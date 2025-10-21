@@ -1,0 +1,8 @@
+.env
+*.pyc
+.idea
+.venv
+dist
+requests*
+ssl
+uniq_hosts.json
