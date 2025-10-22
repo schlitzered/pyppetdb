@@ -26,3 +26,6 @@ packages = ["pyppetdb"]
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]
 
+[project.urls]
+Repository = "https://github.com/schlitzered/pyppetdb"
+Issues = "https://github.com/schlitzered/pyppetdb/issues"
