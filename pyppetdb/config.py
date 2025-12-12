@@ -12,14 +12,8 @@ class ConfigAppFacts(BaseModel):
     index: typing.Optional[typing.List[str]] = None
 
 
-class ConfigAppPuppetDB(BaseModel):
-    cert: str
-    key: str
-    ca: str
-    serverurl: str
-
-
 class ConfigAppSSL(BaseModel):
+    ca: typing.Optional[str] = None
     cert: str
     key: str
 
@@ -31,15 +25,25 @@ class ConfigAppStoreHistory(BaseModel):
     ttl: typing.Optional[int] = 7776000
 
 
-class ConfigApp(BaseModel):
+class ConfigAppMain(BaseModel):
     facts: ConfigAppFacts = ConfigAppFacts()
-    loglevel: log_levels = "INFO"
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8000
-    puppetdb: typing.Optional[ConfigAppPuppetDB] = None
-    secretkey: str = "secret"
     ssl: typing.Optional[ConfigAppSSL] = None
     storeHistory: ConfigAppStoreHistory = ConfigAppStoreHistory()
+
+
+class ConfigAppPuppetdb(BaseModel):
+    port: int = 8001
+    serverurl: typing.Optional[str] = None
+    ssl: typing.Optional[ConfigAppSSL] = None
+
+
+class ConfigApp(BaseModel):
+    main: ConfigAppMain = ConfigAppMain()
+    puppetdb: ConfigAppPuppetdb = ConfigAppPuppetdb()
+    loglevel: log_levels = "INFO"
+    secretkey: str = "secret"
 
 
 class ConfigLdap(BaseModel):

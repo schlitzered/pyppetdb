@@ -38,10 +38,10 @@ class ControllerPdbQueryV4Resources:
     @property
     def http(self) -> httpx.AsyncClient:
         if not self._http:
-            ssl_ctx = ssl.create_default_context(cafile=self.config_app_puppetdb.ca)
+            ssl_ctx = ssl.create_default_context(cafile=self.config.app.puppetdb.ssl.ca)
             ssl_ctx.load_cert_chain(
-                certfile=self.config_app_puppetdb.cert,
-                keyfile=self.config_app_puppetdb.key,
+                certfile=self.config.app.puppetdb.ssl.cert,
+                keyfile=self.config.app.puppetdb.ssl.key,
             )
             self._http = httpx.AsyncClient(verify=ssl_ctx)
         return self._http
@@ -58,7 +58,7 @@ class ControllerPdbQueryV4Resources:
         self,
         request: Request,
     ):
-        if not self.config.app.puppetdb:
+        if not self.config.app.puppetdb.serverurl:
             return []
         resp = await self.http.get(
             url=f"{self.config.app.puppetdb.serverurl}/pdb/query/v4/resources",

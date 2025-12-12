@@ -49,7 +49,7 @@ class CrudNodes(CrudMongo):
         await self.coll.create_index([("change_last", pymongo.ASCENDING)])
         await self.coll.create_index([("change_report", pymongo.ASCENDING)])
         await self.coll.create_index([("report.status", pymongo.ASCENDING)])
-        for fact in self.config.app.facts.index:
+        for fact in self.config.app.main.facts.index:
             await self.coll.create_index(
                 [
                     (f"facts.{fact}", pymongo.ASCENDING),
