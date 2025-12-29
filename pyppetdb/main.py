@@ -378,7 +378,6 @@ async def main_run():
             apps_tasks,
             return_when=asyncio.FIRST_COMPLETED,
         )
-
         if not stop_event.is_set():
             request_stop()
 
