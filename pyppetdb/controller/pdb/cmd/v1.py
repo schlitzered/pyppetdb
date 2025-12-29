@@ -85,12 +85,15 @@ class ControllerPdbCmdV1:
     @property
     def http(self) -> httpx.AsyncClient:
         if not self._http:
-            ssl_ctx = ssl.create_default_context(cafile=self.config.app.puppetdb.ssl.ca)
-            ssl_ctx.load_cert_chain(
-                certfile=self.config.app.puppetdb.ssl.cert,
-                keyfile=self.config.app.puppetdb.ssl.key,
-            )
-            self._http = httpx.AsyncClient(verify=ssl_ctx)
+            if self.config.app.puppetdb.ssl:
+                ssl_ctx = ssl.create_default_context(cafile=self.config.app.puppetdb.ssl.ca)
+                ssl_ctx.load_cert_chain(
+                    certfile=self.config.app.puppetdb.ssl.cert,
+                    keyfile=self.config.app.puppetdb.ssl.key,
+                )
+                self._http = httpx.AsyncClient(verify=ssl_ctx)
+            else:
+                self._http = httpx.AsyncClient()
         return self._http
 
     @property
