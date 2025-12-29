@@ -124,7 +124,7 @@ class CrudMongo(
         try:
             result = await self._coll.delete_one(filter=query)
         except pymongo.errors.ConnectionFailure as err:
-            (self.log.erro - l(f"backend error: {err}"))
+            self.log.error(f"backend error: {err}")
             raise BackendError()
         if result.deleted_count == 0:
             raise ResourceNotFound

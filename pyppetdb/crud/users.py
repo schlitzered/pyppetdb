@@ -190,7 +190,7 @@ class CrudUsers(CrudMongo):
             if user_orig.backend == "internal":
                 data["password"] = self._password(data["password"])
             else:
-                data["passwort"] = None
+                data["password"] = None
 
         result = await self._update(query=query, fields=fields, payload=data)
         return UserGet(**result)

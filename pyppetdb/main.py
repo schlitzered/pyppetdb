@@ -235,6 +235,8 @@ async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
 
 def setup_logging(log_level):
     log = logging.getLogger("uvicorn")
+    if not log.handlers and not logging.getLogger().handlers:
+        logging.basicConfig(level=log_level, format="%(levelname)s:     %(message)s")
     log.info(f"setting loglevel to: {log_level}")
     log.setLevel(log_level)
     return log
@@ -298,8 +300,37 @@ async def add_process_time_header(request, call_next):
     return response
 
 
+def main_run_get_app(
+    app_name: str,
+    controller: pyppetdb.controller.Controller,
+) -> uvicorn.Server | None:
+    _settings = getattr(settings.app, f"{app_name}")
+    if not _settings.enable:
+        return None
+    app = FastAPI(
+        title=f"pyppetdb {app_name} server",
+        version=version,
+        default_response_class=ORJSONResponse,
+        request_class=ORJSONRequest,
+    )
+    app.add_middleware(
+        SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
+    )
+    app.include_router(getattr(controller, f"router_{app_name}"))
+    config = uvicorn.Config(
+        app,
+        host=_settings.host,
+        port=_settings.port,
+        ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
+        ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
+        ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
+    )
+    return uvicorn.Server(config)
+
+
 async def main_run():
     env = await prepare_env()
+    log = env["log"]
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize=env["authorize"],
@@ -315,68 +346,45 @@ async def main_run():
         http=env["http"],
         config=settings,
     )
-    app_main = FastAPI(
-        title="pyppetdb main server",
-        version=version,
-        default_response_class=ORJSONResponse,
-        request_class=ORJSONRequest,
-    )
-    app_main.add_middleware(
-        SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
-    )
-    app_main.include_router(controller.router_main)
-    app_puppetdb = FastAPI(
-        title="pyppetdb puppetdb server",
-        version=version,
-        default_response_class=ORJSONResponse,
-        request_class=ORJSONRequest,
-    )
-    app_puppetdb.include_router(controller.router_puppetdb)
-    config_main = uvicorn.Config(
-        app_main,
-        host=settings.app.main.host,
-        port=settings.app.main.port,
-        ssl_ca_certs=settings.app.main.ssl.ca if settings.app.main.ssl else None,
-        ssl_certfile=settings.app.main.ssl.cert if settings.app.main.ssl else None,
-        ssl_keyfile=settings.app.main.ssl.key if settings.app.main.ssl else None,
-    )
-    config_puppetdb = uvicorn.Config(
-        app_puppetdb,
-        host="127.0.0.1",
-        port=settings.app.puppetdb.port,
-    )
+    apps = list()
+    apps_tasks = list()
+    for app_name in ("main", "puppet", "puppetdb"):
+        app = main_run_get_app(app_name, controller)
+        if app:
+            apps.append(app)
+            apps_tasks.append(
+                asyncio.create_task(app.serve(), name=f"uvicorn-{app_name}")
+            )
 
-    server_main = uvicorn.Server(config_main)
-    server_puppetdb = uvicorn.Server(config_puppetdb)
+    if not apps:
+        log.fatal("no apps configured")
+        sys.exit(1)
 
     stop_event = asyncio.Event()
 
     def request_stop():
-        server_main.should_exit = True
-        server_puppetdb.should_exit = True
+        for _app in apps:
+            _app.should_exit = True
         stop_event.set()
+
+    apps_tasks.append(asyncio.create_task(stop_event.wait(), name="stop-event"))
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, request_stop)
 
-    task_main = asyncio.create_task(server_main.serve(), name="uvicorn-main")
-    task_puppetdb = asyncio.create_task(
-        server_puppetdb.serve(), name="uvicorn-puppetdb"
-    )
-
     try:
         await asyncio.wait(
-            {task_main, task_puppetdb, asyncio.create_task(stop_event.wait())},
+            apps_tasks,
             return_when=asyncio.FIRST_COMPLETED,
         )
 
         if not stop_event.is_set():
             request_stop()
 
-        await asyncio.gather(task_main, task_puppetdb)
+        await asyncio.gather(*apps_tasks)
     finally:
-        for t in (task_main, task_puppetdb):
+        for t in apps_tasks:
             if not t.done():
                 t.cancel()
                 with suppress(asyncio.CancelledError):

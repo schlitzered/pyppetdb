@@ -26,6 +26,7 @@ class ConfigAppStoreHistory(BaseModel):
 
 
 class ConfigAppMain(BaseModel):
+    enable: bool = True
     facts: ConfigAppFacts = ConfigAppFacts()
     host: str = "0.0.0.0"
     port: int = 8000
@@ -33,14 +34,25 @@ class ConfigAppMain(BaseModel):
     storeHistory: ConfigAppStoreHistory = ConfigAppStoreHistory()
 
 
-class ConfigAppPuppetdb(BaseModel):
+class ConfigAppPuppet(BaseModel):
+    enable: bool = True
     port: int = 8001
+    host: str = "0.0.0.0"
+    serverurl: typing.Optional[str] = None
+    ssl: typing.Optional[ConfigAppSSL] = None
+
+
+class ConfigAppPuppetdb(BaseModel):
+    enable: bool = True
+    port: int = 8002
+    host: str = "127.0.0.1"
     serverurl: typing.Optional[str] = None
     ssl: typing.Optional[ConfigAppSSL] = None
 
 
 class ConfigApp(BaseModel):
     main: ConfigAppMain = ConfigAppMain()
+    puppet: ConfigAppPuppet = ConfigAppPuppet()
     puppetdb: ConfigAppPuppetdb = ConfigAppPuppetdb()
     loglevel: log_levels = "INFO"
     secretkey: str = "secret"
