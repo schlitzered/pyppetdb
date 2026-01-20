@@ -10,6 +10,7 @@ from pyppetdb.config import Config
 from pyppetdb.controller.api import ControllerApi
 from pyppetdb.controller.oauth import ControllerOauth
 from pyppetdb.controller.pdb import ControllerPdb
+from pyppetdb.controller.puppet import ControllerPuppet
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.ldap import CrudLdap
@@ -74,6 +75,11 @@ class Controller:
             crud_nodes_reports=crud_nodes_reports,
         ).router
 
+        router_puppet = ControllerPuppet(
+            log=log,
+            config=config,
+        )
+
         self.router_dev.include_router(
             router_main,
             prefix="/api",
@@ -105,6 +111,15 @@ class Controller:
             router_pdb,
             prefix="/pdb",
             responses={404: {"description": "Not found"}},
+        )
+
+        self.router_dev.include_router(
+            router_puppet.router,
+            prefix="/puppet",
+        )
+        self.router_puppet.include_router(
+            router_puppet.router,
+            prefix="/puppet",
         )
 
     @property
