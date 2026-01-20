@@ -49,7 +49,7 @@ class CrudNodes(CrudMongo):
         await self.coll.create_index([("change_last", pymongo.ASCENDING)])
         await self.coll.create_index([("change_report", pymongo.ASCENDING)])
         await self.coll.create_index([("report.status", pymongo.ASCENDING)])
-        for fact in self.config.app.facts.index:
+        for fact in self.config.app.main.facts.index:
             await self.coll.create_index(
                 [
                     (f"facts.{fact}", pymongo.ASCENDING),
@@ -69,99 +69,6 @@ class CrudNodes(CrudMongo):
             ]
         )
         self.log.info(f"creating {self.resource_type} indices, done")
-        return
-        nodes = await self.coll.find(
-            {},
-            {
-                "id": 1,
-                "facts.role": 1,
-                "facts.role_variant": 1,
-                "facts.stage": 1,
-                "facts.location": 1,
-                "facts.provider": 1,
-            },
-        ).to_list(length=None)
-        for node in nodes:
-            exported_resources = [
-                {
-                    "exported": True,
-                    "type": "File",
-                    "title": f"/tmp/file1_{node['id']}",
-                    "tags": [
-                        "file",
-                        "tmp",
-                        "dummy",
-                        f"role:{node.get('facts', {}).get('role')}",
-                        f"role_variant:{node.get('facts', {}).get('role_variant')}",
-                        f"stage:{node.get('facts', {}).get('stage')}",
-                        f"location:{node.get('facts', {}).get('location')}",
-                        f"provider:{node.get('facts',{}).get('provider')}",
-                    ],
-                    "parameters": {
-                        "ensure": "present",
-                        "path": f"/tmp/file1_{node['id']}",
-                        "owner": "root",
-                        "group": "root",
-                        "mode": "0644",
-                        "content": "This is a dummy file for $HOSTNAME.",
-                    },
-                },
-                {
-                    "exported": True,
-                    "type": "File",
-                    "title": f"/tmp/file2_{node['id']}",
-                    "tags": [
-                        "file",
-                        "tmp",
-                        "dummy",
-                        f"role:{node.get('facts', {}).get('role')}",
-                        f"role_variant:{node.get('facts', {}).get('role_variant')}",
-                        f"stage:{node.get('facts', {}).get('stage')}",
-                        f"location:{node.get('facts', {}).get('location')}",
-                        f"provider:{node.get('facts',{}).get('provider')}",
-                    ],
-                    "parameters": {
-                        "ensure": "present",
-                        "path": f"/tmp/file2_{node['id']}",
-                        "owner": "root",
-                        "group": "root",
-                        "mode": "0644",
-                        "content": "This is a dummy file for $HOSTNAME.",
-                    },
-                },
-                {
-                    "exported": True,
-                    "type": "File",
-                    "title": f"/tmp/file3_{node['id']}",
-                    "tags": [
-                        "file",
-                        "tmp",
-                        "dummy",
-                        f"role:{node.get('facts', {}).get('role')}",
-                        f"role_variant:{node.get('facts', {}).get('role_variant')}",
-                        f"stage:{node.get('facts', {}).get('stage')}",
-                        f"location:{node.get('facts', {}).get('location')}",
-                        f"provider:{node.get('facts',{}).get('provider')}",
-                    ],
-                    "parameters": {
-                        "ensure": "present",
-                        "path": f"/tmp/file3_{node['id']}",
-                        "owner": "root",
-                        "group": "root",
-                        "mode": "0644",
-                        "content": "This is a dummy file for $HOSTNAME.",
-                    },
-                },
-            ]
-            await self.coll.update_one(
-                {"id": node["id"]},
-                {
-                    "$set": {
-                        "catalog.resources_exported": exported_resources,
-                        "catalog.num_resources_exported": 3,
-                    }
-                },
-            )
 
     async def delete(
         self,

@@ -45,7 +45,7 @@ class CrudNodesReports(CrudMongo):
 
         await self._create_ttl_index(
             field="id",
-            ttl_seconds=self.config.app.storeHistory.ttl,
+            ttl_seconds=self.config.app.main.storeHistory.ttl,
             index_name="ttl_report_history",
         )
 

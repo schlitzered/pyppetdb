@@ -42,13 +42,13 @@ class CrudNodesCatalogs(CrudMongo):
 
         await self._create_ttl_index(
             field="created_no_report_ttl",
-            ttl_seconds=self.config.app.storeHistory.catalogNoReportTtl,
+            ttl_seconds=self.config.app.main.storeHistory.catalogNoReportTtl,
             index_name="ttl_catalog_no_report",
         )
 
         await self._create_ttl_index(
             field="created",
-            ttl_seconds=self.config.app.storeHistory.ttl,
+            ttl_seconds=self.config.app.main.storeHistory.ttl,
             index_name="ttl_catalog_history",
         )
 

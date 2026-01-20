@@ -1,7 +1,8 @@
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 import logging
 import random
+import signal
 import string
 import sys
 import time
@@ -41,6 +42,8 @@ from pyppetdb.model.users import UserPost
 
 from pyppetdb.errors import ResourceNotFound
 
+version = "0.0.0"
+
 
 class ORJSONRequest(Request):
     async def json(self):
@@ -58,23 +61,24 @@ async def dummy_sleep_background_task(log: logging.Logger):
         log.info("sleeping background task")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+async def prepare_env():
+    env = dict()
     log = setup_logging(
         settings.app.loglevel,
     )
+    env["log"] = log
 
-    #    asyncio.create_task(dummy_sleep_background_task(log))
     log.info(settings)
 
     http = httpx.AsyncClient()
+    env["http"] = http
 
     ldap_pool = await setup_ldap(
         log=log,
         settings_ldap=settings.ldap,
     )
+    env["ldap_pool"] = ldap_pool
 
-    log.info("adding routes")
     mongo_db = setup_mongodb(
         log=log,
         database=settings.mongodb.database,
@@ -86,6 +90,7 @@ async def lifespan(app: FastAPI):
         http=http,
         oauth_settings=settings.oauth,
     )
+    env["crud_oauth"] = crud_oauth
 
     crud_ldap = CrudLdap(
         log=log,
@@ -95,6 +100,7 @@ async def lifespan(app: FastAPI):
         ldap_url=settings.ldap.url,
         ldap_user_pattern=settings.ldap.userpattern,
     )
+    env["crud_ldap"] = crud_ldap
 
     crud_nodes = CrudNodes(
         config=settings,
@@ -102,6 +108,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["nodes"],
     )
     await crud_nodes.index_create()
+    env["crud_nodes"] = crud_nodes
 
     crud_nodes_catalogs = CrudNodesCatalogs(
         config=settings,
@@ -109,6 +116,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["nodes_catalogs"],
     )
     await crud_nodes_catalogs.index_create()
+    env["crud_nodes_catalogs"] = crud_nodes_catalogs
 
     crud_nodes_groups = CrudNodesGroups(
         config=settings,
@@ -116,6 +124,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["nodes_groups"],
     )
     await crud_nodes_groups.index_create()
+    env["crud_nodes_groups"] = crud_nodes_groups
 
     crud_nodes_reports = CrudNodesReports(
         config=settings,
@@ -123,6 +132,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["nodes_reports"],
     )
     await crud_nodes_reports.index_create()
+    env["crud_nodes_reports"] = crud_nodes_reports
 
     crud_teams = CrudTeams(
         config=settings,
@@ -130,6 +140,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["teams"],
     )
     await crud_teams.index_create()
+    env["crud_teams"] = crud_teams
 
     crud_users = CrudUsers(
         config=settings,
@@ -138,6 +149,7 @@ async def lifespan(app: FastAPI):
         crud_ldap=crud_ldap,
     )
     await crud_users.index_create()
+    env["crud_users"] = crud_users
 
     crud_users_credentials = CrudCredentials(
         config=settings,
@@ -145,6 +157,7 @@ async def lifespan(app: FastAPI):
         coll=mongo_db["users_credentials"],
     )
     await crud_users_credentials.index_create()
+    env["crud_users_credentials"] = crud_users_credentials
 
     authorize = Authorize(
         log=log,
@@ -153,26 +166,31 @@ async def lifespan(app: FastAPI):
         crud_users=crud_users,
         crud_users_credentials=crud_users_credentials,
     )
+    env["authorize"] = authorize
+    await setup_admin_user(log=log, crud_users=crud_users)
+    return env
+
+
+@asynccontextmanager
+async def lifespan_dev(app: FastAPI):
+    env = await prepare_env()
 
     controller = pyppetdb.controller.Controller(
-        log=log,
-        authorize=authorize,
-        crud_ldap=crud_ldap,
-        crud_nodes=crud_nodes,
-        crud_nodes_catalogs=crud_nodes_catalogs,
-        crud_nodes_groups=crud_nodes_groups,
-        crud_nodes_reports=crud_nodes_reports,
-        crud_teams=crud_teams,
-        crud_users=crud_users,
-        crud_users_credentials=crud_users_credentials,
-        crud_oauth=crud_oauth,
-        http=http,
+        log=env["log"],
+        authorize=env["authorize"],
+        crud_ldap=env["crud_ldap"],
+        crud_nodes=env["crud_nodes"],
+        crud_nodes_catalogs=env["crud_nodes_catalogs"],
+        crud_nodes_groups=env["crud_nodes_groups"],
+        crud_nodes_reports=env["crud_nodes_reports"],
+        crud_teams=env["crud_teams"],
+        crud_users=env["crud_users"],
+        crud_users_credentials=env["crud_users_credentials"],
+        crud_oauth=env["crud_oauth"],
+        http=env["http"],
         config=settings,
     )
-    app.include_router(controller.router)
-
-    log.info("adding routes, done")
-    await setup_admin_user(log=log, crud_users=crud_users)
+    app.include_router(controller.router_dev)
     yield
 
 
@@ -217,6 +235,8 @@ async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
 
 def setup_logging(log_level):
     log = logging.getLogger("uvicorn")
+    if not log.handlers and not logging.getLogger().handlers:
+        logging.basicConfig(level=log_level, format="%(levelname)s:     %(message)s")
     log.info(f"setting loglevel to: {log_level}")
     log.setLevel(log_level)
     return log
@@ -259,17 +279,19 @@ def setup_oauth_providers(
     return providers
 
 
-app = FastAPI(
-    title="pyppetdb",
-    version="0.0.0",
-    lifespan=lifespan,
+app_dev = FastAPI(
+    title="pyppetdb all in one dev server",
+    version=version,
+    lifespan=lifespan_dev,
     default_response_class=ORJSONResponse,
     request_class=ORJSONRequest,
 )
-app.add_middleware(SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600)
+app_dev.add_middleware(
+    SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
+)
 
 
-@app.middleware("http")
+@app_dev.middleware("http")
 async def add_process_time_header(request, call_next):
     start_time = time.time()
     response = await call_next(request)
@@ -278,17 +300,98 @@ async def add_process_time_header(request, call_next):
     return response
 
 
-def main():
-    if settings.app.ssl:
-        uvicorn.run(
-            app,
-            host=settings.app.host,
-            port=settings.app.port,
-            ssl_certfile=settings.app.ssl.cert,
-            ssl_keyfile=settings.app.ssl.key,
+def main_run_get_app(
+    app_name: str,
+    controller: pyppetdb.controller.Controller,
+) -> uvicorn.Server | None:
+    _settings = getattr(settings.app, f"{app_name}")
+    if not _settings.enable:
+        return None
+    app = FastAPI(
+        title=f"pyppetdb {app_name} server",
+        version=version,
+        default_response_class=ORJSONResponse,
+        request_class=ORJSONRequest,
+    )
+    app.add_middleware(
+        SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
+    )
+    app.include_router(getattr(controller, f"router_{app_name}"))
+    config = uvicorn.Config(
+        app,
+        host=_settings.host,
+        port=_settings.port,
+        ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
+        ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
+        ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
+    )
+    return uvicorn.Server(config)
+
+
+async def main_run():
+    env = await prepare_env()
+    log = env["log"]
+    controller = pyppetdb.controller.Controller(
+        log=env["log"],
+        authorize=env["authorize"],
+        crud_ldap=env["crud_ldap"],
+        crud_nodes=env["crud_nodes"],
+        crud_nodes_catalogs=env["crud_nodes_catalogs"],
+        crud_nodes_groups=env["crud_nodes_groups"],
+        crud_nodes_reports=env["crud_nodes_reports"],
+        crud_teams=env["crud_teams"],
+        crud_users=env["crud_users"],
+        crud_users_credentials=env["crud_users_credentials"],
+        crud_oauth=env["crud_oauth"],
+        http=env["http"],
+        config=settings,
+    )
+    apps = list()
+    apps_tasks = list()
+    for app_name in ("main", "puppet", "puppetdb"):
+        app = main_run_get_app(app_name, controller)
+        if app:
+            apps.append(app)
+            apps_tasks.append(
+                asyncio.create_task(app.serve(), name=f"uvicorn-{app_name}")
+            )
+
+    if not apps:
+        log.fatal("no apps configured")
+        sys.exit(1)
+
+    stop_event = asyncio.Event()
+
+    def request_stop():
+        for _app in apps:
+            _app.should_exit = True
+        stop_event.set()
+
+    apps_tasks.append(asyncio.create_task(stop_event.wait(), name="stop-event"))
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, request_stop)
+
+    try:
+        await asyncio.wait(
+            apps_tasks,
+            return_when=asyncio.FIRST_COMPLETED,
         )
-    else:
-        uvicorn.run(app, host=settings.app.host, port=settings.app.port)
+        if not stop_event.is_set():
+            request_stop()
+
+        await asyncio.gather(*apps_tasks)
+    finally:
+        for t in apps_tasks:
+            if not t.done():
+                t.cancel()
+                with suppress(asyncio.CancelledError):
+                    await t
+
+
+def main():
+    asyncio.run(main_run())
 
 
 if __name__ == "__main__":

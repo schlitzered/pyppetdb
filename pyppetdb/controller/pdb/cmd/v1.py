@@ -85,12 +85,17 @@ class ControllerPdbCmdV1:
     @property
     def http(self) -> httpx.AsyncClient:
         if not self._http:
-            ssl_ctx = ssl.create_default_context(cafile=self.config.app.puppetdb.ca)
-            ssl_ctx.load_cert_chain(
-                certfile=self.config.app.puppetdb.cert,
-                keyfile=self.config.app.puppetdb.key,
-            )
-            self._http = httpx.AsyncClient(verify=ssl_ctx)
+            if self.config.app.puppetdb.ssl:
+                ssl_ctx = ssl.create_default_context(
+                    cafile=self.config.app.puppetdb.ssl.ca
+                )
+                ssl_ctx.load_cert_chain(
+                    certfile=self.config.app.puppetdb.ssl.cert,
+                    keyfile=self.config.app.puppetdb.ssl.key,
+                )
+                self._http = httpx.AsyncClient(verify=ssl_ctx)
+            else:
+                self._http = httpx.AsyncClient()
         return self._http
 
     @property
@@ -164,7 +169,7 @@ class ControllerPdbCmdV1:
                     return_none=True,
                 )
             )
-            if self.config.app.storeHistory.catalog:
+            if self.config.app.main.storeHistory.catalog:
                 asyncio.create_task(
                     self.crud_nodes_catalogs.create(
                         _id=data_decomp["catalog_uuid"],
@@ -216,8 +221,8 @@ class ControllerPdbCmdV1:
                     return_none=True,
                 )
             )
-            if self.config.app.storeHistory.catalog:
-                if self.config.app.storeHistory.catalogUnchanged:
+            if self.config.app.main.storeHistory.catalog:
+                if self.config.app.main.storeHistory.catalogUnchanged:
                     asyncio.create_task(
                         self.crud_nodes_catalogs.drop_created_no_report_ttl(
                             node_id=certname,
@@ -236,7 +241,7 @@ class ControllerPdbCmdV1:
         duration_ms = (stop_time_ns - start_time_ns) / 1_000_000
         self.log.info(f"create {command} took {duration_ms:.2f} ms")
 
-        if self.config.app.puppetdb:
+        if self.config.app.puppetdb.serverurl:
             asyncio.create_task(
                 self.http.post(
                     url=f"{self.config.app.puppetdb.serverurl}/pdb/cmd/v1",
