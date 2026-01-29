@@ -108,7 +108,7 @@ class ControllerOauthAuthenticate:
                     await self.crud_users.update(
                         _id=login,
                         payload=UserPut(
-                            backend=f"oauth{provider}",
+                            backend=f"oauth:{provider}",
                         ),
                         fields=["_id"],
                     )

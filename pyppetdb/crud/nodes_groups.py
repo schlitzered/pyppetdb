@@ -83,10 +83,10 @@ class NodesGroupsCache:
 
     async def _load_initial_data(self):
         try:
-            cursor = self.coll.find({}, {"id": 1, "_id": 0, "filters": 1})
+            cursor = self.coll.find({}, {"id": 1, "_id": 1, "filters": 1})
             count = 0
             async for doc in cursor:
-                doc_id = doc["id"]
+                doc_id = doc["_id"]
                 if doc_id not in self.cache:
                     self.cache[doc_id] = NodeGroupGet(**doc)
                     count += 1

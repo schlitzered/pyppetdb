@@ -62,21 +62,25 @@ class CrudLdap:
     ):
         counter = self.ldap_pool.max_connection + 3
         while counter >= 0:
-            conn = await self.ldap_pool.get()
+            conn = None
             try:
+                conn = await self.ldap_pool.get()
                 return await conn.search(base_dn, scope, query)
             except bonsai.pool.EmptyPool:
                 self.log.warning("ldap pool empty, waiting 1 second")
                 await asyncio.sleep(1)
             except bonsai.errors.ConnectionError:
-                conn.close()
+                if conn:
+                    conn.close()
                 if counter == 0:
                     self.log.error("lost ldap connection, no more retries left")
                 else:
                     self.log.error(f"lost ldap connection, {counter} retries left")
                     counter -= 1
             finally:
-                await self.ldap_pool.put(conn)
+                if conn:
+                    await self.ldap_pool.put(conn)
+        return None
 
     async def check_user_credentials(self, user: str, password: str):
         if not self.ldap_url:

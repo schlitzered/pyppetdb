@@ -52,8 +52,11 @@ class CrudCredentials(CrudMongo):
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def check_credential(self, request: Request):
-        x_secret = request.headers.get("x-secret")
-        x_secret_id = request.headers.get("x-secret-id")
+        x_secret = request.headers.get("x-secret", None)
+        x_secret_id = request.headers.get("x-secret-id", None)
+
+        if x_secret is None or x_secret_id is None:
+            raise CredentialError
 
         query = {"id": x_secret_id}
 
