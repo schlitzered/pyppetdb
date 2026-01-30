@@ -29,6 +29,8 @@ from pyppetdb.config import ConfigLdap as SettingsLdap
 from pyppetdb.config import ConfigOAuth as SettingsOAuth
 
 from pyppetdb.crud.credentials import CrudCredentials
+from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
@@ -39,6 +41,8 @@ from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 
 from pyppetdb.model.users import UserPost
+
+from pyppetdb.pyhiera import PyHiera
 
 from pyppetdb.errors import ResourceNotFound
 
@@ -101,6 +105,24 @@ async def prepare_env():
         ldap_user_pattern=settings.ldap.userpattern,
     )
     env["crud_ldap"] = crud_ldap
+
+    pyhiera = PyHiera(config=settings.hiera)
+    env["pyhiera"] = pyhiera
+
+    crud_hiera_key_models = CrudHieraKeyModels(
+        config=settings,
+        log=log,
+        pyhiera=pyhiera,
+    )
+    env["crud_hiera_key_models"] = crud_hiera_key_models
+
+    crud_hiera_level_data = CrudHieraLevelData(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_level_data"],
+    )
+    await crud_hiera_level_data.index_create()
+    env["crud_hiera_level_data"] = crud_hiera_level_data
 
     crud_nodes = CrudNodes(
         config=settings,
@@ -179,6 +201,8 @@ async def lifespan_dev(app: FastAPI):
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
+        crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_level_data=env["crud_hiera_level_data"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],
@@ -335,6 +359,8 @@ async def main_run():
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
+        crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_level_data=env["crud_hiera_level_data"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],

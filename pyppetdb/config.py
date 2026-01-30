@@ -90,9 +90,14 @@ class ConfigOAuth(BaseModel):
     client: ConfigOAuthClient
     url: ConfigOAuthUrl
 
+class ConfigHiera(BaseModel):
+    enable: bool = True
+    plugin: typing.Optional[dict[str, str]] = None
+
 
 class Config(BaseSettings):
     app: ConfigApp = ConfigApp()
+    hiera: ConfigHiera = ConfigHiera()
     ldap: ConfigLdap = ConfigLdap()
     mongodb: ConfigMongodb = ConfigMongodb()
     oauth: typing.Optional[dict[str, ConfigOAuth]] = None

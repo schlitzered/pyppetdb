@@ -6,6 +6,8 @@ from fastapi import APIRouter
 from pyppetdb.authorize import Authorize
 
 from pyppetdb.controller.api.v1.authenticate import ControllerApiV1Authenticate
+from pyppetdb.controller.api.v1.hiera_key_models import ControllerApiV1HieraKeyModels
+from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLevelData
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.controller.api.v1.nodes_catalogs import ControllerApiV1NodesCatalogs
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
@@ -16,6 +18,8 @@ from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCre
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 from pyppetdb.crud.credentials import CrudCredentials
+from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
@@ -31,6 +35,8 @@ class ControllerApiV1:
         log: logging.Logger,
         authorize: Authorize,
         crud_ldap: CrudLdap,
+        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_level_data: CrudHieraLevelData,
         crud_nodes: CrudNodes,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
@@ -49,6 +55,24 @@ class ControllerApiV1:
                 authorize=authorize,
                 crud_users=crud_users,
                 http=http,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1HieraKeyModels(
+                log=log,
+                authorize=authorize,
+                crud_hiera_key_models=crud_hiera_key_models,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1HieraLevelData(
+                log=log,
+                authorize=authorize,
+                crud_hiera_level_data=crud_hiera_level_data,
             ).router,
             responses={404: {"description": "Not found"}},
         )
