@@ -33,16 +33,19 @@ class CrudHieraKeyModels(Crud, ProjectionMixIn):
         fields: typing.Optional[list] = None,
     ) -> HieraKeyModelGet:
         model = model_type()
-        schema = model.model.model_json_schema()
-        schema.get("properties", {}).pop("sources", None)
-        if "required" in schema:
-            schema["required"] = [
-                field for field in schema["required"] if field != "sources"
-            ]
-        if "$defs" in schema:
-            schema["$defs"].pop("PyHieraModelBackendData", None)
-            if not schema["$defs"]:
-                schema.pop("$defs", None)
+        schema = None
+        if fields is None:
+            if "model" in fields:
+                schema = model.model.model_json_schema()
+                schema.get("properties", {}).pop("sources", None)
+                if "required" in schema:
+                    schema["required"] = [
+                        field for field in schema["required"] if field != "sources"
+                    ]
+                if "$defs" in schema:
+                    schema["$defs"].pop("PyHieraModelBackendData", None)
+                    if not schema["$defs"]:
+                        schema.pop("$defs", None)
         item = HieraKeyModelGet(
             id=key,
             description=model.description,
