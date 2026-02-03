@@ -4,7 +4,6 @@ from typing import Literal
 from typing import Optional
 
 from pydantic import BaseModel
-from pydantic import StrictInt
 from pydantic import StrictStr
 
 from pyppetdb.model.common import MetaMulti
@@ -26,7 +25,7 @@ sort_literal = Literal[
 
 class HieraLevelGet(BaseModel):
     id: Optional[StrictStr] = None
-    priority: Optional[StrictInt] = None
+    priority: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
 
 
@@ -36,10 +35,10 @@ class HieraLevelGetMulti(BaseModel):
 
 
 class HieraLevelPost(BaseModel):
-    priority: Optional[StrictInt] = None
+    priority: Optional[StrictStr] = None
     description: Optional[StrictStr] = None
 
 
 class HieraLevelPut(BaseModel):
-    priority: Optional[StrictInt] = None
+    priority: Optional[StrictStr] = None
     description: Optional[StrictStr] = None

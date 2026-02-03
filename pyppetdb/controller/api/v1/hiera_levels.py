@@ -121,7 +121,7 @@ class ControllerApiV1HieraLevels:
         self,
         request: Request,
         level_id: str = Query(description="filter: regular_expressions", default=None),
-        priority: int = Query(default=None),
+        priority: str = Query(default=None),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="priority"),
         sort_order: sort_order_literal = Query(default="ascending"),

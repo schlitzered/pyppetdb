@@ -37,15 +37,6 @@ class CrudHieraLevels(CrudMongo):
         await self.coll.create_index([("priority", pymongo.ASCENDING)], unique=True)
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def _next_priority(self) -> int:
-        result = await self.coll.find_one(
-            projection={"priority": 1},
-            sort=[("priority", pymongo.DESCENDING)],
-        )
-        if not result or result.get("priority") is None:
-            return PRIORITY_STEP
-        return result["priority"] + PRIORITY_STEP
-
     async def create(
         self,
         _id: str,
@@ -54,8 +45,6 @@ class CrudHieraLevels(CrudMongo):
     ) -> HieraLevelGet:
         data = payload.model_dump()
         data["id"] = _id
-        if data.get("priority") is None:
-            data["priority"] = await self._next_priority()
         result = await self._create(payload=data, fields=fields)
         return HieraLevelGet(**result)
 
@@ -86,7 +75,7 @@ class CrudHieraLevels(CrudMongo):
     async def search(
         self,
         _id: typing.Optional[str] = None,
-        priority: typing.Optional[int] = None,
+        priority: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,

@@ -57,7 +57,7 @@ class ControllerApiV1HieraLevelData:
             methods=["GET"],
         )
         self.router.add_api_route(
-            "/{level_id}/{_id}/{key_id}",
+            "/{level_id}/{data_id}/{key_id}",
             self.create,
             response_model=HieraLevelDataGet,
             response_model_exclude_unset=True,
@@ -65,21 +65,21 @@ class ControllerApiV1HieraLevelData:
             status_code=201,
         )
         self.router.add_api_route(
-            "/{level_id}/{_id}/{key_id}",
+            "/{level_id}/{data_id}/{key_id}",
             self.delete,
             response_model=DataDelete,
             response_model_exclude_unset=True,
             methods=["DELETE"],
         )
         self.router.add_api_route(
-            "/{level_id}/{_id}/{key_id}",
+            "/{level_id}/{data_id}/{key_id}",
             self.get,
             response_model=HieraLevelDataGet,
             response_model_exclude_unset=True,
             methods=["GET"],
         )
         self.router.add_api_route(
-            "/{level_id}/{_id}/{key_id}",
+            "/{level_id}/{data_id}/{key_id}",
             self.update,
             response_model=HieraLevelDataGet,
             response_model_exclude_unset=True,
@@ -118,16 +118,28 @@ class ControllerApiV1HieraLevelData:
     def router(self):
         return self._router
 
+    @staticmethod
+    def _validate_level_and_data_id(
+        level_id: str,
+        data_id: str,
+        facts: dict[str, str],
+    ):
+        if not data_id == level_id.format(**facts):
+            raise QueryParamValidationError(
+                msg=f"invalid data_id {data_id}, not matching expanded level_id {level_id}"
+            )
+
     async def create(
         self,
         request: Request,
         data: HieraLevelDataPost,
         level_id: str,
-        _id: str,
+        data_id: str,
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
+        self._validate_level_and_data_id(level_id, data_id, data.facts)
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
         self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
@@ -143,7 +155,7 @@ class ControllerApiV1HieraLevelData:
                 msg=f"invalid data for key model {key.key_model_id}: {err}"
             )
         return await self.crud_hiera_level_data.create(
-            _id=_id,
+            _id=data_id,
             key_id=key_id,
             level_id=level_id,
             payload=data,
@@ -154,12 +166,12 @@ class ControllerApiV1HieraLevelData:
         self,
         request: Request,
         level_id: str,
-        _id: str,
+        data_id: str,
         key_id: str,
     ):
         await self.authorize.require_admin(request=request)
         return await self.crud_hiera_level_data.delete(
-            _id=_id,
+            _id=data_id,
             key_id=key_id,
             level_id=level_id,
         )
@@ -168,13 +180,13 @@ class ControllerApiV1HieraLevelData:
         self,
         request: Request,
         level_id: str,
-        _id: str,
+        data_id: str,
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
         level_data = await self.crud_hiera_level_data.get(
-            _id=_id,
+            _id=data_id,
             key_id=key_id,
             level_id=level_id,
             fields=list(fields),
@@ -200,7 +212,7 @@ class ControllerApiV1HieraLevelData:
         request: Request,
         level_id: str = Query(description="filter: regular_expressions", default=None),
         key_id: str = Query(description="filter: regular_expressions", default=None),
-        _id: str = Query(description="filter: regular_expressions", default=None),
+        data_id: str = Query(description="filter: regular_expressions", default=None),
         fact: filter_complex_search = Query(default=None),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="id"),
@@ -215,7 +227,7 @@ class ControllerApiV1HieraLevelData:
     ):
         await self.authorize.require_admin(request=request)
         return await self.crud_hiera_level_data.search(
-            _id=_id,
+            _id=data_id,
             key_id=key_id,
             level_id=level_id,
             fact=fact,
@@ -231,7 +243,7 @@ class ControllerApiV1HieraLevelData:
         request: Request,
         data: HieraLevelDataPut,
         level_id: str,
-        _id: str,
+        data_id: str,
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
@@ -252,7 +264,7 @@ class ControllerApiV1HieraLevelData:
                     msg=f"invalid data for key model {key.key_model_id}: {err}"
                 )
         return await self.crud_hiera_level_data.update(
-            _id=_id,
+            _id=data_id,
             key_id=key_id,
             level_id=level_id,
             payload=data,

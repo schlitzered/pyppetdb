@@ -1,7 +1,6 @@
 import logging
 import typing
 
-from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
