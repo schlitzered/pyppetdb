@@ -1,0 +1,9 @@
+complex:
+  a: prod
+  b:
+    blarg: '3'
+    blub: !!set
+      c: null
+      d: null
+      e: null
+db_host: 127.0.0.2
