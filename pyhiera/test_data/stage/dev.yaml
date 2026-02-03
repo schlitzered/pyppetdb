@@ -1,7 +1,0 @@
-complex:
-  b:
-    blarg: '2'
-    blub: !!set
-      c: null
-      d: null
-db_host: 127.0.0.3
