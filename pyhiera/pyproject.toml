@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling", "hatch-requirements-txt"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyhiera"
+version = "0.0.0"
+requires-python = ">=3.9"
+authors = [
+  {name = "Stephan.Schultchen", email = "stephan.schultchen@gmail.com"},
+]
+description = "PyHiera puppet hiera like parameter lookup engine"
+dynamic = ["dependencies"]
+license = {file = "LICENSE.txt"}
+keywords = []
+classifiers = [
+  "Programming Language :: Python"
+]
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyhiera"]
+
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
+[project.urls]
+Repository = "https://github.com/schlitzered/pyhiera"
+Issues = "https://github.com/schlitzered/pyhiera/issues"

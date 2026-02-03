@@ -34,7 +34,7 @@ class CrudHieraKeyModels(Crud, ProjectionMixIn):
     ) -> HieraKeyModelGet:
         model = model_type()
         schema = None
-        if fields is None:
+        if not fields is None:
             if "model" in fields:
                 schema = model.model.model_json_schema()
                 schema.get("properties", {}).pop("sources", None)

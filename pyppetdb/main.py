@@ -30,6 +30,8 @@ from pyppetdb.config import ConfigOAuth as SettingsOAuth
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_keys import CrudHieraKeys
+from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
@@ -115,6 +117,22 @@ async def prepare_env():
         pyhiera=pyhiera,
     )
     env["crud_hiera_key_models"] = crud_hiera_key_models
+
+    crud_hiera_levels = CrudHieraLevels(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_levels"],
+    )
+    await crud_hiera_levels.index_create()
+    env["crud_hiera_levels"] = crud_hiera_levels
+
+    crud_hiera_keys = CrudHieraKeys(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_keys"],
+    )
+    await crud_hiera_keys.index_create()
+    env["crud_hiera_keys"] = crud_hiera_keys
 
     crud_hiera_level_data = CrudHieraLevelData(
         config=settings,
@@ -202,6 +220,8 @@ async def lifespan_dev(app: FastAPI):
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_keys=env["crud_hiera_keys"],
+        crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
@@ -213,6 +233,7 @@ async def lifespan_dev(app: FastAPI):
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
+        pyhiera=env["pyhiera"],
     )
     app.include_router(controller.router_dev)
     yield
@@ -360,6 +381,8 @@ async def main_run():
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_keys=env["crud_hiera_keys"],
+        crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
@@ -371,6 +394,7 @@ async def main_run():
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
+        pyhiera=env["pyhiera"],
     )
     apps = list()
     apps_tasks = list()

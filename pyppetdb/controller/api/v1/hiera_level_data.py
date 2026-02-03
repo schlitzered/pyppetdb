@@ -7,7 +7,12 @@ from fastapi import Request
 
 from pyppetdb.authorize import Authorize
 
+from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
+from pyppetdb.crud.hiera_levels import CrudHieraLevels
+from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.pyhiera import PyHiera
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
@@ -26,10 +31,18 @@ class ControllerApiV1HieraLevelData:
         self,
         log: logging.Logger,
         authorize: Authorize,
+        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_keys: CrudHieraKeys,
         crud_hiera_level_data: CrudHieraLevelData,
+        crud_hiera_levels: CrudHieraLevels,
+        pyhiera: PyHiera,
     ):
         self._authorize = authorize
+        self._crud_hiera_key_models = crud_hiera_key_models
+        self._crud_hiera_keys = crud_hiera_keys
         self._crud_hiera_level_data = crud_hiera_level_data
+        self._crud_hiera_levels = crud_hiera_levels
+        self._pyhiera = pyhiera
         self._log = log
         self._router = APIRouter(
             prefix="/hiera/data",
@@ -78,8 +91,24 @@ class ControllerApiV1HieraLevelData:
         return self._authorize
 
     @property
+    def crud_hiera_key_models(self):
+        return self._crud_hiera_key_models
+
+    @property
+    def crud_hiera_keys(self):
+        return self._crud_hiera_keys
+
+    @property
     def crud_hiera_level_data(self):
         return self._crud_hiera_level_data
+
+    @property
+    def crud_hiera_levels(self):
+        return self._crud_hiera_levels
+
+    @property
+    def pyhiera(self):
+        return self._pyhiera
 
     @property
     def log(self):
@@ -99,6 +128,20 @@ class ControllerApiV1HieraLevelData:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
+        key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
+        await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
+        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
+        model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
+        if not model_type:
+            raise QueryParamValidationError(
+                msg=f"key model {key.key_model_id} not found"
+            )
+        try:
+            model_type().validate(data.data)
+        except ValueError as err:
+            raise QueryParamValidationError(
+                msg=f"invalid data for key model {key.key_model_id}: {err}"
+            )
         return await self.crud_hiera_level_data.create(
             _id=_id,
             key_id=key_id,
@@ -130,12 +173,27 @@ class ControllerApiV1HieraLevelData:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_level_data.get(
+        level_data = await self.crud_hiera_level_data.get(
             _id=_id,
             key_id=key_id,
             level_id=level_id,
             fields=list(fields),
         )
+        key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
+        await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
+        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
+        model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
+        if not model_type:
+            raise QueryParamValidationError(
+                msg=f"key model {key.key_model_id} not found"
+            )
+        try:
+            model_type().validate(level_data.data)
+        except ValueError as err:
+            raise QueryParamValidationError(
+                msg=f"invalid data for key model {key.key_model_id}: {err}"
+            )
+        return level_data
 
     async def search(
         self,
@@ -178,6 +236,21 @@ class ControllerApiV1HieraLevelData:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
+        key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
+        await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
+        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
+        if data.data is not None:
+            model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
+            if not model_type:
+                raise QueryParamValidationError(
+                    msg=f"key model {key.key_model_id} not found"
+                )
+            try:
+                model_type().validate(data.data)
+            except ValueError as err:
+                raise QueryParamValidationError(
+                    msg=f"invalid data for key model {key.key_model_id}: {err}"
+                )
         return await self.crud_hiera_level_data.update(
             _id=_id,
             key_id=key_id,
