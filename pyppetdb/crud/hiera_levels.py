@@ -24,11 +24,16 @@ class HieraLevelsCache:
         self._coll = coll
         self._log = log
         self._cache = {}
+        self._level_ids = []
         self._initialized = False
 
     @property
     def cache(self) -> dict["str", HieraLevelGet]:
         return self._cache
+
+    @property
+    def level_ids(self) -> list[str]:
+        return list(self._level_ids)
 
     @property
     def coll(self):
@@ -70,12 +75,23 @@ class HieraLevelsCache:
         if operation in ("insert", "replace", "update"):
             doc = change.get("fullDocument")
             if doc:
+                level_id = doc.get("id")
+                if level_id is None:
+                    self.log.warning(
+                        f"No id in fullDocument for {operation} change {doc_id}"
+                    )
+                    return
+                if level_id not in self._level_ids:
+                    self._level_ids.append(level_id)
                 self.cache[doc_id] = HieraLevelGet(**doc)
             else:
                 self.log.warning(f"No fullDocument in {operation} change for {doc_id}")
 
         elif operation == "delete":
-            self.cache.pop(doc_id, None)
+            doc = self.cache.pop(doc_id, None)
+            level_id = doc.id if doc else None
+            if level_id and level_id in self._level_ids:
+                self._level_ids.remove(level_id)
 
         else:
             self.log.warning(f"Unhandled operation type: {operation}")
@@ -86,8 +102,13 @@ class HieraLevelsCache:
             count = 0
             async for doc in cursor:
                 doc_id = doc["_id"]
+                level_id = doc.get("id")
+                if level_id is None:
+                    continue
                 if doc_id not in self.cache:
                     self.cache[doc_id] = HieraLevelGet(**doc)
+                    if level_id not in self._level_ids:
+                        self._level_ids.append(level_id)
                     count += 1
 
             self.log.info(f"Loaded {count} initial documents into hiera_levels cache")
