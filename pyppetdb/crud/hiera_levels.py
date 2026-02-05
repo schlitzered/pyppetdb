@@ -16,8 +16,6 @@ from pyppetdb.model.hiera_levels import HieraLevelGetMulti
 from pyppetdb.model.hiera_levels import HieraLevelPost
 from pyppetdb.model.hiera_levels import HieraLevelPut
 
-PRIORITY_STEP = 10
-
 
 class HieraLevelsCache:
     def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
