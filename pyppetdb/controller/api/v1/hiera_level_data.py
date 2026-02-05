@@ -141,7 +141,7 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_admin(request=request)
         self._validate_level_and_data_id(level_id, data_id, data.facts)
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
-        await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
+        level = await self.crud_hiera_levels.get(_id=level_id, fields=["priority"])
         self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
         model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
         if not model_type:
@@ -159,6 +159,7 @@ class ControllerApiV1HieraLevelData:
             key_id=key_id,
             level_id=level_id,
             payload=data,
+            priority=level.priority,
             fields=list(fields),
         )
 

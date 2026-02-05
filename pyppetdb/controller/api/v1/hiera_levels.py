@@ -6,6 +6,7 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import Authorize
+from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
@@ -24,9 +25,11 @@ class ControllerApiV1HieraLevels:
         log: logging.Logger,
         authorize: Authorize,
         crud_hiera_levels: CrudHieraLevels,
+        crud_hiera_level_data: CrudHieraLevelData,
     ):
         self._authorize = authorize
         self._crud_hiera_levels = crud_hiera_levels
+        self._crud_hiera_level_data = crud_hiera_level_data
         self._log = log
         self._router = APIRouter(
             prefix="/hiera/levels",
@@ -79,6 +82,10 @@ class ControllerApiV1HieraLevels:
         return self._crud_hiera_levels
 
     @property
+    def crud_hiera_level_data(self):
+        return self._crud_hiera_level_data
+
+    @property
     def log(self):
         return self._log
 
@@ -94,11 +101,17 @@ class ControllerApiV1HieraLevels:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_levels.create(
+        result = await self.crud_hiera_levels.create(
             _id=level_id,
             payload=data,
             fields=list(fields),
         )
+        if result.priority is not None:
+            await self.crud_hiera_level_data.update_priority_by_level(
+                level_id=level_id,
+                priority=result.priority,
+            )
+        return result
 
     async def delete(
         self,
@@ -152,8 +165,14 @@ class ControllerApiV1HieraLevels:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_levels.update(
+        result = await self.crud_hiera_levels.update(
             _id=level_id,
             payload=data,
             fields=list(fields),
         )
+        if data.priority is not None:
+            await self.crud_hiera_level_data.update_priority_by_level(
+                level_id=level_id,
+                priority=data.priority,
+            )
+        return result

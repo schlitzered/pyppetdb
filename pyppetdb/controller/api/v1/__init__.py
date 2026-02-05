@@ -92,6 +92,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_hiera_levels=crud_hiera_levels,
+                crud_hiera_level_data=crud_hiera_level_data,
             ).router,
             responses={404: {"description": "Not found"}},
         )

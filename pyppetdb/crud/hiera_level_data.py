@@ -50,12 +50,14 @@ class CrudHieraLevelData(CrudMongo):
         key_id: str,
         level_id: str,
         payload: HieraLevelDataPost,
+        priority: int | None,
         fields: list,
     ) -> HieraLevelDataGet:
         data = payload.model_dump()
         data["id"] = _id
         data["key_id"] = key_id
         data["level_id"] = level_id
+        data["priority"] = priority
         result = await self._create(payload=data, fields=fields)
         return HieraLevelDataGet(**result)
 
@@ -76,6 +78,12 @@ class CrudHieraLevelData(CrudMongo):
     async def delete_all_from_level(self, level_id: str):
         await self.coll.delete_many(
             filter={"level_id": level_id},
+        )
+
+    async def update_priority_by_level(self, level_id: str, priority: int | None) -> None:
+        await self.coll.update_many(
+            filter={"level_id": level_id},
+            update={"$set": {"priority": priority}},
         )
 
     async def delete_all_from_key(self, key_id: str):

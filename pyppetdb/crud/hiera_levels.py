@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import typing
 
@@ -18,6 +19,92 @@ from pyppetdb.model.hiera_levels import HieraLevelPut
 PRIORITY_STEP = 10
 
 
+class HieraLevelsCache:
+    def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
+        self._coll = coll
+        self._log = log
+        self._cache = {}
+        self._initialized = False
+
+    @property
+    def cache(self) -> dict["str", HieraLevelGet]:
+        return self._cache
+
+    @property
+    def coll(self):
+        return self._coll
+
+    @property
+    def log(self):
+        return self._log
+
+    async def _watch_changes(self):
+        try:
+            pipeline = [
+                {
+                    "$project": {
+                        "fullDocument.id": 1,
+                        "operationType": 1,
+                        "documentKey._id": 1,
+                    }
+                }
+            ]
+
+            async with self.coll.watch(
+                full_document="updateLookup",
+                pipeline=pipeline,
+            ) as change_stream:
+                self.log.info("Change stream watcher started for hiera_levels")
+                async for change in change_stream:
+                    await self._handle_change(change)
+
+        except pymongo.errors.PyMongoError as err:
+            self.log.error(f"Error in hiera_levels change stream: {err}")
+        except Exception as err:
+            self.log.error(f"Unexpected error in hiera_levels change stream: {err}")
+
+    async def _handle_change(self, change):
+        operation = change["operationType"]
+        doc_id = change["documentKey"]["_id"]
+
+        if operation in ("insert", "replace", "update"):
+            doc = change.get("fullDocument")
+            if doc:
+                self.cache[doc_id] = HieraLevelGet(**doc)
+            else:
+                self.log.warning(f"No fullDocument in {operation} change for {doc_id}")
+
+        elif operation == "delete":
+            self.cache.pop(doc_id, None)
+
+        else:
+            self.log.warning(f"Unhandled operation type: {operation}")
+
+    async def _load_initial_data(self):
+        try:
+            cursor = self.coll.find({}, {"id": 1, "_id": 1})
+            count = 0
+            async for doc in cursor:
+                doc_id = doc["_id"]
+                if doc_id not in self.cache:
+                    self.cache[doc_id] = HieraLevelGet(**doc)
+                    count += 1
+
+            self.log.info(f"Loaded {count} initial documents into hiera_levels cache")
+
+        except pymongo.errors.PyMongoError as err:
+            self.log.error(f"Error loading initial data: {err}")
+            raise
+
+    async def run(self):
+        if self._initialized:
+            return
+        asyncio.create_task(self._watch_changes())
+        await self._load_initial_data()
+        self._initialized = True
+        self.log.info("HieraLevelsCache initialized successfully")
+
+
 class CrudHieraLevels(CrudMongo):
     def __init__(
         self,
@@ -30,11 +117,17 @@ class CrudHieraLevels(CrudMongo):
             log=log,
             coll=coll,
         )
+        self._cache = HieraLevelsCache(log=log, coll=coll)
+
+    @property
+    def cache(self):
+        return self._cache
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         await self.coll.create_index([("priority", pymongo.ASCENDING)], unique=True)
+        await self.cache.run()
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
