@@ -1,4 +1,5 @@
 import logging
+import string
 import typing
 
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -12,6 +13,7 @@ from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import filter_complex_search
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.hiera_level_data import HieraLevelDataGet
 from pyppetdb.model.hiera_level_data import HieraLevelDataGetMulti
 from pyppetdb.model.hiera_level_data import HieraLevelDataPost
@@ -44,6 +46,27 @@ class CrudHieraLevelData(CrudMongo):
         await self.coll.create_index([("key", pymongo.ASCENDING)])
         self.log.info(f"creating {self.resource_type} indices, done")
 
+    @staticmethod
+    def _normalize_facts(level_id: str, facts: dict[str, str]) -> dict[str, str]:
+        fields = [
+            fname for _, fname, _, _ in string.Formatter().parse(level_id) if fname
+        ]
+        return {k: v for k, v in facts.items() if k in fields}
+
+    @staticmethod
+    def _validate_level_and_id(
+        level_id: str,
+        data_id: str,
+        facts: dict[str, str],
+    ):
+        try:
+            if not data_id == level_id.format(**facts):
+                raise QueryParamValidationError(
+                    msg=f"invalid data_id {data_id}, not matching expanded level_id {level_id}"
+                )
+        except KeyError as err:
+            raise QueryParamValidationError(msg=f"missing fact {level_id}: {err}")
+
     async def create(
         self,
         _id: str,
@@ -54,10 +77,12 @@ class CrudHieraLevelData(CrudMongo):
         fields: list,
     ) -> HieraLevelDataGet:
         data = payload.model_dump()
+        self._validate_level_and_id(level_id, _id, data["facts"])
         data["id"] = _id
         data["key_id"] = key_id
         data["level_id"] = level_id
         data["priority"] = priority
+        data["facts"] = self._normalize_facts(level_id, data["facts"])
         result = await self._create(payload=data, fields=fields)
         return HieraLevelDataGet(**result)
 
@@ -80,7 +105,9 @@ class CrudHieraLevelData(CrudMongo):
             filter={"level_id": level_id},
         )
 
-    async def update_priority_by_level(self, level_id: str, priority: int | None) -> None:
+    async def update_priority_by_level(
+        self, level_id: str, priority: int | None
+    ) -> None:
         await self.coll.update_many(
             filter={"level_id": level_id},
             update={"$set": {"priority": priority}},
@@ -124,6 +151,7 @@ class CrudHieraLevelData(CrudMongo):
         _id: typing.Optional[str] = None,
         key_id: typing.Optional[str] = None,
         level_id: typing.Optional[str] = None,
+        _id_list: typing.Optional[list[str]] = None,
         fact: typing.Optional[filter_complex_search] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
@@ -138,6 +166,7 @@ class CrudHieraLevelData(CrudMongo):
         self._filter_re(query, "id", _id)
         self._filter_re(query, "key_id", key_id)
         self._filter_re(query, "level_id", level_id)
+        self._filter_list(query, "id", _id_list)
         result = await self._search(
             query=query,
             fields=fields,

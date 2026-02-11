@@ -10,6 +10,7 @@ from pyppetdb.controller.api.v1.hiera_key_models import ControllerApiV1HieraKeyM
 from pyppetdb.controller.api.v1.hiera_keys import ControllerApiV1HieraKeys
 from pyppetdb.controller.api.v1.hiera_levels import ControllerApiV1HieraLevels
 from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLevelData
+from pyppetdb.controller.api.v1.hiera_lookup import ControllerApiV1HieraLookup
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.controller.api.v1.nodes_catalogs import ControllerApiV1NodesCatalogs
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
@@ -105,6 +106,15 @@ class ControllerApiV1:
                 crud_hiera_keys=crud_hiera_keys,
                 crud_hiera_level_data=crud_hiera_level_data,
                 crud_hiera_levels=crud_hiera_levels,
+                pyhiera=pyhiera,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1HieraLookup(
+                log=log,
+                authorize=authorize,
                 pyhiera=pyhiera,
             ).router,
             responses={404: {"description": "Not found"}},

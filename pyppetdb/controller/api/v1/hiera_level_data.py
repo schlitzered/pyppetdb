@@ -118,17 +118,6 @@ class ControllerApiV1HieraLevelData:
     def router(self):
         return self._router
 
-    @staticmethod
-    def _validate_level_and_data_id(
-        level_id: str,
-        data_id: str,
-        facts: dict[str, str],
-    ):
-        if not data_id == level_id.format(**facts):
-            raise QueryParamValidationError(
-                msg=f"invalid data_id {data_id}, not matching expanded level_id {level_id}"
-            )
-
     async def create(
         self,
         request: Request,
@@ -139,7 +128,6 @@ class ControllerApiV1HieraLevelData:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        self._validate_level_and_data_id(level_id, data_id, data.facts)
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         level = await self.crud_hiera_levels.get(_id=level_id, fields=["priority"])
         self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])

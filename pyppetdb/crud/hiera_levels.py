@@ -17,7 +17,7 @@ from pyppetdb.model.hiera_levels import HieraLevelPost
 from pyppetdb.model.hiera_levels import HieraLevelPut
 
 
-class HieraLevelsCache:
+class CrudHieraLevelsCache:
     def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
         self._coll = coll
         self._log = log
@@ -31,7 +31,7 @@ class HieraLevelsCache:
 
     @property
     def level_ids(self) -> list[str]:
-        return list(self._level_ids)
+        return self._level_ids
 
     @property
     def coll(self):
@@ -136,7 +136,7 @@ class CrudHieraLevels(CrudMongo):
             log=log,
             coll=coll,
         )
-        self._cache = HieraLevelsCache(log=log, coll=coll)
+        self._cache = CrudHieraLevelsCache(log=log, coll=coll)
 
     @property
     def cache(self):

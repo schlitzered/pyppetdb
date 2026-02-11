@@ -108,16 +108,6 @@ async def prepare_env():
     )
     env["crud_ldap"] = crud_ldap
 
-    pyhiera = PyHiera(config=settings.hiera)
-    env["pyhiera"] = pyhiera
-
-    crud_hiera_key_models = CrudHieraKeyModels(
-        config=settings,
-        log=log,
-        pyhiera=pyhiera,
-    )
-    env["crud_hiera_key_models"] = crud_hiera_key_models
-
     crud_hiera_levels = CrudHieraLevels(
         config=settings,
         log=log,
@@ -125,14 +115,6 @@ async def prepare_env():
     )
     await crud_hiera_levels.index_create()
     env["crud_hiera_levels"] = crud_hiera_levels
-
-    crud_hiera_keys = CrudHieraKeys(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_keys"],
-    )
-    await crud_hiera_keys.index_create()
-    env["crud_hiera_keys"] = crud_hiera_keys
 
     crud_hiera_level_data = CrudHieraLevelData(
         config=settings,
@@ -198,6 +180,30 @@ async def prepare_env():
     )
     await crud_users_credentials.index_create()
     env["crud_users_credentials"] = crud_users_credentials
+
+    pyhiera = PyHiera(
+        log=log,
+        config=settings.hiera,
+        crud_hiera_level_data=crud_hiera_level_data,
+        hiera_level_ids=crud_hiera_levels.cache.level_ids,
+    )
+    env["pyhiera"] = pyhiera
+
+    crud_hiera_keys = CrudHieraKeys(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_keys"],
+        pyhiera=pyhiera,
+    )
+    await crud_hiera_keys.index_create()
+    env["crud_hiera_keys"] = crud_hiera_keys
+
+    crud_hiera_key_models = CrudHieraKeyModels(
+        config=settings,
+        log=log,
+        pyhiera=pyhiera,
+    )
+    env["crud_hiera_key_models"] = crud_hiera_key_models
 
     authorize = Authorize(
         log=log,
