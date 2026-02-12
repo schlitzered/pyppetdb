@@ -72,7 +72,7 @@ class ControllerApiV1HieraKeyModelsStatic:
             raise QueryParamValidationError(
                 msg=f"invalid key model id {key_model_id}, expected static prefix"
             )
-        return raw_id
+        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
 
     def _with_prefix(self, item: HieraKeyModelGet) -> HieraKeyModelGet:
         if item.id is None:

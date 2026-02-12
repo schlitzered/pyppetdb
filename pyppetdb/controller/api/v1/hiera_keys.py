@@ -123,8 +123,8 @@ class ControllerApiV1HieraKeys:
         if prefix == KEY_MODEL_DYNAMIC_PREFIX:
             await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
             return model_id
-        self.crud_hiera_key_models_static.get(_id=raw_id, fields=["id"])
-        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
+        self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
+        return model_id
 
     async def _validate_key_data(self, model_id: str, data):
         normalized_id = await self._normalize_key_model_id(model_id)

@@ -140,8 +140,8 @@ class ControllerApiV1HieraLevelData:
         if prefix == KEY_MODEL_DYNAMIC_PREFIX:
             await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
             return model_id
-        self.crud_hiera_key_models_static.get(_id=raw_id, fields=["id"])
-        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
+        self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
+        return model_id
 
     async def _get_model_type(self, model_id: str):
         key_model_id = await self._normalize_model_id(model_id)
