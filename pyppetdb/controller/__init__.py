@@ -13,7 +13,8 @@ from pyppetdb.controller.pdb import ControllerPdb
 from pyppetdb.controller.puppet import ControllerPuppet
 
 from pyppetdb.crud.credentials import CrudCredentials
-from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
@@ -34,7 +35,8 @@ class Controller:
         log: logging.Logger,
         authorize: Authorize,
         crud_ldap: CrudLdap,
-        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
+        crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
@@ -60,7 +62,8 @@ class Controller:
             log=log,
             authorize=authorize,
             crud_ldap=crud_ldap,
-            crud_hiera_key_models=crud_hiera_key_models,
+            crud_hiera_key_models_static=crud_hiera_key_models_static,
+            crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
             crud_hiera_keys=crud_hiera_keys,
             crud_hiera_levels=crud_hiera_levels,
             crud_hiera_level_data=crud_hiera_level_data,

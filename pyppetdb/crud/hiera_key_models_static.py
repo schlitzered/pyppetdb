@@ -7,12 +7,12 @@ from pyppetdb.crud.common import Crud
 from pyppetdb.crud.mixins import ProjectionMixIn
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.model.hiera_key_models import HieraKeyModelGet
-from pyppetdb.model.hiera_key_models import HieraKeyModelGetMulti
+from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
+from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
 from pyppetdb.pyhiera import PyHiera
 
 
-class CrudHieraKeyModels(Crud, ProjectionMixIn):
+class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
     def __init__(
         self,
         config: Config,

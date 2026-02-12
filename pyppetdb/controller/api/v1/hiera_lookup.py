@@ -8,8 +8,10 @@ from fastapi import Request
 from pyhiera.errors import PyHieraBackendError
 from pyhiera.errors import PyHieraError
 from pyppetdb.authorize import Authorize
+from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.hiera_lookup import HieraLookupResult
 from pydantic import constr
 from pyppetdb.pyhiera import PyHiera
@@ -21,10 +23,12 @@ class ControllerApiV1HieraLookup:
         log: logging.Logger,
         authorize: Authorize,
         crud_hiera_lookup_cache: CrudHieraLookupCache,
+        crud_hiera_keys: CrudHieraKeys,
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
         self._crud_hiera_lookup_cache = crud_hiera_lookup_cache
+        self._crud_hiera_keys = crud_hiera_keys
         self._pyhiera = pyhiera
         self._log = log
         self._router = APIRouter(
@@ -51,6 +55,10 @@ class ControllerApiV1HieraLookup:
     @property
     def crud_hiera_lookup_cache(self):
         return self._crud_hiera_lookup_cache
+
+    @property
+    def crud_hiera_keys(self):
+        return self._crud_hiera_keys
 
     @property
     def log(self):
@@ -109,4 +117,16 @@ class ControllerApiV1HieraLookup:
                 data=result.model_dump(exclude={"sources"})["data"]
             )
         except (PyHieraError, PyHieraBackendError) as err:
+            if isinstance(err, PyHieraError) and "Key " in str(err):
+                try:
+                    key = await self.crud_hiera_keys.get(
+                        _id=key_id, fields=["key_model_id"]
+                    )
+                except ResourceNotFound:
+                    raise QueryParamValidationError(msg=str(err))
+                model_id = key.key_model_id
+                if model_id and model_id not in self.pyhiera.hiera.key_models:
+                    raise QueryParamValidationError(
+                        msg=f"key model {model_id} not found for key {key_id}"
+                    )
             raise QueryParamValidationError(msg=str(err))

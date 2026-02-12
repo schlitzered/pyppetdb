@@ -7,12 +7,16 @@ from fastapi import Request
 
 from pyppetdb.authorize import Authorize
 
-from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
+from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
+from pyppetdb.pyhiera.key_model_utils import split_key_model_id
 from pyppetdb.pyhiera import PyHiera
 
 from pyppetdb.model.common import DataDelete
@@ -32,7 +36,8 @@ class ControllerApiV1HieraLevelData:
         self,
         log: logging.Logger,
         authorize: Authorize,
-        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
+        crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_levels: CrudHieraLevels,
@@ -40,7 +45,8 @@ class ControllerApiV1HieraLevelData:
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
-        self._crud_hiera_key_models = crud_hiera_key_models
+        self._crud_hiera_key_models_static = crud_hiera_key_models_static
+        self._crud_hiera_key_models_dynamic = crud_hiera_key_models_dynamic
         self._crud_hiera_keys = crud_hiera_keys
         self._crud_hiera_level_data = crud_hiera_level_data
         self._crud_hiera_levels = crud_hiera_levels
@@ -94,8 +100,8 @@ class ControllerApiV1HieraLevelData:
         return self._authorize
 
     @property
-    def crud_hiera_key_models(self):
-        return self._crud_hiera_key_models
+    def crud_hiera_key_models_static(self):
+        return self._crud_hiera_key_models_static
 
     @property
     def crud_hiera_keys(self):
@@ -108,6 +114,10 @@ class ControllerApiV1HieraLevelData:
     @property
     def crud_hiera_levels(self):
         return self._crud_hiera_levels
+
+    @property
+    def crud_hiera_key_models_dynamic(self):
+        return self._crud_hiera_key_models_dynamic
 
     @property
     def crud_hiera_lookup_cache(self):
@@ -125,6 +135,21 @@ class ControllerApiV1HieraLevelData:
     def router(self):
         return self._router
 
+    async def _normalize_model_id(self, model_id: str) -> str:
+        prefix, raw_id = split_key_model_id(model_id)
+        if prefix == KEY_MODEL_DYNAMIC_PREFIX:
+            await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
+            return model_id
+        self.crud_hiera_key_models_static.get(_id=raw_id, fields=["id"])
+        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
+
+    async def _get_model_type(self, model_id: str):
+        key_model_id = await self._normalize_model_id(model_id)
+        model_type = self.pyhiera.hiera.key_models.get(key_model_id)
+        if not model_type:
+            raise QueryParamValidationError(msg=f"key model {key_model_id} not found")
+        return model_type, key_model_id
+
     async def create(
         self,
         request: Request,
@@ -137,17 +162,12 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_admin(request=request)
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         level = await self.crud_hiera_levels.get(_id=level_id, fields=["priority"])
-        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
-        model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
-        if not model_type:
-            raise QueryParamValidationError(
-                msg=f"key model {key.key_model_id} not found"
-            )
+        model_type, key_model_id = await self._get_model_type(key.key_model_id)
         try:
             model_type().validate(data.data)
         except ValueError as err:
             raise QueryParamValidationError(
-                msg=f"invalid data for key model {key.key_model_id}: {err}"
+                msg=f"invalid data for key model {key_model_id}: {err}"
             )
         result = await self.crud_hiera_level_data.create(
             _id=data_id,
@@ -203,17 +223,12 @@ class ControllerApiV1HieraLevelData:
         )
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
-        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
-        model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
-        if not model_type:
-            raise QueryParamValidationError(
-                msg=f"key model {key.key_model_id} not found"
-            )
+        model_type, key_model_id = await self._get_model_type(key.key_model_id)
         try:
             model_type().validate(level_data.data)
         except ValueError as err:
             raise QueryParamValidationError(
-                msg=f"invalid data for key model {key.key_model_id}: {err}"
+                msg=f"invalid data for key model {key_model_id}: {err}"
             )
         return level_data
 
@@ -260,18 +275,13 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_admin(request=request)
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
-        self.crud_hiera_key_models.get(_id=key.key_model_id, fields=["id"])
         if data.data is not None:
-            model_type = self.pyhiera.hiera.key_models.get(key.key_model_id)
-            if not model_type:
-                raise QueryParamValidationError(
-                    msg=f"key model {key.key_model_id} not found"
-                )
+            model_type, key_model_id = await self._get_model_type(key.key_model_id)
             try:
                 model_type().validate(data.data)
             except ValueError as err:
                 raise QueryParamValidationError(
-                    msg=f"invalid data for key model {key.key_model_id}: {err}"
+                    msg=f"invalid data for key model {key_model_id}: {err}"
                 )
         existing = await self.crud_hiera_level_data.get(
             _id=data_id,

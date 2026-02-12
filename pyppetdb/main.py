@@ -29,7 +29,8 @@ from pyppetdb.config import ConfigLdap as SettingsLdap
 from pyppetdb.config import ConfigOAuth as SettingsOAuth
 
 from pyppetdb.crud.credentials import CrudCredentials
-from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
@@ -46,6 +47,7 @@ from pyppetdb.crud.users import CrudUsers
 from pyppetdb.model.users import UserPost
 
 from pyppetdb.pyhiera import PyHiera
+from pyppetdb.pyhiera.schema_model_factory import SchemaModelFactory
 
 from pyppetdb.errors import ResourceNotFound
 
@@ -198,6 +200,17 @@ async def prepare_env():
     )
     env["pyhiera"] = pyhiera
 
+    crud_hiera_key_models_dynamic = CrudHieraKeyModelsDynamic(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_key_models_dynamic"],
+        pyhiera=pyhiera,
+        schema_factory=SchemaModelFactory(),
+    )
+    await crud_hiera_key_models_dynamic.index_create()
+    await crud_hiera_key_models_dynamic.load_all()
+    env["crud_hiera_key_models_dynamic"] = crud_hiera_key_models_dynamic
+
     crud_hiera_keys = CrudHieraKeys(
         config=settings,
         log=log,
@@ -207,12 +220,12 @@ async def prepare_env():
     await crud_hiera_keys.index_create()
     env["crud_hiera_keys"] = crud_hiera_keys
 
-    crud_hiera_key_models = CrudHieraKeyModels(
+    crud_hiera_key_models_static = CrudHieraKeyModelsStatic(
         config=settings,
         log=log,
         pyhiera=pyhiera,
     )
-    env["crud_hiera_key_models"] = crud_hiera_key_models
+    env["crud_hiera_key_models_static"] = crud_hiera_key_models_static
 
     authorize = Authorize(
         log=log,
@@ -234,7 +247,8 @@ async def lifespan_dev(app: FastAPI):
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
-        crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
+        crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
         crud_hiera_keys=env["crud_hiera_keys"],
         crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],
@@ -396,7 +410,8 @@ async def main_run():
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
-        crud_hiera_key_models=env["crud_hiera_key_models"],
+        crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
+        crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
         crud_hiera_keys=env["crud_hiera_keys"],
         crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],

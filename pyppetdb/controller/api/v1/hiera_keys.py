@@ -6,10 +6,14 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import Authorize
-from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
+from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
+from pyppetdb.pyhiera.key_model_utils import split_key_model_id
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_keys import filter_list
@@ -27,13 +31,15 @@ class ControllerApiV1HieraKeys:
         self,
         log: logging.Logger,
         authorize: Authorize,
-        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
+        crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_level_data: CrudHieraLevelData,
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
-        self._crud_hiera_key_models = crud_hiera_key_models
+        self._crud_hiera_key_models_static = crud_hiera_key_models_static
+        self._crud_hiera_key_models_dynamic = crud_hiera_key_models_dynamic
         self._crud_hiera_keys = crud_hiera_keys
         self._crud_hiera_level_data = crud_hiera_level_data
         self._pyhiera = pyhiera
@@ -85,8 +91,12 @@ class ControllerApiV1HieraKeys:
         return self._authorize
 
     @property
-    def crud_hiera_key_models(self):
-        return self._crud_hiera_key_models
+    def crud_hiera_key_models_static(self):
+        return self._crud_hiera_key_models_static
+
+    @property
+    def crud_hiera_key_models_dynamic(self):
+        return self._crud_hiera_key_models_dynamic
 
     @property
     def crud_hiera_keys(self):
@@ -108,18 +118,24 @@ class ControllerApiV1HieraKeys:
     def router(self):
         return self._router
 
-    def _validate_key_model(self, model_id: str):
-        self.crud_hiera_key_models.get(_id=model_id, fields=["id"])
+    async def _normalize_key_model_id(self, model_id: str) -> str:
+        prefix, raw_id = split_key_model_id(model_id)
+        if prefix == KEY_MODEL_DYNAMIC_PREFIX:
+            await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
+            return model_id
+        self.crud_hiera_key_models_static.get(_id=raw_id, fields=["id"])
+        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
 
-    def _validate_key_data(self, model_id: str, data):
-        model_type = self.pyhiera.hiera.key_models.get(model_id)
+    async def _validate_key_data(self, model_id: str, data):
+        normalized_id = await self._normalize_key_model_id(model_id)
+        model_type = self.pyhiera.hiera.key_models.get(normalized_id)
         if not model_type:
-            raise QueryParamValidationError(msg=f"key model {model_id} not found")
+            raise QueryParamValidationError(msg=f"key model {normalized_id} not found")
         try:
             model_type().validate(data)
         except ValueError as err:
             raise QueryParamValidationError(
-                msg=f"invalid data for key model {model_id}: {err}"
+                msg=f"invalid data for key model {normalized_id}: {err}"
             )
 
     async def create(
@@ -130,7 +146,8 @@ class ControllerApiV1HieraKeys:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        self._validate_key_model(data.key_model_id)
+        normalized_id = await self._normalize_key_model_id(data.key_model_id)
+        data.key_model_id = normalized_id
         return await self.crud_hiera_keys.create(
             _id=key_id,
             payload=data,
@@ -193,19 +210,22 @@ class ControllerApiV1HieraKeys:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        current = await self.crud_hiera_keys.get(
-            _id=key_id, fields=["key_model_id"]
-        )
+        current = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         new_model = data.key_model_id
-        if new_model and new_model != current.key_model_id:
-            self._validate_key_model(new_model)
+        current_model = current.key_model_id
+        if new_model:
+            new_model = await self._normalize_key_model_id(new_model)
+            data.key_model_id = new_model
+        if current_model:
+            current_model = await self._normalize_key_model_id(current_model)
+        if new_model and new_model != current_model:
             level_data = await self.crud_hiera_level_data.search(
                 key_id=key_id,
                 level_id=".*",
                 fields=["data"],
             )
             for item in level_data.result:
-                self._validate_key_data(new_model, item.data)
+                await self._validate_key_data(new_model, item.data)
         return await self.crud_hiera_keys.update(
             _id=key_id,
             payload=data,

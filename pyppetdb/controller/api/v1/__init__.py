@@ -6,7 +6,12 @@ from fastapi import APIRouter
 from pyppetdb.authorize import Authorize
 
 from pyppetdb.controller.api.v1.authenticate import ControllerApiV1Authenticate
-from pyppetdb.controller.api.v1.hiera_key_models import ControllerApiV1HieraKeyModels
+from pyppetdb.controller.api.v1.hiera_key_models_static import (
+    ControllerApiV1HieraKeyModelsStatic,
+)
+from pyppetdb.controller.api.v1.hiera_key_models_dynamic import (
+    ControllerApiV1HieraKeyModelsDynamic,
+)
 from pyppetdb.controller.api.v1.hiera_keys import ControllerApiV1HieraKeys
 from pyppetdb.controller.api.v1.hiera_levels import ControllerApiV1HieraLevels
 from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLevelData
@@ -21,7 +26,8 @@ from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCre
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 from pyppetdb.crud.credentials import CrudCredentials
-from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
@@ -41,7 +47,8 @@ class ControllerApiV1:
         log: logging.Logger,
         authorize: Authorize,
         crud_ldap: CrudLdap,
-        crud_hiera_key_models: CrudHieraKeyModels,
+        crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
+        crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
@@ -70,10 +77,20 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1HieraKeyModels(
+            ControllerApiV1HieraKeyModelsStatic(
                 log=log,
                 authorize=authorize,
-                crud_hiera_key_models=crud_hiera_key_models,
+                crud_hiera_key_models_static=crud_hiera_key_models_static,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1HieraKeyModelsDynamic(
+                log=log,
+                authorize=authorize,
+                crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
+                crud_hiera_keys=crud_hiera_keys,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -82,7 +99,8 @@ class ControllerApiV1:
             ControllerApiV1HieraKeys(
                 log=log,
                 authorize=authorize,
-                crud_hiera_key_models=crud_hiera_key_models,
+                crud_hiera_key_models_static=crud_hiera_key_models_static,
+                crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
                 crud_hiera_keys=crud_hiera_keys,
                 crud_hiera_level_data=crud_hiera_level_data,
                 pyhiera=pyhiera,
@@ -105,7 +123,8 @@ class ControllerApiV1:
             ControllerApiV1HieraLevelData(
                 log=log,
                 authorize=authorize,
-                crud_hiera_key_models=crud_hiera_key_models,
+                crud_hiera_key_models_static=crud_hiera_key_models_static,
+                crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
                 crud_hiera_keys=crud_hiera_keys,
                 crud_hiera_level_data=crud_hiera_level_data,
                 crud_hiera_levels=crud_hiera_levels,
@@ -120,6 +139,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_hiera_lookup_cache=crud_hiera_lookup_cache,
+                crud_hiera_keys=crud_hiera_keys,
                 pyhiera=pyhiera,
             ).router,
             responses={404: {"description": "Not found"}},
