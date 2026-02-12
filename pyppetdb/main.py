@@ -33,6 +33,7 @@ from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
+from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
@@ -123,6 +124,14 @@ async def prepare_env():
     )
     await crud_hiera_level_data.index_create()
     env["crud_hiera_level_data"] = crud_hiera_level_data
+
+    crud_hiera_lookup_cache = CrudHieraLookupCache(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_lookup_cache"],
+    )
+    await crud_hiera_lookup_cache.index_create()
+    env["crud_hiera_lookup_cache"] = crud_hiera_lookup_cache
 
     crud_nodes = CrudNodes(
         config=settings,
@@ -229,6 +238,7 @@ async def lifespan_dev(app: FastAPI):
         crud_hiera_keys=env["crud_hiera_keys"],
         crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],
+        crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],
@@ -390,6 +400,7 @@ async def main_run():
         crud_hiera_keys=env["crud_hiera_keys"],
         crud_hiera_levels=env["crud_hiera_levels"],
         crud_hiera_level_data=env["crud_hiera_level_data"],
+        crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],

@@ -9,6 +9,7 @@ from pyppetdb.authorize import Authorize
 
 from pyppetdb.crud.hiera_key_models import CrudHieraKeyModels
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
+from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.errors import QueryParamValidationError
@@ -35,6 +36,7 @@ class ControllerApiV1HieraLevelData:
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_levels: CrudHieraLevels,
+        crud_hiera_lookup_cache: CrudHieraLookupCache,
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
@@ -42,6 +44,7 @@ class ControllerApiV1HieraLevelData:
         self._crud_hiera_keys = crud_hiera_keys
         self._crud_hiera_level_data = crud_hiera_level_data
         self._crud_hiera_levels = crud_hiera_levels
+        self._crud_hiera_lookup_cache = crud_hiera_lookup_cache
         self._pyhiera = pyhiera
         self._log = log
         self._router = APIRouter(
@@ -107,6 +110,10 @@ class ControllerApiV1HieraLevelData:
         return self._crud_hiera_levels
 
     @property
+    def crud_hiera_lookup_cache(self):
+        return self._crud_hiera_lookup_cache
+
+    @property
     def pyhiera(self):
         return self._pyhiera
 
@@ -142,7 +149,7 @@ class ControllerApiV1HieraLevelData:
             raise QueryParamValidationError(
                 msg=f"invalid data for key model {key.key_model_id}: {err}"
             )
-        return await self.crud_hiera_level_data.create(
+        result = await self.crud_hiera_level_data.create(
             _id=data_id,
             key_id=key_id,
             level_id=level_id,
@@ -150,6 +157,10 @@ class ControllerApiV1HieraLevelData:
             priority=level.priority,
             fields=list(fields),
         )
+        await self.crud_hiera_lookup_cache.delete_by_key_and_facts(
+            key_id=key_id, facts=result.facts
+        )
+        return result
 
     async def delete(
         self,
@@ -159,11 +170,21 @@ class ControllerApiV1HieraLevelData:
         key_id: str,
     ):
         await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_level_data.delete(
+        existing = await self.crud_hiera_level_data.get(
+            _id=data_id,
+            key_id=key_id,
+            level_id=level_id,
+            fields=["facts"],
+        )
+        result = await self.crud_hiera_level_data.delete(
             _id=data_id,
             key_id=key_id,
             level_id=level_id,
         )
+        await self.crud_hiera_lookup_cache.delete_by_key_and_facts(
+            key_id=key_id, facts=existing.facts
+        )
+        return result
 
     async def get(
         self,
@@ -252,10 +273,20 @@ class ControllerApiV1HieraLevelData:
                 raise QueryParamValidationError(
                     msg=f"invalid data for key model {key.key_model_id}: {err}"
                 )
-        return await self.crud_hiera_level_data.update(
+        existing = await self.crud_hiera_level_data.get(
+            _id=data_id,
+            key_id=key_id,
+            level_id=level_id,
+            fields=["facts"],
+        )
+        result = await self.crud_hiera_level_data.update(
             _id=data_id,
             key_id=key_id,
             level_id=level_id,
             payload=data,
             fields=list(fields),
         )
+        await self.crud_hiera_lookup_cache.delete_by_key_and_facts(
+            key_id=key_id, facts=existing.facts
+        )
+        return result

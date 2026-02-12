@@ -193,7 +193,6 @@ class CrudHieraLevelData(CrudMongo):
             "level_id": level_id,
         }
         data = payload.model_dump()
-
         result = await self._update(
             query=query,
             fields=fields,

@@ -7,10 +7,10 @@ from fastapi import Request
 
 from pyhiera.errors import PyHieraBackendError
 from pyhiera.errors import PyHieraError
-from pyhiera.models import PyHieraModelDataBase
-
 from pyppetdb.authorize import Authorize
+from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.model.hiera_lookup import HieraLookupResult
 from pydantic import constr
 from pyppetdb.pyhiera import PyHiera
 
@@ -20,9 +20,11 @@ class ControllerApiV1HieraLookup:
         self,
         log: logging.Logger,
         authorize: Authorize,
+        crud_hiera_lookup_cache: CrudHieraLookupCache,
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
+        self._crud_hiera_lookup_cache = crud_hiera_lookup_cache
         self._pyhiera = pyhiera
         self._log = log
         self._router = APIRouter(
@@ -33,7 +35,7 @@ class ControllerApiV1HieraLookup:
         self.router.add_api_route(
             "/{key_id}",
             self.lookup,
-            response_model=PyHieraModelDataBase,
+            response_model=HieraLookupResult,
             response_model_exclude_unset=True,
             methods=["GET"],
         )
@@ -47,6 +49,10 @@ class ControllerApiV1HieraLookup:
         return self._pyhiera
 
     @property
+    def crud_hiera_lookup_cache(self):
+        return self._crud_hiera_lookup_cache
+
+    @property
     def log(self):
         return self._log
 
@@ -54,7 +60,8 @@ class ControllerApiV1HieraLookup:
     def router(self):
         return self._router
 
-    def _facts_from_query(self, fact: Set[str] | None) -> dict[str, str]:
+    @staticmethod
+    def _facts_from_query(fact: Set[str] | None) -> dict[str, str]:
         if not fact:
             return {}
         facts = {}
@@ -76,13 +83,30 @@ class ControllerApiV1HieraLookup:
     ):
         await self.authorize.require_admin(request=request)
         facts = self._facts_from_query(fact)
+        cached = await self.crud_hiera_lookup_cache.get_cached(
+            key_id=key_id,
+            facts=facts,
+            merge=merge,
+        )
+        if cached:
+            return HieraLookupResult(**cached["result"])
         try:
             if merge:
                 result = await self.pyhiera.hiera.key_data_get_merge(
-                    key=key_id, facts=facts
+                    key=key_id, facts=facts, include_sources=False
                 )
             else:
-                result = await self.pyhiera.hiera.key_data_get(key=key_id, facts=facts)
-            return result
+                result = await self.pyhiera.hiera.key_data_get(
+                    key=key_id, facts=facts, include_sources=False
+                )
+            await self.crud_hiera_lookup_cache.set_cached(
+                key_id=key_id,
+                facts=facts,
+                merge=merge,
+                result={"data": result.model_dump(exclude={"sources"})["data"]},
+            )
+            return HieraLookupResult(
+                data=result.model_dump(exclude={"sources"})["data"]
+            )
         except (PyHieraError, PyHieraBackendError) as err:
             raise QueryParamValidationError(msg=str(err))

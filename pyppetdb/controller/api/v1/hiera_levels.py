@@ -6,6 +6,7 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import Authorize
+from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.model.common import DataDelete
@@ -26,10 +27,12 @@ class ControllerApiV1HieraLevels:
         authorize: Authorize,
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
+        crud_hiera_lookup_cache: CrudHieraLookupCache,
     ):
         self._authorize = authorize
         self._crud_hiera_levels = crud_hiera_levels
         self._crud_hiera_level_data = crud_hiera_level_data
+        self._crud_hiera_lookup_cache = crud_hiera_lookup_cache
         self._log = log
         self._router = APIRouter(
             prefix="/hiera/levels",
@@ -86,6 +89,10 @@ class ControllerApiV1HieraLevels:
         return self._crud_hiera_level_data
 
     @property
+    def crud_hiera_lookup_cache(self):
+        return self._crud_hiera_lookup_cache
+
+    @property
     def log(self):
         return self._log
 
@@ -111,6 +118,7 @@ class ControllerApiV1HieraLevels:
                 level_id=level_id,
                 priority=result.priority,
             )
+        await self.crud_hiera_lookup_cache.clear_all()
         return result
 
     async def delete(
@@ -119,7 +127,9 @@ class ControllerApiV1HieraLevels:
         level_id: str,
     ):
         await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_levels.delete(_id=level_id)
+        result = await self.crud_hiera_levels.delete(_id=level_id)
+        await self.crud_hiera_lookup_cache.clear_all()
+        return result
 
     async def get(
         self,
@@ -175,4 +185,5 @@ class ControllerApiV1HieraLevels:
                 level_id=level_id,
                 priority=data.priority,
             )
+        await self.crud_hiera_lookup_cache.clear_all()
         return result
