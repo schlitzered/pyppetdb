@@ -51,18 +51,40 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
     def _build_key_model_class(
         self, model_id: str, schema: dict, description: str | None
     ) -> type[PyHieraKeyBase]:
+        from pyhiera.models import PyHieraModelDataBase
+        from pydantic import create_model
+        from typing import Any
+
         raw_id = model_id
         if raw_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             raw_id = raw_id[len(KEY_MODEL_DYNAMIC_PREFIX) :]
         model_name = f"Dynamic_{raw_id}"
-        pydantic_model = self.schema_factory.create(schema, name=model_name)
+
+        # Create the validation model from the schema for validation only
+        validation_model = self.schema_factory.create(schema, name=f"{model_name}_Validator")
+
+        # Create a wrapper model that has a 'data' field typed as the schema model
+        # but allows dict input. This makes dynamic models consistent with static models.
+        wrapped_model = create_model(
+            model_name,
+            __base__=PyHieraModelDataBase,
+            data=(Any, ...)  # Use Any to allow dict input/output
+        )
+
         desc = description or "dynamic model"
 
         class DynamicKeyModel(PyHieraKeyBase):
             def __init__(self):
                 super().__init__()
                 self._description = desc
-                self._model = pydantic_model
+                self._model = wrapped_model
+                self._validation_model = validation_model
+
+            def validate(self, data: Any) -> PyHieraModelDataBase:
+                # Validate the data against the schema first
+                validated = self._validation_model(**data if isinstance(data, dict) else data)
+                # Return it wrapped in the model with 'data' field as a dict
+                return self._model(data=validated.model_dump())
 
         DynamicKeyModel.__name__ = model_name
         return DynamicKeyModel

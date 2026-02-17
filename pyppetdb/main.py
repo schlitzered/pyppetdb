@@ -1,7 +1,8 @@
+import argparse
 import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
-import random
+import secrets
 import signal
 import string
 import sys
@@ -49,6 +50,7 @@ from pyppetdb.model.users import UserPost
 from pyppetdb.pyhiera import PyHiera
 from pyppetdb.pyhiera.schema_model_factory import SchemaModelFactory
 
+from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 
 version = "0.0.0"
@@ -235,7 +237,6 @@ async def prepare_env():
         crud_users_credentials=crud_users_credentials,
     )
     env["authorize"] = authorize
-    await setup_admin_user(log=log, crud_users=crud_users)
     return env
 
 
@@ -267,27 +268,6 @@ async def lifespan_dev(app: FastAPI):
     )
     app.include_router(controller.router_dev)
     yield
-
-
-async def setup_admin_user(log: logging.Logger, crud_users: CrudUsers):
-    try:
-        await crud_users.get(_id="admin", fields=["_id"])
-    except ResourceNotFound:
-        password = "".join(
-            random.choice(string.ascii_letters + string.digits) for _ in range(20)
-        )
-        log.info(f"creating admin user with password {password}")
-        await crud_users.create(
-            _id="admin",
-            payload=UserPost(
-                admin=True,
-                email="admin@example.com",
-                name="admin",
-                password=password,
-            ),
-            fields=["_id"],
-        )
-        log.info("creating admin user, done")
 
 
 async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
@@ -352,6 +332,67 @@ def setup_oauth_providers(
                 userinfo_url=config.url.userinfo,
             )
     return providers
+
+
+def _generate_password(length: int = 20) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def cli_create_admin(
+    user_id: str,
+    email: str,
+    name: str,
+    password: str | None,
+) -> None:
+    log = setup_logging(settings.app.loglevel)
+    mongo_db = setup_mongodb(
+        log=log,
+        database=settings.mongodb.database,
+        url=settings.mongodb.url,
+    )
+    crud_ldap = CrudLdap(
+        log=log,
+        ldap_base_dn=settings.ldap.basedn,
+        ldap_bind_dn=settings.ldap.binddn,
+        ldap_pool=None,
+        ldap_url=settings.ldap.url,
+        ldap_user_pattern=settings.ldap.userpattern,
+    )
+    crud_users = CrudUsers(
+        config=settings,
+        log=log,
+        coll=mongo_db["users"],
+        crud_ldap=crud_ldap,
+    )
+
+    try:
+        await crud_users.get(_id=user_id, fields=["_id"])
+        log.error(f"user {user_id} already exists")
+        sys.exit(1)
+    except ResourceNotFound:
+        pass
+
+    if not password:
+        password = _generate_password()
+        print(f"generated password for {user_id}: {password}")
+
+    try:
+        await crud_users.create(
+            _id=user_id,
+            payload=UserPost(
+                admin=True,
+                email=email,
+                name=name,
+                password=password,
+            ),
+            fields=["_id"],
+        )
+    except DuplicateResource:
+        log.error(f"user {user_id} already exists")
+        sys.exit(1)
+
+    log.info(f"created admin user {user_id}")
 
 
 app_dev = FastAPI(
@@ -472,7 +513,35 @@ async def main_run():
                     await t
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="pyppetdb")
+    subparsers = parser.add_subparsers(dest="command")
+
+    create_admin = subparsers.add_parser(
+        "create-admin", help="create an admin user"
+    )
+    create_admin.add_argument("--user-id", default="admin")
+    create_admin.add_argument("--email", default="admin@example.com")
+    create_admin.add_argument("--name", default="admin")
+    create_admin.add_argument("--password")
+
+    return parser
+
+
 def main():
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.command == "create-admin":
+        asyncio.run(
+            cli_create_admin(
+                user_id=args.user_id,
+                email=args.email,
+                name=args.name,
+                password=args.password,
+            )
+        )
+        return
+
     asyncio.run(main_run())
 
 
