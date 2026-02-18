@@ -87,14 +87,6 @@ class ControllerApiV1HieraKeyModelsDynamic:
     def router(self):
         return self._router
 
-    @staticmethod
-    def _require_prefixed_id(key_model_id: str) -> str:
-        if not key_model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
-            raise QueryParamValidationError(
-                msg=f"invalid key model id {key_model_id}, expected dynamic prefix"
-            )
-        return key_model_id
-
     async def search(
         self,
         request: Request,
@@ -113,8 +105,6 @@ class ControllerApiV1HieraKeyModelsDynamic:
         ),
     ):
         await self.authorize.require_admin(request=request)
-        if key_model_id:
-            self._require_prefixed_id(key_model_id)
         result = await self.crud_hiera_key_models_dynamic.search(
             _id=key_model_id,
             fields=list(fields),
@@ -132,7 +122,6 @@ class ControllerApiV1HieraKeyModelsDynamic:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        key_model_id = self._require_prefixed_id(key_model_id)
         result = await self.crud_hiera_key_models_dynamic.get(
             _id=key_model_id,
             fields=list(fields),
@@ -147,7 +136,10 @@ class ControllerApiV1HieraKeyModelsDynamic:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        key_model_id = self._require_prefixed_id(key_model_id)
+        if not key_model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
+            raise QueryParamValidationError(
+                msg=f"invalid key model id {key_model_id}, expected dynamic prefix"
+            )
         result = await self.crud_hiera_key_models_dynamic.create(
             _id=key_model_id,
             payload=data,
@@ -161,17 +153,16 @@ class ControllerApiV1HieraKeyModelsDynamic:
         key_model_id: str,
     ):
         await self.authorize.require_admin(request=request)
-        key_model_id = self._require_prefixed_id(key_model_id)
         keys = await self.crud_hiera_keys.search(
             model=key_model_id,
             fields=["id"],
-            limit=1000,
+            limit=10,
         )
         if keys.result:
-            key_ids = sorted([item.id for item in keys.result if item.id])
+            key_ids = [item.id for item in keys.result if item.id]
             raise QueryParamValidationError(
                 msg=(
-                    f"dynamic key model {key_model_id} is still in use by keys: "
+                    f"dynamic key model {key_model_id} is still in use, example keys: "
                     f"{', '.join(key_ids)}"
                 )
             )

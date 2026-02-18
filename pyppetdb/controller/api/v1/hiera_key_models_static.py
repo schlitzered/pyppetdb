@@ -8,16 +8,12 @@ from fastapi import Request
 from pyppetdb.authorize import Authorize
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 
-from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import filter_list
 from pyppetdb.model.hiera_key_models_static import filter_literal
 from pyppetdb.model.hiera_key_models_static import sort_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import split_key_model_id
 
 
 class ControllerApiV1HieraKeyModelsStatic:
@@ -66,26 +62,6 @@ class ControllerApiV1HieraKeyModelsStatic:
     def router(self):
         return self._router
 
-    def _normalize_id(self, key_model_id: str) -> str:
-        prefix, raw_id = split_key_model_id(key_model_id)
-        if prefix != KEY_MODEL_STATIC_PREFIX:
-            raise QueryParamValidationError(
-                msg=f"invalid key model id {key_model_id}, expected static prefix"
-            )
-        return f"{KEY_MODEL_STATIC_PREFIX}{raw_id}"
-
-    def _with_prefix(self, item: HieraKeyModelGet) -> HieraKeyModelGet:
-        if item.id is None:
-            return item
-        prefix, raw_id = split_key_model_id(item.id)
-        if prefix != KEY_MODEL_STATIC_PREFIX:
-            return item
-        return HieraKeyModelGet(
-            id=f"{KEY_MODEL_STATIC_PREFIX}{raw_id}",
-            description=item.description,
-            model=item.model,
-        )
-
     async def search(
         self,
         request: Request,
@@ -104,15 +80,6 @@ class ControllerApiV1HieraKeyModelsStatic:
         ),
     ):
         await self.authorize.require_admin(request=request)
-        if key_model_id:
-            if key_model_id.startswith(KEY_MODEL_STATIC_PREFIX):
-                pass
-            elif key_model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
-                raise QueryParamValidationError(
-                    msg=f"invalid key model id {key_model_id}, expected static prefix"
-                )
-            else:
-                key_model_id = f"{KEY_MODEL_STATIC_PREFIX}{key_model_id}"
         result = self.crud_hiera_key_models_static.search(
             _id=key_model_id,
             fields=list(fields),
@@ -121,14 +88,6 @@ class ControllerApiV1HieraKeyModelsStatic:
             page=page,
             limit=limit,
         )
-        filtered = []
-        for item in result.result:
-            if not item.id:
-                continue
-            if not item.id.startswith(KEY_MODEL_STATIC_PREFIX):
-                continue
-            filtered.append(self._with_prefix(item))
-        result.result = filtered
         return result
 
     async def get(
@@ -138,9 +97,8 @@ class ControllerApiV1HieraKeyModelsStatic:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        raw_id = self._normalize_id(key_model_id)
         result = self.crud_hiera_key_models_static.get(
-            _id=raw_id,
+            _id=key_model_id,
             fields=list(fields),
         )
-        return self._with_prefix(result)
+        return result

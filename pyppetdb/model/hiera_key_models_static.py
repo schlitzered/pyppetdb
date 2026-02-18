@@ -18,11 +18,7 @@ filter_literal = Literal[
 
 filter_list = set(get_args(filter_literal))
 
-sort_literal = Literal[
-    "id",
-    "description",
-    "model",
-]
+sort_literal = Literal["id"]
 
 
 class HieraKeyModelGet(BaseModel):

@@ -118,16 +118,15 @@ class ControllerApiV1HieraKeys:
     def router(self):
         return self._router
 
-    async def _normalize_key_model_id(self, model_id: str) -> str:
-        prefix, raw_id = split_key_model_id(model_id)
-        if prefix == KEY_MODEL_DYNAMIC_PREFIX:
+    async def _key_model_exists(self, model_id: str) -> str:
+        if model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
             return model_id
         self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
         return model_id
 
     async def _validate_key_data(self, model_id: str, data):
-        normalized_id = await self._normalize_key_model_id(model_id)
+        normalized_id = await self._key_model_exists(model_id)
         model_type = self.pyhiera.hiera.key_models.get(normalized_id)
         if not model_type:
             raise QueryParamValidationError(msg=f"key model {normalized_id} not found")
@@ -146,8 +145,7 @@ class ControllerApiV1HieraKeys:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        normalized_id = await self._normalize_key_model_id(data.key_model_id)
-        data.key_model_id = normalized_id
+        await self._key_model_exists(data.key_model_id)
         return await self.crud_hiera_keys.create(
             _id=key_id,
             payload=data,
@@ -214,10 +212,7 @@ class ControllerApiV1HieraKeys:
         new_model = data.key_model_id
         current_model = current.key_model_id
         if new_model:
-            new_model = await self._normalize_key_model_id(new_model)
-            data.key_model_id = new_model
-        if current_model:
-            current_model = await self._normalize_key_model_id(current_model)
+            await self._key_model_exists(new_model)
         if new_model and new_model != current_model:
             level_data = await self.crud_hiera_level_data.search(
                 key_id=key_id,

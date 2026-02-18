@@ -15,7 +15,6 @@ from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
 from pyppetdb.pyhiera.key_model_utils import split_key_model_id
 from pyppetdb.pyhiera import PyHiera
 
@@ -135,16 +134,15 @@ class ControllerApiV1HieraLevelData:
     def router(self):
         return self._router
 
-    async def _normalize_model_id(self, model_id: str) -> str:
-        prefix, raw_id = split_key_model_id(model_id)
-        if prefix == KEY_MODEL_DYNAMIC_PREFIX:
+    async def _key_model_exists(self, model_id: str) -> str:
+        if model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
             return model_id
         self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
         return model_id
 
     async def _get_model_type(self, model_id: str):
-        key_model_id = await self._normalize_model_id(model_id)
+        key_model_id = await self._key_model_exists(model_id)
         model_type = self.pyhiera.hiera.key_models.get(key_model_id)
         if not model_type:
             raise QueryParamValidationError(msg=f"key model {key_model_id} not found")
@@ -221,15 +219,6 @@ class ControllerApiV1HieraLevelData:
             level_id=level_id,
             fields=list(fields),
         )
-        key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
-        await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
-        model_type, key_model_id = await self._get_model_type(key.key_model_id)
-        try:
-            model_type().validate(level_data.data)
-        except ValueError as err:
-            raise QueryParamValidationError(
-                msg=f"invalid data for key model {key_model_id}: {err}"
-            )
         return level_data
 
     async def search(

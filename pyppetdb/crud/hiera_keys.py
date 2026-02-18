@@ -40,16 +40,20 @@ class CrudHieraKeysAdapter:
     def log(self):
         return self._log
 
+    @property
+    def pyhiera(self):
+        return self._pyhiera
+
     def _add_or_update_key(self, key_id: str, model_id: str):
-        model_type = self._pyhiera.hiera.key_models.get(model_id)
+        model_type = self.pyhiera.hiera.key_models.get(model_id)
         if not model_type:
             self.log.warning(f"key model {model_id} not found")
             return
-        self._pyhiera.hiera.key_add(key_id, model_id)
+        self.pyhiera.hiera.key_add(key_id, model_id)
 
     def _delete_key(self, key_id: str):
         try:
-            self._pyhiera.hiera.key_delete(key_id)
+            self.pyhiera.hiera.key_delete(key_id)
         except PyHieraError as err:
             self.log.warning(f"failed to delete key {key_id}: {err}")
 

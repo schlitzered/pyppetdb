@@ -10,6 +10,7 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
 from pyppetdb.pyhiera import PyHiera
+from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
 
 
 class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
@@ -34,7 +35,9 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
     ) -> HieraKeyModelGet:
         model = model_type()
         schema = None
-        if not fields is None:
+        if fields:
+            if "id" not in fields:
+                fields.append("id")
             if "model" in fields:
                 schema = model.model.model_json_schema()
                 schema.get("properties", {}).pop("sources", None)
@@ -68,7 +71,6 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
     ) -> HieraKeyModelGetMulti:
-        hiera = self.pyhiera.hiera
         items = []
         pattern = None
         if _id:
@@ -76,7 +78,9 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
                 pattern = re.compile(_id)
             except re.error as err:
                 raise QueryParamValidationError(msg=f"invalid regex: {err}")
-        for key, model_type in hiera.key_models.items():
+        for key, model_type in self.pyhiera.hiera.key_models.items():
+            if not key.startswith(KEY_MODEL_STATIC_PREFIX):
+                continue
             if pattern and not pattern.search(key):
                 continue
             items.append(self._build_item(key, model_type, fields=fields))
@@ -102,9 +106,10 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
         _id: str,
         fields: typing.Optional[list] = None,
     ) -> HieraKeyModelGet:
-        hiera = self.pyhiera.hiera
+        if not _id.startswith(KEY_MODEL_STATIC_PREFIX):
+            raise QueryParamValidationError(msg=f"key model {_id} not found")
         try:
-            model_type = hiera.key_models[_id]
+            model_type = self.pyhiera.hiera.key_models[_id]
         except KeyError:
             raise QueryParamValidationError(msg=f"key model {_id} not found")
         return self._build_item(_id, model_type, fields=fields)

@@ -48,7 +48,6 @@ from pyppetdb.crud.users import CrudUsers
 from pyppetdb.model.users import UserPost
 
 from pyppetdb.pyhiera import PyHiera
-from pyppetdb.pyhiera.schema_model_factory import SchemaModelFactory
 
 from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
@@ -207,10 +206,8 @@ async def prepare_env():
         log=log,
         coll=mongo_db["hiera_key_models_dynamic"],
         pyhiera=pyhiera,
-        schema_factory=SchemaModelFactory(),
     )
     await crud_hiera_key_models_dynamic.index_create()
-    await crud_hiera_key_models_dynamic.load_all()
     env["crud_hiera_key_models_dynamic"] = crud_hiera_key_models_dynamic
 
     crud_hiera_keys = CrudHieraKeys(
@@ -517,9 +514,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pyppetdb")
     subparsers = parser.add_subparsers(dest="command")
 
-    create_admin = subparsers.add_parser(
-        "create-admin", help="create an admin user"
-    )
+    create_admin = subparsers.add_parser("create-admin", help="create an admin user")
     create_admin.add_argument("--user-id", default="admin")
     create_admin.add_argument("--email", default="admin@example.com")
     create_admin.add_argument("--name", default="admin")
