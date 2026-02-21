@@ -142,9 +142,10 @@ class CrudHieraModelsDynamicAdapter:
                 self._validation_model = validation_model
 
             def validate(self, data: Any) -> PyHieraModelDataBase:
-                validated = self._validation_model(
-                    **data if isinstance(data, dict) else data
-                )
+                print(data)
+                if not isinstance(data, dict):
+                    data = {"data": data}
+                validated = self._validation_model(**data)
                 return self._model(data=validated.model_dump())
 
         DynamicKeyModel.__name__ = model_id
