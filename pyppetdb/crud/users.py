@@ -50,7 +50,7 @@ class CrudUsers(CrudMongo):
 
     @staticmethod
     def _password(password) -> str:
-        return pbkdf2_sha512.encrypt(password, rounds=100000, salt_size=32)
+        return pbkdf2_sha512.using(rounds=100000, salt_size=32).hash(password)
 
     async def check_credentials(self, credentials: AuthenticatePost) -> str:
         user = credentials.user

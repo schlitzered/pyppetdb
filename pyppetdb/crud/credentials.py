@@ -42,7 +42,7 @@ class CrudCredentials(CrudMongo):
 
     @staticmethod
     def _create_secret(token) -> str:
-        return pbkdf2_sha512.encrypt(str(token), rounds=10, salt_size=32)
+        return pbkdf2_sha512.using(rounds=10, salt_size=32).hash(str(token))
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")

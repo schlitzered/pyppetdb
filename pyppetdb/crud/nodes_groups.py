@@ -19,7 +19,7 @@ from pyppetdb.model.nodes_groups import NodeGroupUpdateInternal
 from pyppetdb.model.pdb_facts import PuppetDBFacts
 
 
-class NodesGroupsCache:
+class CrudNodesGroupsCache:
     def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
         self._coll = coll
         self._log = log
@@ -118,7 +118,7 @@ class CrudNodesGroups(CrudMongo):
             log=log,
             coll=coll,
         )
-        self._cache = NodesGroupsCache(log=log, coll=coll)
+        self._cache = CrudNodesGroupsCache(log=log, coll=coll)
 
     @property
     def cache(self):

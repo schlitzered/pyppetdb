@@ -1,7 +1,8 @@
+import argparse
 import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
-import random
+import secrets
 import signal
 import string
 import sys
@@ -29,6 +30,12 @@ from pyppetdb.config import ConfigLdap as SettingsLdap
 from pyppetdb.config import ConfigOAuth as SettingsOAuth
 
 from pyppetdb.crud.credentials import CrudCredentials
+from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
+from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
+from pyppetdb.crud.hiera_keys import CrudHieraKeys
+from pyppetdb.crud.hiera_levels import CrudHieraLevels
+from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
+from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
@@ -40,6 +47,9 @@ from pyppetdb.crud.users import CrudUsers
 
 from pyppetdb.model.users import UserPost
 
+from pyppetdb.pyhiera import PyHiera
+
+from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 
 version = "0.0.0"
@@ -102,6 +112,30 @@ async def prepare_env():
     )
     env["crud_ldap"] = crud_ldap
 
+    crud_hiera_levels = CrudHieraLevels(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_levels"],
+    )
+    await crud_hiera_levels.index_create()
+    env["crud_hiera_levels"] = crud_hiera_levels
+
+    crud_hiera_level_data = CrudHieraLevelData(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_level_data"],
+    )
+    await crud_hiera_level_data.index_create()
+    env["crud_hiera_level_data"] = crud_hiera_level_data
+
+    crud_hiera_lookup_cache = CrudHieraLookupCache(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_lookup_cache"],
+    )
+    await crud_hiera_lookup_cache.index_create()
+    env["crud_hiera_lookup_cache"] = crud_hiera_lookup_cache
+
     crud_nodes = CrudNodes(
         config=settings,
         log=log,
@@ -159,6 +193,39 @@ async def prepare_env():
     await crud_users_credentials.index_create()
     env["crud_users_credentials"] = crud_users_credentials
 
+    pyhiera = PyHiera(
+        log=log,
+        config=settings.hiera,
+        crud_hiera_level_data=crud_hiera_level_data,
+        hiera_level_ids=crud_hiera_levels.cache.level_ids,
+    )
+    env["pyhiera"] = pyhiera
+
+    crud_hiera_key_models_dynamic = CrudHieraKeyModelsDynamic(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_key_models_dynamic"],
+        pyhiera=pyhiera,
+    )
+    await crud_hiera_key_models_dynamic.index_create()
+    env["crud_hiera_key_models_dynamic"] = crud_hiera_key_models_dynamic
+
+    crud_hiera_keys = CrudHieraKeys(
+        config=settings,
+        log=log,
+        coll=mongo_db["hiera_keys"],
+        pyhiera=pyhiera,
+    )
+    await crud_hiera_keys.index_create()
+    env["crud_hiera_keys"] = crud_hiera_keys
+
+    crud_hiera_key_models_static = CrudHieraKeyModelsStatic(
+        config=settings,
+        log=log,
+        pyhiera=pyhiera,
+    )
+    env["crud_hiera_key_models_static"] = crud_hiera_key_models_static
+
     authorize = Authorize(
         log=log,
         crud_node_groups=crud_nodes_groups,
@@ -167,7 +234,6 @@ async def prepare_env():
         crud_users_credentials=crud_users_credentials,
     )
     env["authorize"] = authorize
-    await setup_admin_user(log=log, crud_users=crud_users)
     return env
 
 
@@ -179,6 +245,12 @@ async def lifespan_dev(app: FastAPI):
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
+        crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
+        crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
+        crud_hiera_keys=env["crud_hiera_keys"],
+        crud_hiera_levels=env["crud_hiera_levels"],
+        crud_hiera_level_data=env["crud_hiera_level_data"],
+        crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],
@@ -189,30 +261,10 @@ async def lifespan_dev(app: FastAPI):
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
+        pyhiera=env["pyhiera"],
     )
     app.include_router(controller.router_dev)
     yield
-
-
-async def setup_admin_user(log: logging.Logger, crud_users: CrudUsers):
-    try:
-        await crud_users.get(_id="admin", fields=["_id"])
-    except ResourceNotFound:
-        password = "".join(
-            random.choice(string.ascii_letters + string.digits) for _ in range(20)
-        )
-        log.info(f"creating admin user with password {password}")
-        await crud_users.create(
-            _id="admin",
-            payload=UserPost(
-                admin=True,
-                email="admin@example.com",
-                name="admin",
-                password=password,
-            ),
-            fields=["_id"],
-        )
-        log.info("creating admin user, done")
 
 
 async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
@@ -279,6 +331,67 @@ def setup_oauth_providers(
     return providers
 
 
+def _generate_password(length: int = 20) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def cli_create_admin(
+    user_id: str,
+    email: str,
+    name: str,
+    password: str | None,
+) -> None:
+    log = setup_logging(settings.app.loglevel)
+    mongo_db = setup_mongodb(
+        log=log,
+        database=settings.mongodb.database,
+        url=settings.mongodb.url,
+    )
+    crud_ldap = CrudLdap(
+        log=log,
+        ldap_base_dn=settings.ldap.basedn,
+        ldap_bind_dn=settings.ldap.binddn,
+        ldap_pool=None,
+        ldap_url=settings.ldap.url,
+        ldap_user_pattern=settings.ldap.userpattern,
+    )
+    crud_users = CrudUsers(
+        config=settings,
+        log=log,
+        coll=mongo_db["users"],
+        crud_ldap=crud_ldap,
+    )
+
+    try:
+        await crud_users.get(_id=user_id, fields=["_id"])
+        log.error(f"user {user_id} already exists")
+        sys.exit(1)
+    except ResourceNotFound:
+        pass
+
+    if not password:
+        password = _generate_password()
+        print(f"generated password for {user_id}: {password}")
+
+    try:
+        await crud_users.create(
+            _id=user_id,
+            payload=UserPost(
+                admin=True,
+                email=email,
+                name=name,
+                password=password,
+            ),
+            fields=["_id"],
+        )
+    except DuplicateResource:
+        log.error(f"user {user_id} already exists")
+        sys.exit(1)
+
+    log.info(f"created admin user {user_id}")
+
+
 app_dev = FastAPI(
     title="pyppetdb all in one dev server",
     version=version,
@@ -335,6 +448,12 @@ async def main_run():
         log=env["log"],
         authorize=env["authorize"],
         crud_ldap=env["crud_ldap"],
+        crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
+        crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
+        crud_hiera_keys=env["crud_hiera_keys"],
+        crud_hiera_levels=env["crud_hiera_levels"],
+        crud_hiera_level_data=env["crud_hiera_level_data"],
+        crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
         crud_nodes_groups=env["crud_nodes_groups"],
@@ -345,6 +464,7 @@ async def main_run():
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
+        pyhiera=env["pyhiera"],
     )
     apps = list()
     apps_tasks = list()
@@ -390,7 +510,33 @@ async def main_run():
                     await t
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="pyppetdb")
+    subparsers = parser.add_subparsers(dest="command")
+
+    create_admin = subparsers.add_parser("create-admin", help="create an admin user")
+    create_admin.add_argument("--user-id", default="admin")
+    create_admin.add_argument("--email", default="admin@example.com")
+    create_admin.add_argument("--name", default="admin")
+    create_admin.add_argument("--password")
+
+    return parser
+
+
 def main():
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.command == "create-admin":
+        asyncio.run(
+            cli_create_admin(
+                user_id=args.user_id,
+                email=args.email,
+                name=args.name,
+                password=args.password,
+            )
+        )
+        return
+
     asyncio.run(main_run())
 
 

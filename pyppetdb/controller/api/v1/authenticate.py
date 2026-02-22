@@ -69,8 +69,6 @@ class ControllerApiV1Authenticate:
 
     async def get(self, request: Request):
         user = await self.authorize.get_user(request=request)
-        if not user:
-            raise AuthenticationError
         return {"user": user.id}
 
     async def create(
