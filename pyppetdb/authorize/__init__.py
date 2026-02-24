@@ -3,6 +3,7 @@ import typing
 
 from fastapi import Request
 
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
@@ -16,7 +17,42 @@ from pyppetdb.errors import SessionCredentialError
 from pyppetdb.model.users import UserGet
 
 
-class Authorize:
+class AuthorizePuppet:
+    def __init__(
+        self,
+        log: logging.Logger,
+        crud_nodes: CrudNodes,
+        crud_nodes_credentials: CrudCredentials,
+    ):
+        self._crud_nodes = crud_nodes
+        self._crud_nodes_credentials = crud_nodes_credentials
+        self._log = log
+
+    @property
+    def crud_nodes(self) -> CrudNodes:
+        return self._crud_nodes
+
+    @property
+    def crud_nodes_credentials(self):
+        return self._crud_nodes_credentials
+
+    @property
+    def log(self):
+        return self._log
+
+    async def get_node(self, request: Request) -> UserGet | None:
+        try:
+            node = await self.crud_nodes_credentials.check_credential(request=request)
+            return node
+        except (CredentialError, ResourceNotFound):
+            return None
+
+    async def require_node(self, request) -> UserGet:
+        user = await self.get_node(request)
+        return user
+
+
+class AuthorizePyppetDB:
     def __init__(
         self,
         log: logging.Logger,

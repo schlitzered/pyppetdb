@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -26,7 +26,7 @@ class ControllerApiV1Users:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,

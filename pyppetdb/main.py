@@ -23,7 +23,8 @@ import orjson
 import pyppetdb.controller
 import pyppetdb.controller.oauth
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.config import Config
 from pyppetdb.config import ConfigLdap as SettingsLdap
@@ -144,6 +145,14 @@ async def prepare_env():
     await crud_nodes.index_create()
     env["crud_nodes"] = crud_nodes
 
+    crud_nodes_credentials = CrudCredentials(
+        config=settings,
+        log=log,
+        coll=mongo_db["nodes_credentials"],
+    )
+    await crud_nodes_credentials.index_create()
+    env["crud_nodes_credentials"] = crud_nodes_credentials
+
     crud_nodes_catalogs = CrudNodesCatalogs(
         config=settings,
         log=log,
@@ -226,14 +235,21 @@ async def prepare_env():
     )
     env["crud_hiera_key_models_static"] = crud_hiera_key_models_static
 
-    authorize = Authorize(
+    authorize_puppet = AuthorizePuppet(
+        log=log,
+        crud_nodes=crud_nodes,
+        crud_nodes_credentials=crud_nodes_credentials,
+    )
+    env["authorize_puppet"] = authorize_puppet
+
+    authorize_pyppetdb = AuthorizePyppetDB(
         log=log,
         crud_node_groups=crud_nodes_groups,
         crud_teams=crud_teams,
         crud_users=crud_users,
         crud_users_credentials=crud_users_credentials,
     )
-    env["authorize"] = authorize
+    env["authorize_pyppetdb"] = authorize_pyppetdb
     return env
 
 
@@ -243,7 +259,7 @@ async def lifespan_dev(app: FastAPI):
 
     controller = pyppetdb.controller.Controller(
         log=env["log"],
-        authorize=env["authorize"],
+        authorize=env["authorize_pyppetdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -253,6 +269,7 @@ async def lifespan_dev(app: FastAPI):
         crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
+        crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_teams=env["crud_teams"],
@@ -430,6 +447,20 @@ def main_run_get_app(
         SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
     )
     app.include_router(getattr(controller, f"router_{app_name}"))
+
+    # Check if mTLS should be enabled for puppet app
+    ssl_cert_reqs = None
+    if (
+        app_name == "puppet"
+        and _settings.ssl
+        and hasattr(_settings, "authMtls")
+        and _settings.authMtls
+    ):
+        import ssl
+
+        ssl_cert_reqs = int(ssl.CERT_REQUIRED)
+        controller.log.info(f"Enabling mTLS authentication for {app_name} app")
+
     config = uvicorn.Config(
         app,
         host=_settings.host,
@@ -437,6 +468,7 @@ def main_run_get_app(
         ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
         ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
         ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
+        ssl_cert_reqs=ssl_cert_reqs,
     )
     return uvicorn.Server(config)
 
@@ -446,7 +478,7 @@ async def main_run():
     log = env["log"]
     controller = pyppetdb.controller.Controller(
         log=env["log"],
-        authorize=env["authorize"],
+        authorize=env["authorize_pyppetdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -456,6 +488,7 @@ async def main_run():
         crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
+        crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_teams=env["crud_teams"],

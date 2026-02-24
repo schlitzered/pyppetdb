@@ -3,7 +3,7 @@ import logging
 import httpx
 from fastapi import APIRouter
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.controller.api.v1 import ControllerApiV1
 
@@ -27,7 +27,7 @@ class ControllerApi:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -37,6 +37,7 @@ class ControllerApi:
         crud_hiera_lookup_cache: CrudHieraLookupCache,
         crud_nodes: CrudNodes,
         crud_nodes_catalogs: CrudNodesCatalogs,
+        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_teams: CrudTeams,
@@ -61,6 +62,7 @@ class ControllerApi:
                 crud_hiera_lookup_cache=crud_hiera_lookup_cache,
                 crud_nodes=crud_nodes,
                 crud_nodes_catalogs=crud_nodes_catalogs,
+                crud_nodes_credentials=crud_nodes_credentials,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
                 crud_teams=crud_teams,

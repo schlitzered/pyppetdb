@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
 html = """
 <!DOCTYPE html>
@@ -66,7 +66,7 @@ class ControllerApiV1Ws:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
     ):
         self._authorize = authorize
         self._conns = ConnectionManager()

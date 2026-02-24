@@ -5,14 +5,14 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
+from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.teams import CrudTeams
-from pyppetdb.errors import ResourceNotFound
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
@@ -33,16 +33,18 @@ class ControllerApiV1Nodes:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_nodes: CrudNodes,
-        crod_nodes_catalogs: CrudNodesCatalogs,
+        crud_nodes_catalogs: CrudNodesCatalogs,
+        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_teams: CrudTeams,
     ):
         self._authorize = authorize
         self._crud_nodes = crud_nodes
-        self._crud_nodes_catalogs = crod_nodes_catalogs
+        self._crud_nodes_catalogs = crud_nodes_catalogs
+        self._crud_nodes_credentials = crud_nodes_credentials
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
         self._crud_teams = crud_teams
@@ -108,6 +110,10 @@ class ControllerApiV1Nodes:
         return self._crud_nodes_catalogs
 
     @property
+    def crud_nodes_credentials(self):
+        return self._crud_nodes_credentials
+
+    @property
     def crud_nodes_groups(self):
         return self._crud_nodes_groups
 
@@ -129,6 +135,7 @@ class ControllerApiV1Nodes:
 
     async def delete(self, request: Request, node_id: str):
         await self.authorize.require_admin(request=request)
+        await self.crud_nodes_credentials.delete_all_from_owner(owner=node_id)
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
         await self.crud_nodes_catalogs.delete_all_from_node(node_id=node_id)
         await self.crud_nodes_reports.delete_all_from_node(node_id=node_id)

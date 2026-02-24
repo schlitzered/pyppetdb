@@ -2,8 +2,9 @@ import logging
 
 import httpx
 from fastapi import APIRouter
+from virtualenv import cli_run
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.controller.api.v1.authenticate import ControllerApiV1Authenticate
 from pyppetdb.controller.api.v1.hiera_key_models_static import (
@@ -18,6 +19,7 @@ from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLeve
 from pyppetdb.controller.api.v1.hiera_lookup import ControllerApiV1HieraLookup
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.controller.api.v1.nodes_catalogs import ControllerApiV1NodesCatalogs
+from pyppetdb.controller.api.v1.nodes_credentials import ControllerApiV1NodesCredentials
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
 from pyppetdb.controller.api.v1.nodes_reports import ControllerApiV1NodesReports
 from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
@@ -45,7 +47,7 @@ class ControllerApiV1:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -55,6 +57,7 @@ class ControllerApiV1:
         crud_hiera_lookup_cache: CrudHieraLookupCache,
         crud_nodes: CrudNodes,
         crud_nodes_catalogs: CrudNodesCatalogs,
+        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_teams: CrudTeams,
@@ -150,10 +153,21 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
-                crod_nodes_catalogs=crud_nodes_catalogs,
+                crud_nodes_catalogs=crud_nodes_catalogs,
+                crud_nodes_credentials=crud_nodes_credentials,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
                 crud_teams=crud_teams,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1NodesCredentials(
+                log=log,
+                authorize=authorize,
+                crud_nodes=crud_nodes,
+                crud_nodes_credentials=crud_nodes_credentials,
             ).router,
             responses={404: {"description": "Not found"}},
         )

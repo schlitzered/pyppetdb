@@ -6,7 +6,7 @@ from fastapi import Request
 
 import httpx
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.users import CrudUsers
 
 from pyppetdb.errors import AuthenticationError
@@ -20,7 +20,7 @@ class ControllerApiV1Authenticate:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_users: CrudUsers,
         http: httpx.AsyncClient,
     ):

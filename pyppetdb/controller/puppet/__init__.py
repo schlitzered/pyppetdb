@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter
+import httpx
 
 from pyppetdb.config import Config
 
@@ -12,6 +13,7 @@ class ControllerPuppet:
         self,
         log: logging.Logger,
         config: Config,
+        http: httpx.AsyncClient,
     ):
         self._log = log
         self._router = APIRouter()
@@ -20,6 +22,7 @@ class ControllerPuppet:
             ControllerPuppetV3(
                 log=log,
                 config=config,
+                http=http,
             ).router,
             prefix="/v3",
             responses={404: {"description": "Not found"}},

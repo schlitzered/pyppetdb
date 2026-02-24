@@ -7,7 +7,7 @@ from fastapi import Request
 
 from pyhiera.errors import PyHieraBackendError
 from pyhiera.errors import PyHieraError
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.errors import QueryParamValidationError
@@ -21,7 +21,7 @@ class ControllerApiV1HieraLookup:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_hiera_lookup_cache: CrudHieraLookupCache,
         crud_hiera_keys: CrudHieraKeys,
         pyhiera: PyHiera,

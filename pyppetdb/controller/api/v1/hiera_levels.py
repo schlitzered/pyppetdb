@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
@@ -24,7 +24,7 @@ class ControllerApiV1HieraLevels:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_lookup_cache: CrudHieraLookupCache,

@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from pyppetdb.authorize import Authorize
+from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_reports import CrudNodesReports
@@ -23,7 +23,7 @@ class ControllerApiV1NodesReports:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: Authorize,
+        authorize: AuthorizePyppetDB,
         crud_nodes: CrudNodes,
         crud_nodes_reports: CrudNodesReports,
     ):
