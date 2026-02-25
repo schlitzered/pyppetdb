@@ -259,7 +259,7 @@ async def lifespan_dev(app: FastAPI):
 
     controller = pyppetdb.controller.Controller(
         log=env["log"],
-        authorize=env["authorize_pyppetdb"],
+        authorize_pyppetdb=env["authorize_pyppetdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -478,7 +478,7 @@ async def main_run():
     log = env["log"]
     controller = pyppetdb.controller.Controller(
         log=env["log"],
-        authorize=env["authorize_pyppetdb"],
+        authorize_pyppetdb=env["authorize_pyppetdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],

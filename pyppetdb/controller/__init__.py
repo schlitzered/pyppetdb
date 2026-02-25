@@ -33,7 +33,7 @@ class Controller:
     def __init__(
         self,
         log: logging.Logger,
-        authorize: AuthorizePyppetDB,
+        authorize_pyppetdb: AuthorizePyppetDB,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -61,7 +61,7 @@ class Controller:
         self._router_puppetdb = APIRouter()
         router_main = ControllerApi(
             log=log,
-            authorize=authorize,
+            authorize=authorize_pyppetdb,
             crud_ldap=crud_ldap,
             crud_hiera_key_models_static=crud_hiera_key_models_static,
             crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
