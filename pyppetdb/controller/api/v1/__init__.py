@@ -2,7 +2,6 @@ import logging
 
 import httpx
 from fastapi import APIRouter
-from virtualenv import cli_run
 
 from pyppetdb.authorize import AuthorizePyppetDB
 

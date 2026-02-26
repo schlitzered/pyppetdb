@@ -3,6 +3,7 @@ import logging
 import httpx
 from fastapi import APIRouter
 
+from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.config import Config
@@ -34,6 +35,7 @@ class Controller:
         self,
         log: logging.Logger,
         authorize_pyppetdb: AuthorizePyppetDB,
+        authorize_puppet: AuthorizePuppet,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -98,6 +100,7 @@ class Controller:
         ).router
 
         router_puppet = ControllerPuppet(
+            authorize_puppet=authorize_puppet,
             log=log,
             config=config,
             http=http,

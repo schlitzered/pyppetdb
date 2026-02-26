@@ -5,23 +5,27 @@ from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
-from fastapi import Response
 import httpx
 
+from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.config import Config
+from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
 
-class ControllerPuppetV3Node:
-
+class ControllerPuppetV3Node(ControllerPuppetV3Base):
     def __init__(
         self,
+        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
     ):
-        self._config = config
-        self._http = http
-        self._log = log
+        super().__init__(
+            authorize_puppet=authorize_puppet,
+            config=config,
+            log=log,
+            http=http,
+        )
         self._router = APIRouter(
             prefix="/node",
             tags=["puppet_v3_node"],
@@ -34,14 +38,6 @@ class ControllerPuppetV3Node:
             status_code=200,
         )
 
-    @property
-    def config(self):
-        return self._config
-
-    @property
-    def router(self):
-        return self._router
-
     async def get(
         self,
         request: Request,
@@ -52,38 +48,25 @@ class ControllerPuppetV3Node:
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
-                status_code=502,
-                detail="Puppet server URL not configured"
+                status_code=502, detail="Puppet server URL not configured"
             )
 
-        self._log.info(f"Node GET for {certname}, environment={environment}, transaction_uuid={transaction_uuid}")
-
-        # Build target URL
         target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/node/{certname}"
-        if request.url.query:
-            target_url = f"{target_url}?{request.url.query}"
-
-        # Forward headers (excluding host)
-        headers = dict(request.headers)
-        headers.pop("host", None)
 
         try:
-            # Forward the request to puppet server
             response = await self._http.get(
                 url=target_url,
-                headers=headers,
+                params={
+                    "environment": environment,
+                    "transaction_uuid": transaction_uuid,
+                    "configured_environment": configured_environment,
+                },
+                headers=self._headers(request),
             )
+            return response.json()
 
-            # Return the response from upstream
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.headers.get("content-type", "application/json"),
-            )
         except httpx.RequestError as e:
-            self._log.error(f"Error forwarding node request to puppet server: {e}")
             raise HTTPException(
                 status_code=502,
-                detail=f"Error communicating with puppet server: {str(e)}"
+                detail=f"Error communicating with puppet server: {str(e)}",
             )

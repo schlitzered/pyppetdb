@@ -237,6 +237,7 @@ async def prepare_env():
 
     authorize_puppet = AuthorizePuppet(
         log=log,
+        config=settings.app.puppet,
         crud_nodes=crud_nodes,
         crud_nodes_credentials=crud_nodes_credentials,
     )
@@ -260,6 +261,7 @@ async def lifespan_dev(app: FastAPI):
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
+        authorize_puppet=env["authorize_puppet"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -448,19 +450,6 @@ def main_run_get_app(
     )
     app.include_router(getattr(controller, f"router_{app_name}"))
 
-    # Check if mTLS should be enabled for puppet app
-    ssl_cert_reqs = None
-    if (
-        app_name == "puppet"
-        and _settings.ssl
-        and hasattr(_settings, "authMtls")
-        and _settings.authMtls
-    ):
-        import ssl
-
-        ssl_cert_reqs = int(ssl.CERT_REQUIRED)
-        controller.log.info(f"Enabling mTLS authentication for {app_name} app")
-
     config = uvicorn.Config(
         app,
         host=_settings.host,
@@ -468,7 +457,6 @@ def main_run_get_app(
         ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
         ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
         ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
-        ssl_cert_reqs=ssl_cert_reqs,
     )
     return uvicorn.Server(config)
 
@@ -479,6 +467,7 @@ async def main_run():
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
+        authorize_puppet=env["authorize_puppet"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],

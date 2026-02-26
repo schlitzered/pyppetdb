@@ -8,20 +8,26 @@ from fastapi import Request
 from fastapi import Response
 import httpx
 
+from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.config import Config
+from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
 
-class ControllerPuppetV3FileContent:
+class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
 
     def __init__(
         self,
+        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
     ):
-        self._config = config
-        self._http = http
-        self._log = log
+        super().__init__(
+            authorize_puppet=authorize_puppet,
+            config=config,
+            log=log,
+            http=http,
+        )
         self._router = APIRouter(
             prefix="/file_content",
             tags=["puppet_v3_file_content"],
@@ -34,14 +40,6 @@ class ControllerPuppetV3FileContent:
             status_code=200,
         )
 
-    @property
-    def config(self):
-        return self._config
-
-    @property
-    def router(self):
-        return self._router
-
     async def get(
         self,
         request: Request,
@@ -51,41 +49,29 @@ class ControllerPuppetV3FileContent:
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
-                status_code=502,
-                detail="Puppet server URL not configured"
+                status_code=502, detail="Puppet server URL not configured"
             )
 
-        # Build target URL
         target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/file_content/{mount_point}/{file_path}"
-        if request.url.query:
-            target_url = f"{target_url}?{request.url.query}"
-
-        # Forward headers (excluding host)
-        headers = dict(request.headers)
-        headers.pop("host", None)
 
         try:
-            self._log.debug(
-                f"Forwarding file_content request: mount={mount_point}, "
-                f"path={file_path}, environment={environment}"
-            )
 
-            # Forward the request to puppet server
             response = await self._http.get(
                 url=target_url,
-                headers=headers,
+                params={
+                    "environment": environment,
+                },
+                headers=self._headers(request),
             )
-
-            # Return the response from upstream
             return Response(
                 content=response.content,
                 status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.headers.get("content-type", "application/octet-stream"),
+                headers={
+                    "content-type": "application/octet-stream",
+                },
             )
         except httpx.RequestError as e:
-            self._log.error(f"Error forwarding file_content request to puppet server: {e}")
             raise HTTPException(
                 status_code=502,
-                detail=f"Error communicating with puppet server: {str(e)}"
+                detail=f"Error communicating with puppet server: {str(e)}",
             )

@@ -39,7 +39,6 @@ class ConfigAppPuppet(BaseModel):
     port: int = 8001
     host: str = "0.0.0.0"
     serverurl: typing.Optional[str] = None
-    authMtls: typing.Optional[bool] = False
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None
 
