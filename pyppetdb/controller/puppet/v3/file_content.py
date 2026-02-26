@@ -1,11 +1,12 @@
 import logging
-
+from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 from fastapi import Response
+from fastapi.responses import FileResponse
 import httpx
 
 from pyppetdb.authorize import AuthorizePuppet
@@ -47,31 +48,83 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
         file_path: str,
         environment: str = Query(...),
     ):
-        if not self.config.app.puppet.serverurl:
+        codedir = Path("/etc/puppetlabs/code")
+        env_modules = codedir / "environments" / environment / "modules"
+
+        if mount_point.startswith("modules/"):
+            # modules/<MODULE> mount: accesses files/ subdirectory of the module
+            # URL: /puppet/v3/file_content/modules/apache/httpd.conf
+            # Maps to: $codedir/environments/{env}/modules/apache/files/httpd.conf
+            module_name = mount_point.split("/", 1)[1]
+            full_path = env_modules / module_name / "files" / file_path
+            base_path = env_modules / module_name / "files"
+
+        elif mount_point.startswith("tasks/"):
+            # tasks/<MODULE> mount: accesses tasks/ subdirectory of the module
+            # URL: /puppet/v3/file_content/tasks/apache/init.sh
+            # Maps to: $codedir/environments/{env}/modules/apache/tasks/init.sh
+            module_name = mount_point.split("/", 1)[1]
+            full_path = env_modules / module_name / "tasks" / file_path
+            base_path = env_modules / module_name / "tasks"
+
+        elif mount_point == "plugins":
+            # plugins mount: magical mount that merges lib/ from all modules
+            # Searches through all modules for lib/{file_path}
+            # URL: /puppet/v3/file_content/plugins/facter/my_fact.rb
+            full_path = None
+            for module_dir in env_modules.iterdir():
+                if module_dir.is_dir():
+                    candidate = module_dir / "lib" / file_path
+                    if candidate.is_file():
+                        full_path = candidate
+                        base_path = module_dir / "lib"
+                        break
+
+            if not full_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail="File not found in any module's lib directory",
+                )
+
+        elif mount_point == "pluginfacts":
+            # pluginfacts mount: magical mount that merges facts.d/ from all modules
+            # Searches through all modules for facts.d/{file_path}
+            # URL: /puppet/v3/file_content/pluginfacts/my_fact.sh
+            full_path = None
+            for module_dir in env_modules.iterdir():
+                if module_dir.is_dir():
+                    candidate = module_dir / "facts.d" / file_path
+                    if candidate.is_file():
+                        full_path = candidate
+                        base_path = module_dir / "facts.d"
+                        break
+
+            if not full_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail="File not found in any module's facts.d directory",
+                )
+
+        else:
+            # Could be custom mount from fileserver.conf - not supported yet
             raise HTTPException(
-                status_code=502, detail="Puppet server URL not configured"
+                status_code=400, detail=f"Unsupported mount point: {mount_point}"
             )
 
-        target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/file_content/{mount_point}/{file_path}"
-
+        # Security: ensure the resolved path is within the base directory
         try:
-
-            response = await self._http.get(
-                url=target_url,
-                params={
-                    "environment": environment,
-                },
-                headers=self._headers(request),
-            )
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers={
-                    "content-type": "application/octet-stream",
-                },
-            )
-        except httpx.RequestError as e:
+            full_path = full_path.resolve()
+            full_path.relative_to(base_path.resolve())
+        except ValueError:
             raise HTTPException(
-                status_code=502,
-                detail=f"Error communicating with puppet server: {str(e)}",
+                status_code=403, detail="Access denied: path traversal detected"
             )
+
+        # Check if file exists
+        if not full_path.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(
+            path=full_path,
+            media_type="application/octet-stream",
+        )
