@@ -35,6 +35,7 @@ from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
@@ -55,6 +56,7 @@ class ControllerApiV1:
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_lookup_cache: CrudHieraLookupCache,
         crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
@@ -152,6 +154,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
+                crud_nodes_catalog_cache=crud_nodes_catalog_cache,
                 crud_nodes_catalogs=crud_nodes_catalogs,
                 crud_nodes_credentials=crud_nodes_credentials,
                 crud_nodes_groups=crud_nodes_groups,
