@@ -1,6 +1,7 @@
 import typing
+import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log_levels = typing.Literal[
@@ -10,6 +11,13 @@ log_levels = typing.Literal[
 
 class ConfigAppFacts(BaseModel):
     index: typing.Optional[typing.List[str]] = None
+
+    @field_validator('index', mode='before')
+    @classmethod
+    def parse_index(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
 
 class ConfigAppSSL(BaseModel):
@@ -44,6 +52,13 @@ class ConfigAppPuppet(BaseModel):
     serverurl: typing.Optional[str] = None
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None
+
+    @field_validator('catalogCacheFacts', mode='before')
+    @classmethod
+    def parse_catalog_cache_facts(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
 
 class ConfigAppPuppetdb(BaseModel):
