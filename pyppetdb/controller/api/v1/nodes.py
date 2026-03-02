@@ -7,8 +7,11 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 
+from pyppetdb.errors import ResourceNotFound
+
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
@@ -35,6 +38,7 @@ class ControllerApiV1Nodes:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
@@ -43,6 +47,7 @@ class ControllerApiV1Nodes:
     ):
         self._authorize = authorize
         self._crud_nodes = crud_nodes
+        self._crud_nodes_catalog_cache = crud_nodes_catalog_cache
         self._crud_nodes_catalogs = crud_nodes_catalogs
         self._crud_nodes_credentials = crud_nodes_credentials
         self._crud_nodes_groups = crud_nodes_groups
@@ -76,6 +81,13 @@ class ControllerApiV1Nodes:
             methods=["GET"],
         )
         self.router.add_api_route(
+            "/_catalog_cache_wipe",
+            self.catalog_cache_wipe,
+            response_model=DataDelete,
+            response_model_exclude_unset=True,
+            methods=["DELETE"],
+        )
+        self.router.add_api_route(
             "/{node_id}",
             self.delete,
             response_model=DataDelete,
@@ -104,6 +116,10 @@ class ControllerApiV1Nodes:
     @property
     def crud_nodes(self):
         return self._crud_nodes
+
+    @property
+    def crud_nodes_catalog_cache(self):
+        return self._crud_nodes_catalog_cache
 
     @property
     def crud_nodes_catalogs(self):
@@ -151,11 +167,17 @@ class ControllerApiV1Nodes:
         user_node_groups = await self.authorize.get_user_node_groups(
             request=request, user=user
         )
-        return await self.crud_nodes.get(
+        node = await self.crud_nodes.get(
             _id=node_id,
             user_node_groups=user_node_groups,
             fields=list(fields),
         )
+
+        if "catalog_cached" in fields:
+            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids([node_id])
+            node.catalog_cached = node_id in cached_node_ids
+
+        return node
 
     async def distinct_fact_values(
         self,
@@ -215,6 +237,10 @@ class ControllerApiV1Nodes:
         report_status: str = Query(
             description="filter: regular_expressions", default=None
         ),
+        outdated_threshold: str = Query(
+            default=None,
+            description="ISO timestamp for outdated threshold (defaults to now-2h)",
+        ),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="id"),
         sort_order: sort_order_literal = Query(default="ascending"),
@@ -230,19 +256,31 @@ class ControllerApiV1Nodes:
         user_node_groups = await self.authorize.get_user_node_groups(
             request=request, user=user
         )
-        return await self.crud_nodes.search(
+        result = await self.crud_nodes.search(
             _id=node_id,
             user_node_groups=user_node_groups,
             disabled=disabled,
             environment=environment,
             fact=fact,
             report_status=report_status,
+            outdated_threshold=outdated_threshold,
             fields=list(fields),
             sort=sort,
             sort_order=sort_order,
             page=page,
             limit=limit,
         )
+
+        if "catalog_cached" in fields and "id" in fields:
+            node_ids = [node.id for node in result.result if node.id]
+            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids(
+                node_ids
+            )
+
+            for node in result.result:
+                node.catalog_cached = node.id in cached_node_ids
+
+        return result
 
     async def update(
         self,
@@ -257,3 +295,24 @@ class ControllerApiV1Nodes:
         return await self.crud_nodes.update(
             _id=node_id, payload=data, fields=list(fields)
         )
+
+    async def catalog_cache_wipe(
+        self,
+        request: Request,
+        node_id: str = Query(
+            description="filter: specific node or regular expression", default=None
+        ),
+        environment: str = Query(
+            description="filter: regular_expressions", default=None
+        ),
+        fact: filter_complex_search = Query(default=None),
+    ):
+        await self.authorize.require_admin(request=request)
+
+        await self.crud_nodes_catalog_cache.delete_many_by_filter(
+            node_id=node_id,
+            environment=environment,
+            fact=fact,
+        )
+
+        return DataDelete()

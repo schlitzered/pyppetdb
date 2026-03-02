@@ -38,6 +38,9 @@ class ConfigAppPuppet(BaseModel):
     enable: bool = True
     port: int = 8001
     host: str = "0.0.0.0"
+    catalogCache: typing.Optional[bool] = True
+    catalogCacheFacts: typing.Optional[list[str]] = []
+    catalogCacheTTL: typing.Optional[int] = 86400
     serverurl: typing.Optional[str] = None
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None

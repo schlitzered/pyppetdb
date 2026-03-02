@@ -1,5 +1,6 @@
 import logging
 import typing
+from datetime import datetime, timedelta
 
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -202,6 +203,7 @@ class CrudNodes(CrudMongo):
         environment: typing.Optional[str] = None,
         fact: typing.Optional[filter_complex_search] = None,
         report_status: typing.Optional[str] = None,
+        outdated_threshold: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,
@@ -240,6 +242,19 @@ class CrudNodes(CrudMongo):
         }
         for status in await self.coll.aggregate(pipeline).to_list(length=None):
             statuses[status["_id"]] = status["count"]
+
+        # Count outdated nodes (not disabled, report older than threshold)
+        if outdated_threshold:
+            # Parse ISO timestamp
+            threshold_dt = datetime.fromisoformat(outdated_threshold.replace('Z', '+00:00'))
+        else:
+            # Default to now - 2 hours
+            threshold_dt = datetime.now() - timedelta(hours=2)
+
+        outdated_query = {**query, "disabled": {"$ne": True}}
+        outdated_query["change_report"] = {"$lt": threshold_dt}
+        outdated_count = await self.coll.count_documents(outdated_query)
+
         result = await self._search(
             query=query,
             fields=fields,
@@ -248,10 +263,12 @@ class CrudNodes(CrudMongo):
             page=page,
             limit=limit,
         )
+
         result["meta"]["status_changed"] = statuses["changed"]
         result["meta"]["status_unchanged"] = statuses["unchanged"]
         result["meta"]["status_failed"] = statuses["failed"]
         result["meta"]["status_unreported"] = statuses[None]
+        result["meta"]["status_outdated"] = outdated_count
         return NodeGetMulti(**result)
 
     async def update(

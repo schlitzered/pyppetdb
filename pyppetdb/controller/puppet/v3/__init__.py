@@ -1,4 +1,5 @@
 import logging
+import typing
 
 from fastapi import APIRouter
 import httpx
@@ -14,6 +15,7 @@ from pyppetdb.controller.puppet.v3.file_content import ControllerPuppetV3FileCon
 from pyppetdb.controller.puppet.v3.file_metadata import ControllerPuppetV3FileMetadata
 from pyppetdb.controller.puppet.v3.node import ControllerPuppetV3Node
 from pyppetdb.controller.puppet.v3.report import ControllerPuppetV3Report
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 
 
 class ControllerPuppetV3:
@@ -23,6 +25,7 @@ class ControllerPuppetV3:
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         self._log = log
         self._router = APIRouter()
@@ -34,6 +37,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             ).router,
             responses={404: {"description": "Not found"}},
         )
