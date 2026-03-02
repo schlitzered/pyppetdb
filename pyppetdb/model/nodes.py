@@ -13,7 +13,6 @@ from pyppetdb.model.common import MetaMulti
 
 filter_literal = Literal[
     "id",
-    "catalog_cached",
     "catalog.catalog_uuid",
     "catalog.num_resources",
     "catalog.num_resources_exported",
@@ -122,7 +121,6 @@ class NodeGetReport(BaseModel):
 class NodeGet(BaseModel):
     id: Optional[StrictStr] = None
     catalog: NodeGetCatalog = None
-    catalog_cached: Optional[bool] = None
     change_catalog: Optional[datetime] = None
     change_facts: Optional[datetime] = None
     change_last: Optional[datetime] = None

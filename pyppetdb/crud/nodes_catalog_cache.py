@@ -52,6 +52,7 @@ class CrudNodesCatalogCache(CrudMongo):
             result["cached"] = True
             return NodeCatalogCacheGet(**result)
         except ResourceNotFound:
+            # Return a response indicating no cache exists
             return NodeCatalogCacheGet(id=node_id, cached=False)
 
     async def get_catalog(
@@ -102,28 +103,12 @@ class CrudNodesCatalogCache(CrudMongo):
         await self._delete(query=query)
         return DataDelete()
 
-    async def get_cached_node_ids(
-        self,
-        node_ids: typing.List[str],
-    ) -> typing.Set[str]:
-        if not node_ids:
-            return set()
-
-        query = {"id": {"$in": node_ids}}
-        cursor = self.coll.find(filter=query, projection={"id": 1})
-        cached_ids = set()
-        async for doc in cursor:
-            cached_ids.add(doc["id"])
-        return cached_ids
-
     async def delete_many_by_filter(
         self,
-        node_id: typing.Optional[str] = None,
         environment: typing.Optional[str] = None,
         fact: typing.Optional[filter_complex_search] = None,
     ) -> int:
         query = {}
-        self._filter_literal(query, "id", node_id)
         self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
         self._filter_literal(query, "environment", environment)
 

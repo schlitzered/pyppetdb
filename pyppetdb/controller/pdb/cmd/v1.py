@@ -242,20 +242,14 @@ class ControllerPdbCmdV1:
         self.log.info(f"create {command} took {duration_ms:.2f} ms")
 
         if self.config.app.puppetdb.serverurl:
-            asyncio.create_task(self._proxy_to_puppetdb(request, body))
+            self.log.info(request.headers)
+            asyncio.create_task(
+                self.http.post(
+                    url=f"{self.config.app.puppetdb.serverurl}/pdb/cmd/v1",
+                    params=request.query_params,
+                    headers=request.headers,
+                    content=await request.body(),
+                    # data=data_decomp,
+                )
+            )
         return {}
-
-    async def _proxy_to_puppetdb(self, request: Request, body: bytes):
-        headers = dict(request.headers)
-        headers.pop('content-encoding', None)
-        headers.pop('x-uncompressed-length', None)
-        headers.pop('host', None)
-        headers.pop('content-length', None)
-        headers.pop('transfer-encoding', None)
-
-        await self.http.post(
-            url=f"{self.config.app.puppetdb.serverurl}/pdb/cmd/v1",
-            params=request.query_params,
-            headers=headers,
-            content=body,
-        )

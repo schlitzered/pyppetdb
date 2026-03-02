@@ -138,14 +138,6 @@ async def prepare_env():
     await crud_hiera_lookup_cache.index_create()
     env["crud_hiera_lookup_cache"] = crud_hiera_lookup_cache
 
-    crud_nodes_catalog_cache = CrudNodesCatalogCache(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_catalog_cache"],
-    )
-    await crud_nodes_catalog_cache.index_create()
-    env["crud_nodes_catalog_cache"] = crud_nodes_catalog_cache
-
     crud_nodes = CrudNodes(
         config=settings,
         log=log,
@@ -169,6 +161,14 @@ async def prepare_env():
     )
     await crud_nodes_catalogs.index_create()
     env["crud_nodes_catalogs"] = crud_nodes_catalogs
+
+    crud_nodes_catalog_cache = CrudNodesCatalogCache(
+        config=settings,
+        log=log,
+        coll=mongo_db["nodes_catalog_cache"],
+    )
+    await crud_nodes_catalog_cache.index_create()
+    env["crud_nodes_catalog_cache"] = crud_nodes_catalog_cache
 
     crud_nodes_groups = CrudNodesGroups(
         config=settings,

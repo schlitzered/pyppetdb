@@ -263,7 +263,6 @@ class CrudNodes(CrudMongo):
             page=page,
             limit=limit,
         )
-
         result["meta"]["status_changed"] = statuses["changed"]
         result["meta"]["status_unchanged"] = statuses["unchanged"]
         result["meta"]["status_failed"] = statuses["failed"]

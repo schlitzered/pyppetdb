@@ -7,8 +7,6 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 
-from pyppetdb.errors import ResourceNotFound
-
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -167,17 +165,11 @@ class ControllerApiV1Nodes:
         user_node_groups = await self.authorize.get_user_node_groups(
             request=request, user=user
         )
-        node = await self.crud_nodes.get(
+        return await self.crud_nodes.get(
             _id=node_id,
             user_node_groups=user_node_groups,
             fields=list(fields),
         )
-
-        if "catalog_cached" in fields:
-            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids([node_id])
-            node.catalog_cached = node_id in cached_node_ids
-
-        return node
 
     async def distinct_fact_values(
         self,
@@ -256,7 +248,7 @@ class ControllerApiV1Nodes:
         user_node_groups = await self.authorize.get_user_node_groups(
             request=request, user=user
         )
-        result = await self.crud_nodes.search(
+        return await self.crud_nodes.search(
             _id=node_id,
             user_node_groups=user_node_groups,
             disabled=disabled,
@@ -270,17 +262,6 @@ class ControllerApiV1Nodes:
             page=page,
             limit=limit,
         )
-
-        if "catalog_cached" in fields and "id" in fields:
-            node_ids = [node.id for node in result.result if node.id]
-            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids(
-                node_ids
-            )
-
-            for node in result.result:
-                node.catalog_cached = node.id in cached_node_ids
-
-        return result
 
     async def update(
         self,
@@ -299,20 +280,19 @@ class ControllerApiV1Nodes:
     async def catalog_cache_wipe(
         self,
         request: Request,
-        node_id: str = Query(
-            description="filter: specific node or regular expression", default=None
-        ),
         environment: str = Query(
             description="filter: regular_expressions", default=None
         ),
         fact: filter_complex_search = Query(default=None),
     ):
+        """
+        Bulk delete catalog caches based on fact filters.
+        Uses the same filtering logic as nodes search.
+        """
         await self.authorize.require_admin(request=request)
-
-        await self.crud_nodes_catalog_cache.delete_many_by_filter(
-            node_id=node_id,
+        deleted_count = await self.crud_nodes_catalog_cache.delete_many_by_filter(
             environment=environment,
             fact=fact,
         )
-
+        self.log.info(f"Wiped {deleted_count} catalog cache entries")
         return DataDelete()
