@@ -13,6 +13,7 @@ from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCacheGet
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCachePutInternal
+from pyppetdb.nodes_data_protector import NodesDataProtector
 from pyppetdb.errors import ResourceNotFound
 
 
@@ -22,12 +23,14 @@ class CrudNodesCatalogCache(CrudMongo):
         log: logging.Logger,
         config: Config,
         coll: AsyncIOMotorCollection,
+        protector: NodesDataProtector,
     ):
         super(CrudNodesCatalogCache, self).__init__(
             config=config,
             log=log,
             coll=coll,
         )
+        self._protector = protector
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -61,10 +64,12 @@ class CrudNodesCatalogCache(CrudMongo):
         query = {"id": node_id}
         try:
             result = await self._coll.find_one(filter=query, projection={"catalog": 1})
-            if result:
-                return result.get("catalog")
+            if result and result.get("catalog"):
+                return self._protector.decrypt_obj(result.get("catalog"))
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
+        except Exception as err:
+            self.log.error(f"failed to decrypt catalog for {node_id}: {err}")
         return None
 
     async def upsert(
@@ -77,10 +82,12 @@ class CrudNodesCatalogCache(CrudMongo):
         random_factor = random.uniform(0.75, 1.25)
         ttl = datetime.utcnow() + timedelta(seconds=int(ttl_seconds * random_factor))
 
+        encrypted_catalog = self._protector.encrypt_obj(catalog)
+
         payload = NodeCatalogCachePutInternal(
             id=node_id,
             facts=facts,
-            catalog=catalog,
+            catalog=encrypted_catalog,
             placement=self.config.mongodb.placement,
             ttl=ttl,
         )

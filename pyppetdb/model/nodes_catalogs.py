@@ -22,7 +22,7 @@ sort_literal = Literal["id"]
 
 
 class NodeCatalogGet(BaseModel):
-    id: Optional[StrictStr] = None
+    id: Optional[datetime | StrictStr] = None
     created: Optional[datetime] = None
     node_id: Optional[StrictStr] = None
     catalog: Optional[NodeGetCatalog] = None

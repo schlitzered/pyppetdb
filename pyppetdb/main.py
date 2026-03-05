@@ -46,10 +46,15 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.oauth import CrudOAuthGitHub
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
+from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 
 from pyppetdb.model.users import UserPost
 
 from pyppetdb.pyhiera import PyHiera
+from pyppetdb.nodes_data_protector import NodesDataProtector
+from pyppetdb.nodes_secrets_redactor import NodesSecretsRedactor
+from pyppetdb.nodes_reports_redactor import NodesReportsRedactor
+from pyppetdb.nodes_catalogs_redactor import NodesCatalogsRedactor
 
 from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
@@ -97,6 +102,30 @@ async def prepare_env():
         url=settings.mongodb.url,
     )
 
+    nodes_data_protector = NodesDataProtector(
+        app_secret_key=settings.app.secretkey,
+        log=log,
+    )
+    env["nodes_data_protector"] = nodes_data_protector
+
+    nodes_secrets_redactor = NodesSecretsRedactor(
+        protector=nodes_data_protector,
+        log=log,
+    )
+    env["nodes_secrets_redactor"] = nodes_secrets_redactor
+
+    nodes_reports_redactor = NodesReportsRedactor(
+        redactor=nodes_secrets_redactor,
+        log=log,
+    )
+    env["nodes_reports_redactor"] = nodes_reports_redactor
+
+    nodes_catalogs_redactor = NodesCatalogsRedactor(
+        redactor=nodes_secrets_redactor,
+        log=log,
+    )
+    env["nodes_catalogs_redactor"] = nodes_catalogs_redactor
+
     crud_oauth = setup_oauth_providers(
         log=log,
         http=http,
@@ -142,6 +171,7 @@ async def prepare_env():
         config=settings,
         log=log,
         coll=mongo_db["nodes_catalog_cache"],
+        protector=nodes_data_protector,
     )
     await crud_nodes_catalog_cache.index_create()
     env["crud_nodes_catalog_cache"] = crud_nodes_catalog_cache
@@ -162,10 +192,20 @@ async def prepare_env():
     await crud_nodes_credentials.index_create()
     env["crud_nodes_credentials"] = crud_nodes_credentials
 
+    crud_nodes_secrets_redactor = CrudNodesSecretsRedactor(
+        config=settings,
+        log=log,
+        coll=mongo_db["nodes_secrets_redactor"],
+        redactor=nodes_secrets_redactor,
+    )
+    await crud_nodes_secrets_redactor.index_create()
+    env["crud_nodes_secrets_redactor"] = crud_nodes_secrets_redactor
+
     crud_nodes_catalogs = CrudNodesCatalogs(
         config=settings,
         log=log,
         coll=mongo_db["nodes_catalogs"],
+        secret_manager=nodes_catalogs_redactor,
     )
     await crud_nodes_catalogs.index_create()
     env["crud_nodes_catalogs"] = crud_nodes_catalogs
@@ -182,6 +222,7 @@ async def prepare_env():
         config=settings,
         log=log,
         coll=mongo_db["nodes_reports"],
+        secret_manager=nodes_reports_redactor,
     )
     await crud_nodes_reports.index_create()
     env["crud_nodes_reports"] = crud_nodes_reports
@@ -284,6 +325,7 @@ async def lifespan_dev(app: FastAPI):
         crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
+        crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],
@@ -491,6 +533,7 @@ async def main_run():
         crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
+        crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],

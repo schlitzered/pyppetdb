@@ -16,6 +16,7 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_reports import NodeReportGet
 from pyppetdb.model.nodes_reports import NodeReportGetMulti
 from pyppetdb.model.nodes_reports import NodeReportPostInternal
+from pyppetdb.nodes_reports_redactor import NodesReportsRedactor
 
 
 class CrudNodesReports(CrudMongo):
@@ -24,12 +25,14 @@ class CrudNodesReports(CrudMongo):
         config: Config,
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
+        secret_manager: NodesReportsRedactor,
     ):
         super(CrudNodesReports, self).__init__(
             config=config,
             log=log,
             coll=coll,
         )
+        self._secret_manager = secret_manager
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -60,6 +63,7 @@ class CrudNodesReports(CrudMongo):
         return_none: bool = False,
     ) -> NodeReportGet | None:
         data = payload.model_dump()
+        data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
 
