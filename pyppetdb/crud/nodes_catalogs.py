@@ -8,7 +8,6 @@ import pymongo
 import pymongo.errors
 
 from pyppetdb.config import Config
-
 from pyppetdb.crud.common import CrudMongo
 
 from pyppetdb.model.common import DataDelete
@@ -16,6 +15,7 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_catalogs import NodeCatalogGet
 from pyppetdb.model.nodes_catalogs import NodeCatalogGetMulti
 from pyppetdb.model.nodes_catalogs import NodeCatalogPostInternal
+from pyppetdb.nodes_catalogs_redactor import NodesCatalogsRedactor
 
 
 class CrudNodesCatalogs(CrudMongo):
@@ -24,8 +24,10 @@ class CrudNodesCatalogs(CrudMongo):
         config: Config,
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
+        secret_manager: NodesCatalogsRedactor,
     ):
         super(CrudNodesCatalogs, self).__init__(config=config, log=log, coll=coll)
+        self._secret_manager = secret_manager
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -63,6 +65,7 @@ class CrudNodesCatalogs(CrudMongo):
         return_none: bool = False,
     ) -> NodeCatalogGet | None:
         data = payload.model_dump()
+        data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
 
@@ -107,7 +110,7 @@ class CrudNodesCatalogs(CrudMongo):
 
     async def get(
         self,
-        _id: str,
+        _id: datetime | str,
         node_id: str,
         fields: list,
     ) -> NodeCatalogGet:

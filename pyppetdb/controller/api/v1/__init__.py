@@ -20,11 +20,14 @@ from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.controller.api.v1.nodes_catalogs import ControllerApiV1NodesCatalogs
 from pyppetdb.controller.api.v1.nodes_credentials import ControllerApiV1NodesCredentials
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
+
 from pyppetdb.controller.api.v1.nodes_reports import ControllerApiV1NodesReports
+from pyppetdb.controller.api.v1.nodes_secrets_redactor import ControllerApiV1NodesSecretsRedactor
 from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
-from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
+
+# from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
@@ -39,6 +42,7 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 
@@ -61,6 +65,7 @@ class ControllerApiV1:
         crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,
@@ -206,6 +211,15 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
+            ControllerApiV1NodesSecretsRedactor(
+                log=log,
+                authorize=authorize,
+                crud_nodes_secrets_redactor=crud_nodes_secrets_redactor,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
             ControllerApiV1Teams(
                 log=log,
                 authorize=authorize,
@@ -237,13 +251,13 @@ class ControllerApiV1:
             responses={404: {"description": "Not found"}},
         )
 
-        self.router.include_router(
-            ControllerApiV1Ws(
-                log=log,
-                authorize=authorize,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
+        # self.router.include_router(
+        #    ControllerApiV1Ws(
+        #        log=log,
+        #        authorize=authorize,
+        #    ).router,
+        #    responses={404: {"description": "Not found"}},
+        # )
 
     @property
     def router(self):

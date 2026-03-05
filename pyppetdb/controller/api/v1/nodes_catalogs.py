@@ -74,7 +74,7 @@ class ControllerApiV1NodesCatalogs:
     async def get(
         self,
         node_id: str,
-        catalog_id: str,
+        catalog_id: datetime | str,
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):

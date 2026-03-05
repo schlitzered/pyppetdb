@@ -183,6 +183,8 @@ class CrudNodesGroups(CrudMongo):
     @staticmethod
     def compile_filters_from_node_group(node_group: NodeGroupGet | NodeGroupUpdate):
         or_filter = []
+        if not node_group.filters:
+            return {"id": None}
         for _filter in node_group.filters:
             and_filter = []
             for _filter_part in _filter.part:
