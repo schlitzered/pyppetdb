@@ -7,8 +7,6 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 
-from pyppetdb.errors import ResourceNotFound
-
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -174,7 +172,9 @@ class ControllerApiV1Nodes:
         )
 
         if "catalog_cached" in fields:
-            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids([node_id])
+            cached_node_ids = await self.crud_nodes_catalog_cache.get_cached_node_ids(
+                [node_id]
+            )
             node.catalog_cached = node_id in cached_node_ids
 
         return node
