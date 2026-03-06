@@ -51,10 +51,10 @@ from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.model.users import UserPost
 
 from pyppetdb.pyhiera import PyHiera
-from pyppetdb.nodes_data_protector import NodesDataProtector
-from pyppetdb.nodes_secrets_redactor import NodesSecretsRedactor
-from pyppetdb.nodes_reports_redactor import NodesReportsRedactor
-from pyppetdb.nodes_catalogs_redactor import NodesCatalogsRedactor
+from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
+from pyppetdb.crud.nodes_reports import NodesReportsRedactor
+from pyppetdb.crud.nodes_catalogs import NodesCatalogsRedactor
 
 from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound

@@ -10,13 +10,51 @@ import pymongo.errors
 from pyppetdb.config import Config
 
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_reports import NodeReportGet
 from pyppetdb.model.nodes_reports import NodeReportGetMulti
 from pyppetdb.model.nodes_reports import NodeReportPostInternal
-from pyppetdb.nodes_reports_redactor import NodesReportsRedactor
+
+
+class NodesReportsRedactor:
+    def __init__(self, log: logging.Logger, redactor: NodesSecretsRedactor):
+        self.log = log
+        self._redactor = redactor
+
+    def redact(self, data: typing.Any) -> typing.Any:
+        if not isinstance(data, dict):
+            return data
+
+        report = data.get("report")
+        if not isinstance(report, dict):
+            return data
+
+        # 1. report.logs: only redact "message" field of each object
+        logs = report.get("logs")
+        if isinstance(logs, typing.List):
+            for log_entry in logs:
+                if isinstance(log_entry, dict) and "message" in log_entry:
+                    log_entry["message"] = self._redactor.redact(log_entry["message"])
+
+        # 2. report.resources.[].events.[].new_value, old_value, message
+        resources = report.get("resources")
+        if isinstance(resources, typing.List):
+            for resource in resources:
+                if not isinstance(resource, dict):
+                    continue
+                events = resource.get("events")
+                if isinstance(events, typing.List):
+                    for event in events:
+                        if not isinstance(event, dict):
+                            continue
+                        for field in ["new_value", "old_value", "message"]:
+                            if field in event:
+                                event[field] = self._redactor.redact(event[field])
+
+        return data
 
 
 class CrudNodesReports(CrudMongo):

@@ -41,10 +41,28 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
             "dynamic:other": MagicMock()
         }
         
+        # Test basic search
         result = self.crud.search(_id="test1")
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].id, "static:test1")
-        self.assertEqual(result.meta.result_size, 1)
+        
+        # Test sort
+        result = self.crud.search(sort="id", sort_order="descending")
+        self.assertEqual(result.result[0].id, "static:test2")
+        
+        # Test pagination
+        result = self.crud.search(limit=1)
+        self.assertEqual(len(result.result), 1)
+
+    def test_build_item_with_model_field(self):
+        mock_model_type = MagicMock()
+        mock_model = mock_model_type.return_value
+        mock_model.description = "desc"
+        mock_model.model.model_json_schema.return_value = {"properties": {}}
+        
+        item = self.crud._build_item("static:test", mock_model_type, fields=["model"])
+        self.assertEqual(item.id, "static:test")
+        self.assertEqual(item.model, {"properties": {}})
 
     def test_search_invalid_regex(self):
         with self.assertRaises(QueryParamValidationError):

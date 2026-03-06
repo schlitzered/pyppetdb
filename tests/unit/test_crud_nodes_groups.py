@@ -41,7 +41,7 @@ class TestCrudNodesGroupsUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._get.assert_called_once()
 
     async def test_resource_exists(self):
-        self.crud._resource_exists = AsyncMock(return_value=True)
+        self.crud._resource_exists = AsyncMock(return_value=MagicMock())
         await self.crud.resource_exists(_id="g1")
         self.crud._resource_exists.assert_called_once()
 
@@ -76,7 +76,7 @@ class TestCrudNodesGroupsUnit(unittest.IsolatedAsyncioTestCase):
             values={"osfamily": "RedHat"},
             environment="prod",
             producer_timestamp="2026-03-06T00:00:00Z",
-            producer="puppetmaster"
+            producer="pm1"
         )
         
         self.mock_coll.bulk_write = AsyncMock()
@@ -85,6 +85,26 @@ class TestCrudNodesGroupsUnit(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(matched_groups, ["g1"])
         self.mock_coll.bulk_write.assert_called_once()
+
+    def test_evaluate_filter_part(self):
+        from pyppetdb.model.nodes_groups import NodeGroupFilterRulePart
+        part = NodeGroupFilterRulePart(fact="os.family", values=["RedHat", "CentOS"])
+        
+        self.assertTrue(self.crud._evaluate_filter_part(part, {"os": {"family": "RedHat"}}))
+        self.assertFalse(self.crud._evaluate_filter_part(part, {"os": {"family": "Debian"}}))
+        self.assertFalse(self.crud._evaluate_filter_part(part, {"other": "val"}))
+
+    def test_compile_filters_from_node_group(self):
+        from pyppetdb.model.nodes_groups import NodeGroupGet, NodeGroupFilterRule, NodeGroupFilterRulePart
+        group = NodeGroupGet(
+            filters=[
+                NodeGroupFilterRule(
+                    part=[NodeGroupFilterRulePart(fact="f1", values=["v1"])]
+                )
+            ]
+        )
+        res = self.crud.compile_filters_from_node_group(group)
+        self.assertIn("$or", res)
 
 class TestCrudNodesGroupsCacheUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -102,3 +122,12 @@ class TestCrudNodesGroupsCacheUnit(unittest.IsolatedAsyncioTestCase):
         await self.cache._handle_change(change)
         self.assertIn("doc1", self.cache.cache)
         self.assertEqual(self.cache.cache["doc1"].id, "g1")
+
+    async def test_load_initial_data(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = iter([
+            {"_id": "d1", "id": "g1"}
+        ])
+        self.mock_coll.find.return_value = mock_cursor
+        await self.cache._load_initial_data()
+        self.assertEqual(len(self.cache.cache), 1)

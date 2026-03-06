@@ -42,6 +42,11 @@ class TestCrudHieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.get(_id="key1", fields=[])
         self.crud._get.assert_called_once_with(query={"id": "key1"}, fields=[])
 
+    async def test_resource_exists(self):
+        self.crud._resource_exists = AsyncMock(return_value=MagicMock())
+        await self.crud.resource_exists(_id="key1")
+        self.crud._resource_exists.assert_called_once_with(query={"id": "key1"})
+
     async def test_search(self):
         self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
         await self.crud.search(_id="key1", model="static:test", deprecated=True)
@@ -92,3 +97,17 @@ class TestCrudHieraKeysAdapterUnit(unittest.IsolatedAsyncioTestCase):
         await self.adapter._handle_change(change)
         self.mock_pyhiera.hiera.key_delete.assert_called_once_with("key1")
         self.assertNotIn("doc1", self.adapter._doc_to_key)
+
+    async def test_load_initial_data(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = iter([
+            {"_id": "d1", "id": "k1", "key_model_id": "m1"},
+            {"_id": "d2", "id": "k2", "key_model_id": "m2"}
+        ])
+        self.mock_coll.find.return_value = mock_cursor
+        self.mock_pyhiera.hiera.key_models = {"m1": MagicMock(), "m2": MagicMock()}
+        
+        await self.adapter._load_initial_data()
+        self.assertEqual(self.adapter._doc_to_key["d1"], "k1")
+        self.assertEqual(self.adapter._doc_to_key["d2"], "k2")
+        self.assertEqual(self.mock_pyhiera.hiera.key_add.call_count, 2)

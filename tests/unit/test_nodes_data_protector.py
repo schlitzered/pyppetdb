@@ -1,6 +1,6 @@
 import unittest
 import logging
-from pyppetdb.nodes_data_protector import NodesDataProtector
+from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 
 class TestNodesDataProtectorUnit(unittest.TestCase):
     def setUp(self):

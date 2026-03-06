@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import MagicMock
 import logging
-from pyppetdb.nodes_secrets_redactor import NodesSecretsRedactor
-from pyppetdb.nodes_reports_redactor import NodesReportsRedactor
-from pyppetdb.nodes_catalogs_redactor import NodesCatalogsRedactor
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
+from pyppetdb.crud.nodes_reports import NodesReportsRedactor
+from pyppetdb.crud.nodes_catalogs import NodesCatalogsRedactor
 
 class TestRedactorsUnit(unittest.TestCase):
     def setUp(self):
@@ -30,6 +30,20 @@ class TestRedactorsUnit(unittest.TestCase):
             "list": ["XXXXX", "other"]
         }
         self.assertEqual(self.base_redactor.redact(data), expected)
+
+    def test_base_redactor_overlapping(self):
+        self.base_redactor.rebuild(["SECRET", "SECRET123"])
+        self.assertEqual(self.base_redactor.redact("This is SECRET123"), "This is XXXXX")
+
+    def test_base_redactor_rebuild(self):
+        self.base_redactor.rebuild(["NEW_SECRET"])
+        self.assertEqual(self.base_redactor.redact("NEW_SECRET"), "XXXXX")
+        # Old secret should be gone
+        self.assertEqual(self.base_redactor.redact("SECRET123"), "SECRET123")
+
+    def test_base_redactor_other_types(self):
+        self.assertEqual(self.base_redactor.redact(123), 123)
+        self.assertEqual(self.base_redactor.redact(( "SECRET123", )), ("XXXXX",))
 
     def test_reports_redactor(self):
         reports_redactor = NodesReportsRedactor(self.log, self.base_redactor)

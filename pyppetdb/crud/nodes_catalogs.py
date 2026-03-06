@@ -9,13 +9,41 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_catalogs import NodeCatalogGet
 from pyppetdb.model.nodes_catalogs import NodeCatalogGetMulti
 from pyppetdb.model.nodes_catalogs import NodeCatalogPostInternal
-from pyppetdb.nodes_catalogs_redactor import NodesCatalogsRedactor
+
+
+class NodesCatalogsRedactor:
+    def __init__(self, log: logging.Logger, redactor: NodesSecretsRedactor):
+        self.log = log
+        self._redactor = redactor
+
+    def redact(self, data: typing.Any) -> typing.Any:
+        if not isinstance(data, dict):
+            return data
+
+        catalog = data.get("catalog")
+        if not isinstance(catalog, dict):
+            return data
+
+        for resources_key in ["resources", "resources_exported"]:
+            resources = catalog.get(resources_key)
+            if isinstance(resources, typing.List):
+                for resource in resources:
+                    if not isinstance(resource, dict):
+                        continue
+                    parameters = resource.get("parameters")
+                    if isinstance(parameters, dict):
+                        # Redact only values in parameters, and we use the base redactor for the value
+                        # Note: we don't redact the keys of the parameters here.
+                        for k, v in parameters.items():
+                            parameters[k] = self._redactor.redact(v)
+        return data
 
 
 class CrudNodesCatalogs(CrudMongo):

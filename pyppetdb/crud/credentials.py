@@ -6,9 +6,10 @@ import string
 import typing
 import uuid
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Request
 from motor.motor_asyncio import AsyncIOMotorCollection
-from passlib.hash import pbkdf2_sha512
 import pymongo
 
 from pyppetdb.config import Config
@@ -28,6 +29,8 @@ from pyppetdb.model.credentials import CredentialPut
 
 
 class CrudCredentials(CrudMongo):
+    _ph = PasswordHasher()
+
     def __init__(
         self,
         config: Config,
@@ -40,9 +43,9 @@ class CrudCredentials(CrudMongo):
             coll=coll,
         )
 
-    @staticmethod
-    def _create_secret(token) -> str:
-        return pbkdf2_sha512.using(rounds=10, salt_size=32).hash(str(token))
+    @classmethod
+    def _create_secret(cls, token) -> str:
+        return cls._ph.hash(str(token))
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -62,7 +65,12 @@ class CrudCredentials(CrudMongo):
 
         result = await self._get(query=query, fields=["secret", "owner"])
 
-        if not pbkdf2_sha512.verify(x_secret, result["secret"]):
+        try:
+            self._ph.verify(result["secret"], x_secret)
+        except VerifyMismatchError:
+            raise CredentialError
+        except Exception as e:
+            self.log.error(f"Credential verification error: {e}")
             raise CredentialError
 
         return result["owner"]

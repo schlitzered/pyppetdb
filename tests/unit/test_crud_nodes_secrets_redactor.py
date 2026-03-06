@@ -67,3 +67,25 @@ class TestCrudNodesSecretsRedactorCacheUnit(unittest.IsolatedAsyncioTestCase):
         
         self.assertNotIn("doc1", self.cache._cache)
         self.mock_redactor.rebuild.assert_called_once()
+
+    async def test_handle_change_error(self):
+        change = {
+            "operationType": "insert",
+            "documentKey": {"_id": "doc1"},
+            "fullDocument": {"value_encrypted": "bad"}
+        }
+        self.mock_redactor.decrypt.side_effect = Exception("fail")
+        await self.cache._handle_change(change)
+        self.assertNotIn("doc1", self.cache._cache)
+
+    async def test_load_initial_data(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = iter([
+            {"_id": "d1", "value_encrypted": "e1"}
+        ])
+        self.mock_coll.find.return_value = mock_cursor
+        self.mock_redactor.decrypt.return_value = "s1"
+        
+        await self.cache._load_initial_data()
+        self.assertEqual(self.cache._cache["d1"], "s1")
+        self.mock_redactor.rebuild.assert_called_with(["s1"])

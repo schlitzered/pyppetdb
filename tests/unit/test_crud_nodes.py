@@ -34,6 +34,11 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["id"], "node1")
         self.assertEqual(query["node_groups"], {"$in": ["g1"]})
 
+    async def test_resource_exists(self):
+        self.crud._resource_exists = AsyncMock(return_value=MagicMock())
+        await self.crud.resource_exists(_id="node1", user_node_groups=["g1"])
+        self.crud._resource_exists.assert_called_once()
+
     async def test_search(self):
         # Mock aggregation for status counts
         mock_cursor = MagicMock()
@@ -58,6 +63,17 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.meta.status_changed, 5)
         self.assertEqual(result.meta.status_unchanged, 10)
         self.assertEqual(result.meta.status_outdated, 2)
+
+    async def test_search_with_threshold(self):
+        # Mock aggregation for status counts
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[])
+        self.mock_coll.aggregate.return_value = mock_cursor
+        self.mock_coll.count_documents = AsyncMock(return_value=1)
+        self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
+        
+        await self.crud.search(outdated_threshold="2026-03-06T00:00:00Z")
+        self.mock_coll.count_documents.assert_called_once()
 
     async def test_update(self):
         self.crud._update = AsyncMock(return_value={"id": "node1"})

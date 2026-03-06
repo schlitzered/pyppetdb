@@ -5,11 +5,12 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
-from passlib.hash import pbkdf2_sha512
+from argon2 import PasswordHasher
 from pymongo import MongoClient
 
 
 class IntegrationTestBase(unittest.TestCase):
+    _ph = PasswordHasher()
     _db_name = None
     @classmethod
     def setUpClass(cls):
@@ -28,9 +29,7 @@ class IntegrationTestBase(unittest.TestCase):
         cls._db["users_credentials"].delete_many({})
 
         admin_password = "adminpass"
-        admin_hash = pbkdf2_sha512.using(rounds=100000, salt_size=32).hash(
-            admin_password
-        )
+        admin_hash = cls._ph.hash(admin_password)
         cls._db["users"].insert_one(
             {
                 "id": "admin",
@@ -43,9 +42,7 @@ class IntegrationTestBase(unittest.TestCase):
         )
 
         api_secret = "test-secret"
-        api_secret_hash = pbkdf2_sha512.using(rounds=10, salt_size=32).hash(
-            api_secret
-        )
+        api_secret_hash = cls._ph.hash(api_secret)
         cls._db["users_credentials"].insert_one(
             {
                 "id": "test-cred",

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic, HieraKeyModelDynamicPost
 from pyppetdb.errors import QueryParamValidationError
+from pyhiera.keys import PyHieraKeyBase
 
 class TestCrudHieraKeyModelsDynamicUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -83,3 +84,28 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
         await self.adapter._handle_change(change)
         self.adapter.model_unregister.assert_called_once_with("dynamic:test")
         self.assertNotIn("doc1", self.adapter._doc_to_model_id)
+
+    async def test_load_initial_data(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = iter([
+            {"_id": "d1", "id": "dynamic:m1", "model": {"type": "string"}, "description": "desc1"}
+        ])
+        self.mock_coll.find.return_value = mock_cursor
+        self.adapter.model_register = MagicMock()
+        
+        await self.adapter._load_initial_data()
+        self.assertEqual(self.adapter._doc_to_model_id["d1"], "dynamic:m1")
+        self.adapter.model_register.assert_called_once()
+
+    def test_build_key_model_class(self):
+        schema = {
+            "type": "object",
+            "properties": {"foo": {"type": "string"}}
+        }
+        model_class = self.adapter._build_key_model_class(
+            "dynamic:m1", schema, "desc"
+        )
+        self.assertTrue(issubclass(model_class, PyHieraKeyBase))
+        instance = model_class()
+        res = instance.validate({"foo": "bar"})
+        self.assertEqual(res.data, {"foo": "bar"})

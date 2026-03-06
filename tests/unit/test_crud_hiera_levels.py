@@ -37,6 +37,11 @@ class TestCrudHieraLevelsUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.get(_id="level1", fields=[])
         self.crud._get.assert_called_once_with(query={"id": "level1"}, fields=[])
 
+    async def test_resource_exists(self):
+        self.crud._resource_exists = AsyncMock(return_value=MagicMock())
+        await self.crud.resource_exists(_id="level1")
+        self.crud._resource_exists.assert_called_once_with(query={"id": "level1"})
+
     async def test_search(self):
         self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
         await self.crud.search(_id="level1", priority=10)
@@ -86,3 +91,16 @@ class TestCrudHieraLevelsCacheUnit(unittest.IsolatedAsyncioTestCase):
         await self.cache._handle_change(change)
         self.assertNotIn("level1", self.cache.level_ids)
         self.assertNotIn("doc1", self.cache.cache)
+
+    async def test_load_initial_data(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = iter([
+            {"_id": "d1", "id": "l1"},
+            {"_id": "d2", "id": "l2"}
+        ])
+        self.mock_coll.find.return_value = mock_cursor
+        
+        await self.cache._load_initial_data()
+        self.assertIn("l1", self.cache.level_ids)
+        self.assertIn("l2", self.cache.level_ids)
+        self.assertEqual(len(self.cache.cache), 2)

@@ -1,9 +1,10 @@
 import logging
 import typing
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
-from passlib.hash import pbkdf2_sha512
 import pymongo
 import pymongo.errors
 
@@ -25,6 +26,8 @@ from pyppetdb.model.users import UserPut
 
 
 class CrudUsers(CrudMongo):
+    _ph = PasswordHasher()
+
     def __init__(
         self,
         config: Config,
@@ -48,9 +51,9 @@ class CrudUsers(CrudMongo):
     def crud_ldap(self):
         return self._crud_ldap
 
-    @staticmethod
-    def _password(password) -> str:
-        return pbkdf2_sha512.using(rounds=100000, salt_size=32).hash(password)
+    @classmethod
+    def _password(cls, password) -> str:
+        return cls._ph.hash(password)
 
     async def check_credentials(self, credentials: AuthenticatePost) -> str:
         user = credentials.user
@@ -65,7 +68,12 @@ class CrudUsers(CrudMongo):
                     credentials=credentials
                 )
             elif result["backend"] == "internal":
-                if not pbkdf2_sha512.verify(password, result["password"]):
+                try:
+                    self._ph.verify(result["password"], password)
+                except VerifyMismatchError:
+                    raise AuthenticationError
+                except Exception as e:
+                    self.log.error(f"Password verification error: {e}")
                     raise AuthenticationError
             elif result["backend"] == "ldap":
                 try:
