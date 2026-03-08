@@ -12,6 +12,8 @@ from pyppetdb.model.ca_authorities import (
 )
 from pyppetdb.model.common import sort_order_literal
 
+from pyppetdb.errors import QueryParamValidationError
+
 class CrudCAAuthorities(CrudMongo):
     def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection, protector: NodesDataProtector):
         super().__init__(config, log, coll)
@@ -76,6 +78,12 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CAAuthorityGet(**result)
 
+    async def delete(self, _id: str) -> None:
+        await self._delete(query={"id": _id})
+
+    async def count(self, query: dict) -> int:
+        return await self.coll.count_documents(query)
+
     async def get_private_key(self, _id: str) -> bytes:
         result = await self._get(query={"id": _id}, fields=["private_key_encrypted"])
         decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
@@ -86,6 +94,7 @@ class CrudCAAuthorities(CrudMongo):
         _id: typing.Optional[str] = None,
         parent_id: typing.Optional[str] = None,
         common_name: typing.Optional[str] = None,
+        fingerprint: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,
@@ -96,6 +105,7 @@ class CrudCAAuthorities(CrudMongo):
         self._filter_re(query, "id", _id)
         self._filter_re(query, "parent_id", parent_id)
         self._filter_re(query, "common_name", common_name)
+        self._filter_re(query, "fingerprint.sha256", fingerprint)
 
         result = await self._search(
             query=query,

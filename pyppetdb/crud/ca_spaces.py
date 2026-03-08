@@ -6,6 +6,11 @@ from pyppetdb.model.ca_spaces import (
 )
 from pyppetdb.model.common import sort_order_literal
 
+from motor.motor_asyncio import AsyncIOMotorCollection
+from pyppetdb.config import Config
+import logging
+from pyppetdb.errors import QueryParamValidationError
+
 class CrudCASpaces(CrudMongo):
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -19,6 +24,12 @@ class CrudCASpaces(CrudMongo):
     async def get(self, _id: str, fields: list[str] = []) -> CASpaceGet:
         result = await self._get(query={"id": _id}, fields=fields)
         return CASpaceGet(**result)
+
+    async def delete(self, _id: str) -> None:
+        await self._delete(query={"id": _id})
+
+    async def count(self, query: dict) -> int:
+        return await self.coll.count_documents(query)
 
     async def search(
         self,

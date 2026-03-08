@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.common import MetaMulti, Fingerprints
 
 filter_literal = Literal[
     "id",
@@ -27,7 +27,7 @@ sort_literal = Literal[
 ]
 
 class CAAuthorityPost(BaseModel):
-    id: str
+    id: Optional[str] = None
     parent_id: Optional[str] = None
     common_name: Optional[str] = None
     organization: Optional[str] = "PyppetDB"
@@ -48,7 +48,7 @@ class CAAuthorityGet(BaseModel):
     serial_number: str
     not_before: datetime
     not_after: datetime
-    fingerprint: str
+    fingerprint: Fingerprints
     certificate: str
     # Private key is NEVER returned in GET
 

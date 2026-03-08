@@ -43,10 +43,27 @@ class ControllerApiV1CACertificates:
             response_model=CACertificateGet,
             response_model_exclude_unset=True
         )
+        self._router.add_api_route(
+            "/{cert_id}",
+            self.delete_certificate,
+            methods=["DELETE"],
+            response_model=dict,
+            response_model_exclude_unset=True
+        )
 
     @property
     def router(self):
         return self._router
+
+    async def delete_certificate(
+        self,
+        request: Request,
+        space_id: str,
+        cert_id: str,
+    ):
+        await self._authorize.require_admin(request=request)
+        await self._crud_certificates.delete(space_id=space_id, certname=cert_id)
+        return {}
 
     async def search_certificates(
         self,

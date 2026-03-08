@@ -265,6 +265,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_authorities=crud_ca_authorities,
+                crud_spaces=crud_ca_spaces,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -274,6 +275,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_spaces=crud_ca_spaces,
+                crud_certificates=crud_ca_certificates,
             ).router,
             responses={404: {"description": "Not found"}},
         )

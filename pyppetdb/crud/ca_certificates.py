@@ -119,6 +119,12 @@ class CrudCACertificates(CrudMongo):
         result = await self._get(query={"id": certname, "space_id": space_id}, fields=fields)
         return CACertificateGet(**result)
 
+    async def delete(self, space_id: str, certname: str) -> None:
+        await self._delete(query={"id": certname, "space_id": space_id})
+
+    async def count(self, query: dict) -> int:
+        return await self.coll.count_documents(query)
+
     async def search(
         self,
         _id: typing.Optional[str] = None,
@@ -138,7 +144,7 @@ class CrudCACertificates(CrudMongo):
             query["space_id"] = space_id
         if status:
             query["status"] = status
-        self._filter_re(query, "fingerprint", fingerprint)
+        self._filter_re(query, "fingerprint.sha256", fingerprint)
         self._filter_re(query, "serial_number", serial_number)
 
         result = await self._search(

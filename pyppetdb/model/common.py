@@ -24,5 +24,11 @@ class MetaMulti(BaseModel):
     result_size: Annotated[int, Field(gt=-1)]
 
 
+class Fingerprints(BaseModel):
+    sha256: str
+    sha1: str
+    md5: str
+
+
 class DataDelete(BaseModel):
     pass

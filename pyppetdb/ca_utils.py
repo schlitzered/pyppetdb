@@ -158,7 +158,11 @@ class CAUtils:
             "serial_number": str(cert.serial_number),
             "not_before": cert.not_valid_before_utc,
             "not_after": cert.not_valid_after_utc,
-            "fingerprint": cert.fingerprint(hashes.SHA256()).hex(),
+            "fingerprint": {
+                "sha256": cert.fingerprint(hashes.SHA256()).hex(),
+                "sha1": cert.fingerprint(hashes.SHA1()).hex(),
+                "md5": cert.fingerprint(hashes.MD5()).hex(),
+            },
         }
 
     @staticmethod

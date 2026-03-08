@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.common import MetaMulti, Fingerprints
 
 # CA Status
 CAStatus = Literal["requested", "signed", "revoked", "expired"]
@@ -38,7 +38,7 @@ class CACertificateGet(BaseModel):
     id: str  # certname/common_name
     space_id: str
     status: CAStatus
-    fingerprint: Optional[str] = None
+    fingerprint: Optional[Fingerprints] = None
     certificate: Optional[str] = None
     csr: Optional[str] = None
     not_before: Optional[datetime] = None

@@ -4,6 +4,8 @@ from fastapi import APIRouter, Request, Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_spaces import (
     CASpacePost, CASpaceGet, CASpaceGetMulti,
     filter_literal, filter_list, sort_literal
@@ -16,10 +18,12 @@ class ControllerApiV1CASpaces:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         crud_spaces: CrudCASpaces,
+        crud_certificates: CrudCACertificates,
     ):
         self._log = log
         self._authorize = authorize
         self._crud_spaces = crud_spaces
+        self._crud_certificates = crud_certificates
         self._router = APIRouter(prefix="/ca/spaces", tags=["ca"])
 
         self._router.add_api_route(
@@ -43,10 +47,32 @@ class ControllerApiV1CASpaces:
             response_model=CASpaceGet,
             response_model_exclude_unset=True
         )
+        self._router.add_api_route(
+            "/{space_id}",
+            self.delete_space,
+            methods=["DELETE"],
+            response_model=dict,
+            response_model_exclude_unset=True
+        )
 
     @property
     def router(self):
         return self._router
+
+    async def delete_space(
+        self,
+        request: Request,
+        space_id: str,
+    ):
+        await self._authorize.require_admin(request=request)
+
+        # Check if there are any certificates in this space
+        count = await self._crud_certificates.count({"space_id": space_id})
+        if count > 0:
+            raise QueryParamValidationError(msg=f"CA Space '{space_id}' still contains certificates")
+
+        await self._crud_spaces.delete(_id=space_id)
+        return {}
 
     async def create_space(
         self,

@@ -17,7 +17,7 @@ sort_literal = Literal[
 ]
 
 class CASpacePost(BaseModel):
-    id: str
+    id: Optional[str] = None
     authority_id: str
     description: Optional[str] = None
 
