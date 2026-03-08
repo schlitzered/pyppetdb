@@ -30,6 +30,9 @@ from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.oauth import CrudOAuth
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
+from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_certificates import CrudCACertificates
 
 
 class Controller:
@@ -56,6 +59,9 @@ class Controller:
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,
+        crud_ca_authorities: CrudCAAuthorities,
+        crud_ca_spaces: CrudCASpaces,
+        crud_ca_certificates: CrudCACertificates,
         http: httpx.AsyncClient,
         config: Config,
         pyhiera,
@@ -85,6 +91,9 @@ class Controller:
             crud_teams=crud_teams,
             crud_users=crud_users,
             crud_users_credentials=crud_users_credentials,
+            crud_ca_authorities=crud_ca_authorities,
+            crud_ca_spaces=crud_ca_spaces,
+            crud_ca_certificates=crud_ca_certificates,
             http=http,
             pyhiera=pyhiera,
         ).router
@@ -111,6 +120,9 @@ class Controller:
             config=config,
             http=http,
             crud_nodes_catalog_cache=crud_nodes_catalog_cache,
+            crud_ca_authorities=crud_ca_authorities,
+            crud_ca_spaces=crud_ca_spaces,
+            crud_ca_certificates=crud_ca_certificates,
         )
 
         self.router_dev.include_router(

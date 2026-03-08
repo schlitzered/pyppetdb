@@ -17,7 +17,7 @@ from pyppetdb.model.hiera_key_models_static import sort_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
 from pyppetdb.model.hiera_key_models_dynamic import HieraKeyModelDynamicPost
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
 
 
 class ControllerApiV1HieraKeyModelsDynamic:

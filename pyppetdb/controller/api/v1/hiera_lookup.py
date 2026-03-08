@@ -14,7 +14,7 @@ from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.hiera_lookup import HieraLookupResult
 from pydantic import constr
-from pyppetdb.pyhiera import PyHiera
+from pyppetdb.hiera import PyHiera
 
 
 class ControllerApiV1HieraLookup:

@@ -11,9 +11,7 @@ from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.errors import QueryParamValidationError
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import split_key_model_id
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_keys import filter_list
@@ -23,7 +21,7 @@ from pyppetdb.model.hiera_keys import HieraKeyGet
 from pyppetdb.model.hiera_keys import HieraKeyGetMulti
 from pyppetdb.model.hiera_keys import HieraKeyPost
 from pyppetdb.model.hiera_keys import HieraKeyPut
-from pyppetdb.pyhiera import PyHiera
+from pyppetdb.hiera import PyHiera
 
 
 class ControllerApiV1HieraKeys:

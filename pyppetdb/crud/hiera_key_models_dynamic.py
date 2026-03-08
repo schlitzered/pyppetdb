@@ -15,9 +15,9 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
 from pyppetdb.model.hiera_key_models_dynamic import HieraKeyModelDynamicPost
-from pyppetdb.pyhiera import PyHiera
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
-from pyppetdb.pyhiera.schema_model_factory import SchemaModelFactory
+from pyppetdb.hiera import PyHiera
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
+from pyppetdb.hiera.schema_model_factory import SchemaModelFactory
 
 
 class CrudHieraModelsDynamicAdapter:

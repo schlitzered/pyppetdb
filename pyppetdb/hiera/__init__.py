@@ -4,9 +4,9 @@ from pyhiera import PyHieraAsync
 
 from pyppetdb.config import ConfigHiera
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
-from pyppetdb.pyhiera.backend import PyHieraBackendCrudHieraLevelDataAsync
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
-from pyppetdb.pyhiera.key_model_utils import prefixed_key_model_id
+from pyppetdb.hiera.backend import PyHieraBackendCrudHieraLevelDataAsync
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
+from pyppetdb.hiera.key_model_utils import prefixed_key_model_id
 
 
 class PyHiera:

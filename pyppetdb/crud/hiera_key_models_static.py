@@ -9,8 +9,8 @@ from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGetMulti
-from pyppetdb.pyhiera import PyHiera
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
+from pyppetdb.hiera import PyHiera
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
 
 
 class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):

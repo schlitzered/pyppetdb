@@ -26,6 +26,9 @@ from pyppetdb.controller.api.v1.nodes_secrets_redactor import ControllerApiV1Nod
 from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
+from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthorities
+from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
+from pyppetdb.controller.api.v1.ca_certificates import ControllerApiV1CACertificates
 
 # from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
@@ -45,6 +48,9 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
+from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_certificates import CrudCACertificates
 
 
 class ControllerApiV1:
@@ -69,6 +75,9 @@ class ControllerApiV1:
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,
+        crud_ca_authorities: CrudCAAuthorities,
+        crud_ca_spaces: CrudCASpaces,
+        crud_ca_certificates: CrudCACertificates,
         http: httpx.AsyncClient,
         pyhiera,
     ):
@@ -247,6 +256,33 @@ class ControllerApiV1:
                 authorize=authorize,
                 crud_users=crud_users,
                 crud_users_credentials=crud_users_credentials,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CAAuthorities(
+                log=log,
+                authorize=authorize,
+                crud_authorities=crud_ca_authorities,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CASpaces(
+                log=log,
+                authorize=authorize,
+                crud_spaces=crud_ca_spaces,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CACertificates(
+                log=log,
+                authorize=authorize,
+                crud_certificates=crud_ca_certificates,
             ).router,
             responses={404: {"description": "Not found"}},
         )

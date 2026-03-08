@@ -47,10 +47,13 @@ from pyppetdb.crud.oauth import CrudOAuthGitHub
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
+from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_certificates import CrudCACertificates
 
 from pyppetdb.model.users import UserPost
 
-from pyppetdb.pyhiera import PyHiera
+from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.nodes_reports import NodesReportsRedactor
@@ -252,6 +255,33 @@ async def prepare_env():
     await crud_users_credentials.index_create()
     env["crud_users_credentials"] = crud_users_credentials
 
+    crud_ca_authorities = CrudCAAuthorities(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_authorities"],
+        protector=nodes_data_protector,
+    )
+    await crud_ca_authorities.index_create()
+    env["crud_ca_authorities"] = crud_ca_authorities
+
+    crud_ca_spaces = CrudCASpaces(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_spaces"],
+    )
+    await crud_ca_spaces.index_create()
+    env["crud_ca_spaces"] = crud_ca_spaces
+
+    crud_ca_certificates = CrudCACertificates(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_certificates"],
+        crud_authorities=crud_ca_authorities,
+        crud_spaces=crud_ca_spaces,
+    )
+    await crud_ca_certificates.index_create()
+    env["crud_ca_certificates"] = crud_ca_certificates
+
     pyhiera = PyHiera(
         log=log,
         config=settings.hiera,
@@ -329,6 +359,9 @@ async def lifespan_dev(app: FastAPI):
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],
+        crud_ca_authorities=env["crud_ca_authorities"],
+        crud_ca_spaces=env["crud_ca_spaces"],
+        crud_ca_certificates=env["crud_ca_certificates"],
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
@@ -537,6 +570,9 @@ async def main_run():
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],
+        crud_ca_authorities=env["crud_ca_authorities"],
+        crud_ca_spaces=env["crud_ca_spaces"],
+        crud_ca_certificates=env["crud_ca_certificates"],
         crud_oauth=env["crud_oauth"],
         http=env["http"],
         config=settings,
