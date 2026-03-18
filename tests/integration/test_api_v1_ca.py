@@ -1,4 +1,5 @@
 import uuid
+import datetime
 from tests.integration.base import IntegrationTestBase
 
 class ApiV1CAIntegrationTests(IntegrationTestBase):
@@ -51,7 +52,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/spaces/{space_id}",
             headers=self._auth_headers(),
             json={
-                "authority_id": ca_id
+                "ca_id": ca_id
             }
         )
         self.assertEqual(resp.status_code, 200)
@@ -91,7 +92,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         resp = self.client.post(
             f"/api/v1/ca/spaces/{space_id}",
             headers=self._auth_headers(),
-            json={"authority_id": ca_id}
+            json={"ca_id": ca_id}
         )
         self.assertEqual(resp.status_code, 200)
         
@@ -99,8 +100,11 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self._db["ca_certificates"].insert_one({
             "id": cert_id,
             "space_id": space_id,
+            "ca_id": ca_id,
+            "cn": "test-node",
             "status": "requested",
-            "csr": "DUMMY CSR"
+            "csr": "DUMMY CSR",
+            "created": datetime.datetime.now(datetime.timezone.utc)
         })
 
         # 8. Try to delete Space (should fail: has certificates)
@@ -111,12 +115,8 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 422)
         self.assertIn("still contains certificates", resp.json()["detail"])
 
-        # 9. Delete Certificate
-        resp = self.client.delete(
-            f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}",
-            headers=self._auth_headers()
-        )
-        self.assertEqual(resp.status_code, 200)
+        # 9. Delete Certificate (Manual cleanup as there is no API endpoint for deletion)
+        self._db["ca_certificates"].delete_one({"id": cert_id, "space_id": space_id})
 
         # 10. Delete Space
         resp = self.client.delete(
@@ -155,16 +155,17 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         # Cleanup
         self.client.delete(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers())
 
-    def test_crl_chain(self):
+    def test_crl_integration(self):
         root_ca_id = f"root-{uuid.uuid4().hex}"
         sub_ca_id = f"sub-{uuid.uuid4().hex}"
         space_id = f"space-{uuid.uuid4().hex}"
-        cert_id = "test-node-cert"
+        cert_cn = "test-node-cert"
+        cert_id = f"temp-id-{uuid.uuid4().hex}"
 
         # 1. Setup Hierarchy
         self.client.post(f"/api/v1/ca/authorities/{root_ca_id}", headers=self._auth_headers(), json={"common_name": "Root"})
         self.client.post(f"/api/v1/ca/authorities/{sub_ca_id}", headers=self._auth_headers(), json={"parent_id": root_ca_id, "common_name": "Sub"})
-        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"authority_id": sub_ca_id})
+        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": sub_ca_id})
 
         # 2. Revoke Sub CA
         self.client.put(f"/api/v1/ca/authorities/{sub_ca_id}", headers=self._auth_headers(), json={"status": "revoked"})
@@ -177,24 +178,35 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, cert_id),
+            x509.NameAttribute(NameOID.COMMON_NAME, cert_cn),
         ])).sign(key, hashes.SHA256())
         csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
 
         self._db["ca_certificates"].insert_one({
             "id": cert_id,
             "space_id": space_id,
+            "ca_id": sub_ca_id,
+            "cn": cert_cn,
             "status": "requested",
-            "csr": csr_pem
+            "csr": csr_pem,
+            "created": datetime.datetime.now(datetime.timezone.utc)
         })
         
-        self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}", headers=self._auth_headers(), json={"status": "signed"})
-        self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}", headers=self._auth_headers(), json={"status": "revoked"})
-
-        # 4. Get CRL
-        resp = self.client.get(f"/api/v1/ca/spaces/{space_id}/crl", headers=self._auth_headers())
+        # Sign the cert
+        resp = self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}", headers=self._auth_headers(), json={"status": "signed"})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"BEGIN X509 CRL", resp.content)
+        signed_cert = resp.json()
+        serial = signed_cert["id"] # The serial number
+
+        # Revoke the cert
+        self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{serial}", headers=self._auth_headers(), json={"status": "revoked"})
+
+        # 4. Check CRL in CA Authority
+        resp = self.client.get(f"/api/v1/ca/authorities/{sub_ca_id}", headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        ca_data = resp.json()
+        self.assertIsNotNone(ca_data.get("crl"))
+        self.assertIn("BEGIN X509 CRL", ca_data["crl"]["crl_pem"])
 
     def test_authority_history(self):
         root1_id = f"root1-{uuid.uuid4().hex}"
@@ -203,27 +215,30 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
 
         # 1. Create Space with root1
         self.client.post(f"/api/v1/ca/authorities/{root1_id}", headers=self._auth_headers(), json={"common_name": "Root1"})
-        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"authority_id": root1_id})
+        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": root1_id})
 
         # 2. Update Space to use root2
         self.client.post(f"/api/v1/ca/authorities/{root2_id}", headers=self._auth_headers(), json={"common_name": "Root2"})
-        resp = self.client.put(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"authority_id": root2_id})
+        resp = self.client.put(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": root2_id})
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["authority_id"], root2_id)
-        self.assertEqual(resp.json()["authority_id_history"], [root1_id])
+        self.assertEqual(resp.json()["ca_id"], root2_id)
+        self.assertEqual(resp.json()["ca_id_history"], [root1_id])
 
-        # 3. Get CRL - should contain CRLs for both root1 and root2
-        resp = self.client.get(f"/api/v1/ca/spaces/{space_id}/crl", headers=self._auth_headers())
-        self.assertEqual(resp.status_code, 200)
+        # 3. Verify CRL exists for both CAs in their respective authority objects
+        for ca_id in [root1_id, root2_id]:
+            resp = self.client.get(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers())
+            self.assertEqual(resp.status_code, 200)
+            self.assertIsNotNone(resp.json().get("crl"))
 
     def test_authority_certs_and_crl(self):
         ca_id = f"ca-certs-test-{uuid.uuid4().hex}"
         space_id = f"space-certs-test-{uuid.uuid4().hex}"
-        cert_id = "test-cert-authority-endpoint"
+        cert_cn = "test-cert-authority-endpoint"
+        cert_id = f"temp-id-{uuid.uuid4().hex}"
 
         # 1. Create CA and Space
         self.client.post(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers(), json={"common_name": "Test Auth Endpoints"})
-        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"authority_id": ca_id})
+        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": ca_id})
 
         # 2. Submit and Sign Cert
         from cryptography import x509
@@ -233,25 +248,31 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
-            x509.NameAttribute(NameOID.COMMON_NAME, cert_id),
+            x509.NameAttribute(NameOID.COMMON_NAME, cert_cn),
         ])).sign(key, hashes.SHA256())
         csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
 
         self._db["ca_certificates"].insert_one({
             "id": cert_id,
             "space_id": space_id,
+            "ca_id": ca_id,
+            "cn": cert_cn,
             "status": "requested",
-            "csr": csr_pem
+            "csr": csr_pem,
+            "created": datetime.datetime.now(datetime.timezone.utc)
         })
-        self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}", headers=self._auth_headers(), json={"status": "signed"})
+        resp = self.client.put(f"/api/v1/ca/spaces/{space_id}/certs/{cert_id}", headers=self._auth_headers(), json={"status": "signed"})
+        self.assertEqual(resp.status_code, 200)
+        serial = resp.json()["id"]
 
         # 3. Test /ca/authorities/{ca_id}/certs
         resp = self.client.get(f"/api/v1/ca/authorities/{ca_id}/certs", headers=self._auth_headers())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(resp.json()["result"]), 1)
-        self.assertEqual(resp.json()["result"][0]["id"], cert_id)
+        self.assertEqual(resp.json()["result"][0]["id"], serial)
 
-        # 4. Test /ca/authorities/{ca_id}/crl
-        resp = self.client.get(f"/api/v1/ca/authorities/{ca_id}/crl", headers=self._auth_headers())
+        # 4. Verify CRL in Authority object
+        resp = self.client.get(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers())
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"BEGIN X509 CRL", resp.content)
+        self.assertIsNotNone(resp.json().get("crl"))
+        self.assertIn("BEGIN X509 CRL", resp.json()["crl"]["crl_pem"])
