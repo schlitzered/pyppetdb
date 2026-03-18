@@ -190,7 +190,7 @@ class CrudCAAuthorities(CrudMongo):
         ca_key_pem: bytes,
         revoked_certs: List[dict],
     ) -> CACRL:
-        """Generate and update CRL for a CA"""
+        """Generate and update CRL for a CA. CRL must already exist."""
         crl_pem, next_update = CAUtils.generate_crl(
             ca_cert_pem=ca_cert_pem,
             ca_key_pem=ca_key_pem,
@@ -202,8 +202,10 @@ class CrudCAAuthorities(CrudMongo):
             ca_doc = await self.coll.find_one({"id": ca_id}, {"crl": 1})
             if not ca_doc:
                 raise Exception(f"CA {ca_id} not found")
+            if "crl" not in ca_doc:
+                raise Exception(f"CA {ca_id} has no CRL (external CA?)")
 
-            current_generation = ca_doc.get("crl", {}).get("generation", 0)
+            current_generation = ca_doc["crl"]["generation"]
             now = datetime.datetime.now(datetime.timezone.utc)
 
             # Update with generation check to prevent race conditions
@@ -222,7 +224,7 @@ class CrudCAAuthorities(CrudMongo):
             if result.modified_count > 0:
                 # Get updated CRL
                 updated = await self.coll.find_one({"id": ca_id}, {"crl": 1})
-                return CACRL(**updated["crl"]) if updated.get("crl") else None
+                return CACRL(**updated["crl"])
 
     async def lock_crl_acquire(
         self,

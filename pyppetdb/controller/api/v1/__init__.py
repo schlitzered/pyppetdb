@@ -29,10 +29,12 @@ from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
 from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthorities
+from pyppetdb.controller.api.v1.ca_authorities_certs import ControllerApiV1CAAuthoritiesCerts
 from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
-from pyppetdb.controller.api.v1.ca_certificates import ControllerApiV1CACertificates
+from pyppetdb.controller.api.v1.ca_spaces_certificates import (
+    ControllerApiV1CASpacesCertificates,
+)
 
-# from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
@@ -269,6 +271,16 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_authorities=crud_ca_authorities,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CAAuthoritiesCerts(
+                log=log,
+                authorize=authorize,
+                crud_authorities=crud_ca_authorities,
                 crud_spaces=crud_ca_spaces,
                 crud_certificates=crud_ca_certificates,
                 ca_service=ca_service,
@@ -289,7 +301,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1CACertificates(
+            ControllerApiV1CASpacesCertificates(
                 log=log,
                 authorize=authorize,
                 crud_certificates=crud_ca_certificates,

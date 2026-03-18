@@ -13,16 +13,11 @@ from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.ca_spaces import CASpaceGet
 from pyppetdb.model.ca_spaces import CASpaceGetMulti
 from pyppetdb.model.ca_spaces import CASpacePut
-from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
-from pyppetdb.model.ca_authorities import filter_literal as ca_filter_literal
-from pyppetdb.model.ca_authorities import filter_list as ca_filter_list
 from pyppetdb.model.ca_spaces import filter_literal
 from pyppetdb.model.ca_spaces import filter_list
 from pyppetdb.model.ca_spaces import sort_literal
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.model.common import MetaMulti
 from pyppetdb.errors import QueryParamValidationError
-from pyppetdb.errors import ResourceNotFound
 
 
 class ControllerApiV1CASpaces:
@@ -45,44 +40,37 @@ class ControllerApiV1CASpaces:
 
         self._router.add_api_route(
             "",
-            self.search_spaces,
+            self.search,
             methods=["GET"],
             response_model=CASpaceGetMulti,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{space_id}",
-            self.create_space,
+            self.create,
             methods=["POST"],
             response_model=CASpaceGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{space_id}",
-            self.get_space,
+            self.get,
             methods=["GET"],
             response_model=CASpaceGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{space_id}",
-            self.update_space,
+            self.update,
             methods=["PUT"],
             response_model=CASpaceGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{space_id}",
-            self.delete_space,
+            self.delete,
             methods=["DELETE"],
             response_model=dict,
-            response_model_exclude_unset=True,
-        )
-        self._router.add_api_route(
-            "/{space_id}/ca",
-            self.get_space_ca,
-            methods=["GET"],
-            response_model=CAAuthorityGetMulti,
             response_model_exclude_unset=True,
         )
 
@@ -106,55 +94,7 @@ class ControllerApiV1CASpaces:
     def crud_ca_certificates(self):
         return self._crud_ca_certificates
 
-    async def get_space_ca(
-        self,
-        request: Request,
-        space_id: str,
-        fields: Set[ca_filter_literal] = Query(default=ca_filter_list),
-        include_chain: bool = Query(default=True, description="include parent CAs"),
-        include_crl: bool = Query(default=False, description="include CRL"),
-    ) -> CAAuthorityGetMulti:
-        await self.authorize.require_admin(request=request)
-
-        try:
-            space = await self.crud_ca_spaces.get(space_id, fields=list(fields))
-            if not space.ca_id:
-                raise ResourceNotFound(
-                    details=f"Space '{space_id}' does not have a CA associated with it"
-                )
-            ca_ids = [space.ca_id] + space.ca_id_history
-
-            cas = []
-            processed_ca_ids = set()
-
-            unique_ca_ids = []
-            for cid in ca_ids:
-                if cid not in unique_ca_ids:
-                    unique_ca_ids.append(cid)
-
-            crl_fields = ["crl"] if include_crl else []
-            for ca_id in unique_ca_ids:
-                try:
-                    ca_ids_to_process = [ca_id]
-                    while ca_ids_to_process:
-                        cid = ca_ids_to_process.pop(0)
-                        if cid in processed_ca_ids:
-                            continue
-
-                        ca = await self._crud_ca_authorities.get(cid, fields=crl_fields)
-                        cas.append(ca)
-                        processed_ca_ids.add(cid)
-
-                        if include_chain and ca.parent_id:
-                            ca_ids_to_process.append(ca.parent_id)
-                except ResourceNotFound:
-                    continue
-
-            return CAAuthorityGetMulti(result=cas, meta=MetaMulti(result_size=len(cas)))
-        except ResourceNotFound:
-            raise ResourceNotFound(details=f"Space '{space_id}' not found")
-
-    async def update_space(
+    async def update(
         self,
         request: Request,
         space_id: str,
@@ -168,7 +108,7 @@ class ControllerApiV1CASpaces:
             _id=space_id, payload=data, fields=list(fields)
         )
 
-    async def create_space(
+    async def create(
         self,
         request: Request,
         space_id: str,
@@ -180,7 +120,7 @@ class ControllerApiV1CASpaces:
             _id=space_id, payload=data, fields=list(fields)
         )
 
-    async def get_space(
+    async def get(
         self,
         request: Request,
         space_id: str,
@@ -189,7 +129,7 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_admin(request=request)
         return await self.crud_ca_spaces.get(_id=space_id, fields=list(fields))
 
-    async def delete_space(
+    async def delete(
         self,
         request: Request,
         space_id: str,
@@ -206,7 +146,7 @@ class ControllerApiV1CASpaces:
         await self.crud_ca_spaces.delete(_id=space_id)
         return {}
 
-    async def search_spaces(
+    async def search(
         self,
         request: Request,
         space_id: str = Query(description="filter: regular_expressions", default=None),
