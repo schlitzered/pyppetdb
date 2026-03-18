@@ -1,8 +1,12 @@
 from datetime import datetime
-from typing import List, Optional, Literal, Dict
+from typing import List
+from typing import Optional
+from typing import Literal
+from typing import Dict
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, Fingerprints
+from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.common import Fingerprints
 
 # CA Status
 CAStatus = Literal["requested", "signed", "revoked", "expired"]
@@ -18,6 +22,8 @@ filter_literal = Literal[
     "not_after",
     "serial_number",
     "created",
+    "ca",
+    "ca_chain",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -45,10 +51,12 @@ class CACertificateGet(BaseModel):
     not_after: Optional[datetime] = None
     serial_number: Optional[str] = None
     created: Optional[datetime] = None
+    ca: Optional[str] = None
+    ca_chain: List[str] = []
 
 class CACertificateGetMulti(BaseModel):
     result: List[CACertificateGet]
     meta: MetaMulti
 
 class CACertificateStatusPut(BaseModel):
-    desired_state: Literal["signed", "revoked"]
+    status: Literal["signed", "revoked"]

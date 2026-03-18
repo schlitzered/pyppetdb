@@ -12,6 +12,7 @@ from pyppetdb.controller.api import ControllerApi
 from pyppetdb.controller.oauth import ControllerOauth
 from pyppetdb.controller.pdb import ControllerPdb
 from pyppetdb.controller.puppet import ControllerPuppet
+from pyppetdb.controller.puppet_ca import ControllerPuppetCa
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
@@ -33,6 +34,8 @@ from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.crud.ca_crls import CrudCACRLs
+from pyppetdb.ca.service import CAService
 
 
 class Controller:
@@ -62,6 +65,8 @@ class Controller:
         crud_ca_authorities: CrudCAAuthorities,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_certificates: CrudCACertificates,
+        crud_ca_crls: CrudCACRLs,
+        ca_service: CAService,
         http: httpx.AsyncClient,
         config: Config,
         pyhiera,
@@ -94,6 +99,8 @@ class Controller:
             crud_ca_authorities=crud_ca_authorities,
             crud_ca_spaces=crud_ca_spaces,
             crud_ca_certificates=crud_ca_certificates,
+            crud_ca_crls=crud_ca_crls,
+            ca_service=ca_service,
             http=http,
             pyhiera=pyhiera,
         ).router
@@ -120,10 +127,16 @@ class Controller:
             config=config,
             http=http,
             crud_nodes_catalog_cache=crud_nodes_catalog_cache,
-            crud_ca_authorities=crud_ca_authorities,
-            crud_ca_spaces=crud_ca_spaces,
-            crud_ca_certificates=crud_ca_certificates,
-        )
+        ).router
+
+        router_puppet_ca = ControllerPuppetCa(
+            log=log,
+            crud_authorities=crud_ca_authorities,
+            crud_spaces=crud_ca_spaces,
+            crud_certificates=crud_ca_certificates,
+            crud_crls=crud_ca_crls,
+            ca_service=ca_service,
+        ).router
 
         self.router_dev.include_router(
             router_main,
@@ -159,12 +172,19 @@ class Controller:
         )
 
         self.router_dev.include_router(
-            router_puppet.router,
-            prefix="/puppet",
+            router_puppet,
         )
         self.router_puppet.include_router(
-            router_puppet.router,
-            prefix="/puppet",
+            router_puppet,
+        )
+
+        self.router_dev.include_router(
+            router_puppet_ca,
+            prefix="/puppet-ca",
+        )
+        self.router_puppet.include_router(
+            router_puppet_ca,
+            prefix="/puppet-ca",
         )
 
     @property

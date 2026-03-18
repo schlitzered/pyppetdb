@@ -8,12 +8,57 @@ from cryptography.x509.oid import NameOID
 
 class CAUtils:
     @staticmethod
+    def generate_csr(
+        common_name: str,
+        organization: str = "PyppetDB",
+        organizational_unit: str = "Nodes",
+        country: str = "DE",
+        state: Optional[str] = "Hessen",
+        locality: Optional[str] = None,
+        alt_names: Optional[List[str]] = None
+    ) -> Tuple[bytes, bytes]:
+        """Generate a CSR and private key."""
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=4096,
+        )
+
+        name_parts = [
+            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization),
+            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, organizational_unit),
+            x509.NameAttribute(NameOID.COUNTRY_NAME, country),
+        ]
+        if state:
+            name_parts.append(x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, state))
+        if locality:
+            name_parts.append(x509.NameAttribute(NameOID.LOCALITY_NAME, locality))
+
+        builder = x509.CertificateSigningRequestBuilder()
+        builder = builder.subject_name(x509.Name(name_parts))
+
+        if alt_names:
+            san = x509.SubjectAlternativeName([x509.DNSName(name) for name in alt_names])
+            builder = builder.add_extension(san, critical=False)
+
+        csr = builder.sign(private_key, hashes.SHA256())
+
+        csr_pem = csr.public_bytes(serialization.Encoding.PEM)
+        key_pem = private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+
+        return csr_pem, key_pem
+
+    @staticmethod
     def generate_ca(
         common_name: str,
         organization: str = "PyppetDB",
         organizational_unit: str = "CA",
-        country: str = "US",
-        state: Optional[str] = None,
+        country: str = "DE",
+        state: Optional[str] = "Hessen",
         locality: Optional[str] = None,
         validity_days: int = 3650
     ) -> Tuple[bytes, bytes]:
@@ -68,8 +113,8 @@ class CAUtils:
         ca_key_pem: bytes,
         organization: str = "PyppetDB",
         organizational_unit: str = "CA",
-        country: str = "US",
-        state: Optional[str] = None,
+        country: str = "DE",
+        state: Optional[str] = "Hessen",
         locality: Optional[str] = None,
         validity_days: int = 3650
     ) -> Tuple[bytes, bytes]:
@@ -132,8 +177,8 @@ class CAUtils:
         csr = x509.load_pem_x509_csr(csr_pem)
         ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
         ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
-        
-        cert = (
+
+        builder = (
             x509.CertificateBuilder()
             .subject_name(csr.subject)
             .issuer_name(ca_cert.subject)
@@ -143,9 +188,13 @@ class CAUtils:
             .not_valid_after(
                 datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=validity_days)
             )
-            .sign(ca_key, hashes.SHA256())
         )
-        
+
+        for extension in csr.extensions:
+            builder = builder.add_extension(extension.value, critical=extension.critical)
+
+        cert = builder.sign(ca_key, hashes.SHA256())
+
         return cert.public_bytes(serialization.Encoding.PEM)
 
     @staticmethod
@@ -170,17 +219,18 @@ class CAUtils:
         ca_cert_pem: bytes,
         ca_key_pem: bytes,
         revoked_certs: List[dict]  # List of {"serial_number": int, "revocation_date": datetime}
-    ) -> bytes:
+    ) -> Tuple[bytes, datetime.datetime]:
         """Generate a Certificate Revocation List (CRL)."""
         ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
         ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
         
+        last_update = datetime.datetime.now(datetime.timezone.utc)
+        next_update = last_update + datetime.timedelta(days=1)
+        
         builder = x509.CertificateRevocationListBuilder()
         builder = builder.issuer_name(ca_cert.subject)
-        builder = builder.last_update(datetime.datetime.now(datetime.timezone.utc))
-        builder = builder.next_update(
-            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-        )
+        builder = builder.last_update(last_update)
+        builder = builder.next_update(next_update)
         
         for cert in revoked_certs:
             revoked_cert = (
@@ -192,4 +242,4 @@ class CAUtils:
             builder = builder.add_revoked_certificate(revoked_cert)
             
         crl = builder.sign(ca_key, hashes.SHA256())
-        return crl.public_bytes(serialization.Encoding.PEM)
+        return crl.public_bytes(serialization.Encoding.PEM), next_update

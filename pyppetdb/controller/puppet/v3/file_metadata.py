@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import Request
 import httpx
 
@@ -56,10 +55,6 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         request: Request,
         mount_point: str,
         file_path: str,
-        environment: str = Query(...),
-        links: str = Query("manage"),
-        checksum_type: str = Query("md5"),
-        source_permissions: str = Query("ignore"),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -72,12 +67,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
 
             response = await self._http.get(
                 url=target_url,
-                params={
-                    "environment": environment,
-                    "links": links,
-                    "checksum_type": checksum_type,
-                    "source_permissions": source_permissions,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
             )
             return response.json()
@@ -96,12 +86,6 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         request: Request,
         mount_point: str,
         file_path: str,
-        environment: str = Query(...),
-        recurse: str = Query("no"),
-        ignore: list[str] = Query(None),
-        links: str = Query("manage"),
-        checksum_type: str = Query("md5"),
-        source_permissions: str = Query("ignore"),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -114,14 +98,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
 
             response = await self._http.get(
                 url=target_url,
-                params={
-                    "environment": environment,
-                    "recurse": recurse,
-                    "ignore": ignore,
-                    "links": links,
-                    "checksum_type": checksum_type,
-                    "source_permissions": source_permissions,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
             )
             return response.json()
@@ -139,12 +116,6 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         self,
         request: Request,
         mount_point: str,
-        environment: str = Query(...),
-        recurse: str = Query("no"),
-        ignore: list[str] = Query(None),
-        links: str = Query("manage"),
-        checksum_type: str = Query("md5"),
-        source_permissions: str = Query("ignore"),
     ):
         self.log.info(f"GET file_metadatas for {mount_point}")
         if not self.config.app.puppet.serverurl:
@@ -159,14 +130,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         try:
             response = await self._http.get(
                 url=target_url,
-                params={
-                    "recurse": recurse,
-                    "ignore": ignore,
-                    "links": links,
-                    "checksum_type": checksum_type,
-                    "environment": environment,
-                    "source_permissions": source_permissions,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
             )
             return response.json()

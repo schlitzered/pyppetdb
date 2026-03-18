@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import Request
 import httpx
 
@@ -46,7 +45,6 @@ class ControllerPuppetV3Facts(
         self,
         request: Request,
         nodename: str,
-        environment: str = Query(...),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -65,9 +63,7 @@ class ControllerPuppetV3Facts(
         try:
             response = await self._http.put(
                 url=target_url,
-                params={
-                    "environment": environment,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
                 content=body_bytes,
             )

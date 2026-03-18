@@ -1,8 +1,15 @@
 from datetime import datetime
-from typing import List, Optional, Literal, Dict
+from typing import List
+from typing import Optional
+from typing import Literal
+from typing import Dict
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, Fingerprints
+from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.common import Fingerprints
+
+# CA Status
+CAStatus = Literal["active", "revoked"]
 
 filter_literal = Literal[
     "id",
@@ -14,6 +21,9 @@ filter_literal = Literal[
     "not_after",
     "fingerprint",
     "certificate",
+    "internal",
+    "chain",
+    "status",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -27,18 +37,18 @@ sort_literal = Literal[
 ]
 
 class CAAuthorityPost(BaseModel):
-    id: Optional[str] = None
     parent_id: Optional[str] = None
     common_name: Optional[str] = None
     organization: Optional[str] = "PyppetDB"
     organizational_unit: Optional[str] = "CA"
-    country: Optional[str] = "US"
-    state: Optional[str] = None
+    country: Optional[str] = "DE"
+    state: Optional[str] = "Hessen"
     locality: Optional[str] = None
     validity_days: Optional[int] = 3650
     # For external upload
     certificate: Optional[str] = None
     private_key: Optional[str] = None
+    external_chain: Optional[List[str]] = None
 
 class CAAuthorityGet(BaseModel):
     id: str
@@ -50,8 +60,15 @@ class CAAuthorityGet(BaseModel):
     not_after: datetime
     fingerprint: Fingerprints
     certificate: str
+    internal: bool
+    chain: List[str]
+    status: CAStatus
+    revocation_date: Optional[datetime] = None
     # Private key is NEVER returned in GET
 
 class CAAuthorityGetMulti(BaseModel):
     result: List[CAAuthorityGet]
     meta: MetaMulti
+
+class CAAuthorityStatusPut(BaseModel):
+    status: Literal["revoked"]

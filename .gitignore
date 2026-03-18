@@ -3,6 +3,7 @@ GEMINI.md
 .env
 *.pyc
 .idea
+venv
 .venv
 dist
 requests*

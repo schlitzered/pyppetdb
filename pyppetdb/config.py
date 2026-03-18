@@ -115,8 +115,13 @@ class ConfigHiera(BaseModel):
     plugin: typing.Optional[dict[str, str]] = None
 
 
+class ConfigCA(BaseModel):
+    enableCrlRefresh: bool = True
+
+
 class Config(BaseSettings):
     app: ConfigApp = ConfigApp()
+    ca: ConfigCA = ConfigCA()
     hiera: ConfigHiera = ConfigHiera()
     ldap: ConfigLdap = ConfigLdap()
     mongodb: ConfigMongodb = ConfigMongodb()

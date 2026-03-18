@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 import httpx
@@ -75,7 +74,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         self,
         request: Request,
         md5: str,
-        environment: str = Query(...),
     ):
         raise HTTPException(
             status_code=404,
@@ -87,7 +85,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
         original_path: str,
-        environment: str = Query(...),
     ):
         raise HTTPException(
             status_code=404,
@@ -98,7 +95,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         self,
         request: Request,
         md5: str,
-        environment: str = Query(...),
     ):
         raise HTTPException(
             status_code=404,
@@ -110,7 +106,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
         original_path: str,
-        environment: str = Query(...),
     ):
         raise HTTPException(
             status_code=404,
@@ -121,7 +116,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         self,
         request: Request,
         md5: str,
-        environment: str = Query(...),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -140,10 +134,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         try:
             response = await self._http.put(
                 url=target_url,
-                params={
-                    "environment": environment,
-                    "md5": md5,
-                },
+                params=request.query_params,
                 headers=headers,
                 content=body,
             )
@@ -164,7 +155,6 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
         original_path: str,
-        environment: str = Query(...),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -178,11 +168,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         try:
             response = await self._http.put(
                 url=target_url,
-                params={
-                    "environment": environment,
-                    "md5": md5,
-                    "original_path": original_path,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
                 content=body,
             )

@@ -1,26 +1,22 @@
 import datetime
 import logging
 import typing
+from typing import List
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.ca_utils import CAUtils
-from pyppetdb.model.ca_certificates import (
-    CACertificateGet, CACertificateGetMulti, CAStatus
-)
+from pyppetdb.ca.utils import CAUtils
+from pyppetdb.model.ca_certificates import CACertificateGet
+from pyppetdb.model.ca_certificates import CACertificateGetMulti
+from pyppetdb.model.ca_certificates import CAStatus
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.errors import QueryParamValidationError
-from pyppetdb.crud.ca_authorities import CrudCAAuthorities
-from pyppetdb.crud.ca_spaces import CrudCASpaces
 
 class CrudCACertificates(CrudMongo):
-    def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection, 
-                 crud_authorities: CrudCAAuthorities, crud_spaces: CrudCASpaces):
+    def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection):
         super().__init__(config, log, coll)
-        self.crud_authorities = crud_authorities
-        self.crud_spaces = crud_spaces
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -31,9 +27,6 @@ class CrudCACertificates(CrudMongo):
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def submit_csr(self, space_id: str, certname: str, csr_pem: str, fields: list[str] = []) -> CACertificateGet:
-        # Check if space exists
-        await self.crud_spaces.get(space_id)
-        
         data = {
             "id": certname,
             "space_id": space_id,
@@ -49,19 +42,15 @@ class CrudCACertificates(CrudMongo):
         )
         return await self.get(space_id, certname, fields=fields)
 
-    async def sign(self, space_id: str, certname: str, fields: list[str] = []) -> CACertificateGet:
+    async def sign(self, space_id: str, certname: str, ca_cert_pem: bytes, ca_key_pem: bytes, fields: list[str] = []) -> CACertificateGet:
         cert_data = await self._get(query={"id": certname, "space_id": space_id}, fields=[])
         if cert_data["status"] != "requested":
             raise QueryParamValidationError(msg="Certificate is not in 'requested' state")
             
-        space = await self.crud_spaces.get(space_id)
-        ca = await self.crud_authorities.get(space.authority_id)
-        ca_key = await self.crud_authorities.get_private_key(space.authority_id)
-        
         cert_pem = CAUtils.sign_csr(
             csr_pem=cert_data["csr"].encode(),
-            ca_cert_pem=ca.certificate.encode(),
-            ca_key_pem=ca_key
+            ca_cert_pem=ca_cert_pem,
+            ca_key_pem=ca_key_pem
         )
         
         info = CAUtils.get_cert_info(cert_pem)
@@ -92,29 +81,6 @@ class CrudCACertificates(CrudMongo):
         )
         return await self.get(space_id, certname, fields=fields)
 
-    async def get_crl(self, space_id: str) -> bytes:
-        space = await self.crud_spaces.get(space_id)
-        ca = await self.crud_authorities.get(space.authority_id)
-        ca_key = await self.crud_authorities.get_private_key(space.authority_id)
-        
-        # Fetch all revoked certs for this space
-        revoked_cursor = self.coll.find(
-            {"space_id": space_id, "status": "revoked"},
-            {"serial_number": 1, "revocation_date": 1}
-        )
-        revoked_certs = []
-        async for cert in revoked_cursor:
-            revoked_certs.append({
-                "serial_number": int(cert["serial_number"]),
-                "revocation_date": cert["revocation_date"]
-            })
-            
-        return CAUtils.generate_crl(
-            ca_cert_pem=ca.certificate.encode(),
-            ca_key_pem=ca_key,
-            revoked_certs=revoked_certs
-        )
-
     async def get(self, space_id: str, certname: str, fields: list[str] = []) -> CACertificateGet:
         result = await self._get(query={"id": certname, "space_id": space_id}, fields=fields)
         return CACertificateGet(**result)
@@ -124,6 +90,49 @@ class CrudCACertificates(CrudMongo):
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
+
+    async def get_revoked_for_spaces(self, space_ids: list[str]) -> list[dict]:
+        cursor = self.coll.find(
+            {"space_id": {"$in": space_ids}, "status": "revoked"},
+            {"serial_number": 1, "revocation_date": 1}
+        )
+        revoked = []
+        async for cert in cursor:
+            revoked.append({
+                "serial_number": int(cert["serial_number"]),
+                "revocation_date": cert["revocation_date"]
+            })
+        return revoked
+
+    async def search_multi_spaces(
+        self,
+        space_ids: list[str],
+        _id: typing.Optional[str] = None,
+        status: typing.Optional[CAStatus] = None,
+        fingerprint: typing.Optional[str] = None,
+        serial_number: typing.Optional[str] = None,
+        fields: typing.Optional[list] = None,
+        sort: typing.Optional[str] = None,
+        sort_order: typing.Optional[sort_order_literal] = None,
+        page: typing.Optional[int] = None,
+        limit: typing.Optional[int] = None,
+    ) -> CACertificateGetMulti:
+        query = {"space_id": {"$in": space_ids}}
+        self._filter_re(query, "id", _id)
+        if status:
+            query["status"] = status
+        self._filter_re(query, "fingerprint.sha256", fingerprint)
+        self._filter_re(query, "serial_number", serial_number)
+
+        result = await self._search(
+            query=query,
+            fields=fields,
+            sort=sort,
+            sort_order=sort_order,
+            page=page,
+            limit=limit,
+        )
+        return CACertificateGetMulti(**result)
 
     async def search(
         self,

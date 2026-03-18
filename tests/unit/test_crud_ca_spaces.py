@@ -2,6 +2,8 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.model.ca_spaces import CASpacePost
+from pyppetdb.model.ca_spaces import CASpacePut
 
 class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -25,3 +27,41 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         res = await self.crud.count({"test": 1})
         self.assertEqual(res, 3)
         self.mock_coll.count_documents.assert_called_once_with({"test": 1})
+
+    async def test_create(self):
+        self.crud._create = AsyncMock(return_value={"id": "space1", "authority_id": "ca1", "authority_id_history": []})
+        payload = CASpacePost(authority_id="ca1")
+        await self.crud.create(_id="space1", payload=payload)
+        
+        args = self.crud._create.call_args[1]
+        self.assertEqual(args["payload"]["id"], "space1")
+        self.assertEqual(args["payload"]["authority_id"], "ca1")
+        self.assertEqual(args["payload"]["authority_id_history"], [])
+
+    async def test_update_authority(self):
+        # Setup mock for get()
+        self.mock_coll.find_one = AsyncMock(side_effect=[
+            {"id": "space1", "authority_id": "ca1", "authority_id_history": []}, # first call inside update
+            {"id": "space1", "authority_id": "ca2", "authority_id_history": ["ca1"]} # final get()
+        ])
+        self.mock_coll.update_one = AsyncMock()
+        
+        payload = CASpacePut(authority_id="ca2")
+        await self.crud.update("space1", payload)
+        
+        self.mock_coll.update_one.assert_called_once()
+        args, kwargs = self.mock_coll.update_one.call_args
+        self.assertEqual(args[0], {"id": "space1"})
+        self.assertEqual(args[1]["$set"], {"authority_id": "ca2"})
+        self.assertEqual(args[1]["$push"], {"authority_id_history": "ca1"})
+
+    async def test_search_by_ca(self):
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[{"id": "s1"}])
+        self.mock_coll.find.return_value = mock_cursor
+        
+        res = await self.crud.search_by_ca("ca1")
+        self.assertEqual(len(res), 1)
+        self.mock_coll.find.assert_called_once()
+        args = self.mock_coll.find.call_args[0][0]
+        self.assertIn("$or", args)

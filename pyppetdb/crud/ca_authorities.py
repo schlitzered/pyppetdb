@@ -1,40 +1,48 @@
+import datetime
 import logging
 import typing
+from typing import List
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
-from pyppetdb.ca_utils import CAUtils
-from pyppetdb.model.ca_authorities import (
-    CAAuthorityPost, CAAuthorityGet, CAAuthorityGetMulti
-)
+from pyppetdb.ca.utils import CAUtils
+from pyppetdb.model.ca_authorities import CAAuthorityPost
+from pyppetdb.model.ca_authorities import CAAuthorityGet
+from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
+from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
 
+from pyppetdb.crud.ca_crls import CrudCACRLs
 from pyppetdb.errors import QueryParamValidationError
 
 class CrudCAAuthorities(CrudMongo):
-    def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection, protector: NodesDataProtector):
+    def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection, protector: NodesDataProtector, crud_crls: CrudCACRLs = None):
         super().__init__(config, log, coll)
         self._protector = protector
+        self._crud_crls = crud_crls
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def create(self, payload: CAAuthorityPost, fields: list[str] = []) -> CAAuthorityGet:
+    async def create(self, _id: str, payload: CAAuthorityPost, fields: list[str] = []) -> CAAuthorityGet:
         if payload.certificate and payload.private_key:
             # External upload
+            internal = False
             cert_pem = payload.certificate.encode()
             key_pem = payload.private_key.encode()
+            chain = payload.external_chain or []
         elif payload.parent_id:
             # Signed by parent CA
+            internal = True
             parent_ca = await self.get(payload.parent_id)
             parent_key = await self.get_private_key(payload.parent_id)
             if not payload.common_name:
-                payload.common_name = f"PyppetDB CA {payload.id}"
+                payload.common_name = f"PyppetDB CA {_id}"
             cert_pem, key_pem = CAUtils.sign_ca(
                 common_name=payload.common_name,
                 ca_cert_pem=parent_ca.certificate.encode(),
@@ -46,10 +54,13 @@ class CrudCAAuthorities(CrudMongo):
                 locality=payload.locality,
                 validity_days=payload.validity_days
             )
+            # Chain is parent cert + parent chain
+            chain = [parent_ca.certificate] + parent_ca.chain
         else:
             # Generate new self-signed
+            internal = True
             if not payload.common_name:
-                payload.common_name = f"PyppetDB CA {payload.id}"
+                payload.common_name = f"PyppetDB CA {_id}"
             cert_pem, key_pem = CAUtils.generate_ca(
                 common_name=payload.common_name,
                 organization=payload.organization,
@@ -59,19 +70,33 @@ class CrudCAAuthorities(CrudMongo):
                 locality=payload.locality,
                 validity_days=payload.validity_days
             )
+            chain = []
         
         info = CAUtils.get_cert_info(cert_pem)
         encrypted_key = self._protector.encrypt_string(key_pem.decode())
         
         data = {
-            "id": payload.id,
+            "id": _id,
             "parent_id": payload.parent_id,
             "certificate": cert_pem.decode(),
             "private_key_encrypted": encrypted_key,
+            "internal": internal,
+            "chain": chain,
+            "status": "active",
             **info
         }
         
         result = await self._create(payload=data, fields=fields)
+        
+        # Initialize generation 0 CRL (containing revoked child CAs)
+        if internal and self._crud_crls:
+            await self._crud_crls.sync_crl(
+                ca_id=_id,
+                ca_cert_pem=cert_pem,
+                ca_key_pem=key_pem,
+                revoked_certs=[]
+            )
+            
         return CAAuthorityGet(**result)
 
     async def get(self, _id: str, fields: list[str] = []) -> CAAuthorityGet:
@@ -89,12 +114,38 @@ class CrudCAAuthorities(CrudMongo):
         decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
         return decrypted.encode()
 
+    async def revoke(self, _id: str) -> CAAuthorityGet:
+        updates = {
+            "status": "revoked",
+            "revocation_date": datetime.datetime.now(datetime.timezone.utc)
+        }
+        await self.coll.update_one(
+            {"id": _id},
+            {"$set": updates}
+        )
+        return await self.get(_id)
+
+    async def get_revoked(self, parent_id: str) -> list[dict]:
+        cursor = self.coll.find(
+            {"parent_id": parent_id, "status": "revoked"},
+            {"serial_number": 1, "revocation_date": 1}
+        )
+        revoked = []
+        async for ca in cursor:
+            revoked.append({
+                "serial_number": int(ca["serial_number"]),
+                "revocation_date": ca["revocation_date"]
+            })
+        return revoked
+
     async def search(
         self,
         _id: typing.Optional[str] = None,
         parent_id: typing.Optional[str] = None,
         common_name: typing.Optional[str] = None,
         fingerprint: typing.Optional[str] = None,
+        internal: typing.Optional[bool] = None,
+        status: typing.Optional[CAStatus] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,
@@ -106,6 +157,10 @@ class CrudCAAuthorities(CrudMongo):
         self._filter_re(query, "parent_id", parent_id)
         self._filter_re(query, "common_name", common_name)
         self._filter_re(query, "fingerprint.sha256", fingerprint)
+        if internal is not None:
+            query["internal"] = internal
+        if status:
+            query["status"] = status
 
         result = await self._search(
             query=query,
