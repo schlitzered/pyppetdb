@@ -205,11 +205,19 @@ class CAUtils:
         return cert.public_bytes(serialization.Encoding.PEM)
 
     @staticmethod
+    def get_csr_info(csr_pem: bytes) -> dict:
+        """Extract information from a CSR."""
+        csr = x509.load_pem_x509_csr(csr_pem)
+        return {
+            "cn": csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
+        }
+
+    @staticmethod
     def get_cert_info(cert_pem: bytes) -> dict:
         """Extract information from a certificate."""
         cert = x509.load_pem_x509_certificate(cert_pem)
         return {
-            "common_name": cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[
+            "cn": cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[
                 0
             ].value,
             "issuer": cert.issuer.rfc4514_string(),

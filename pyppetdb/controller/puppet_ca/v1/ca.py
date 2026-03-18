@@ -66,38 +66,38 @@ class ControllerPuppetCaV1CA:
             except ResourceNotFound:
                 raise HTTPException(status_code=404, detail="Space not found")
 
-        try:
-            cert = await self._crud_certificates.get(
-                space_id="puppet-ca",
-                certname=nodename,
-                fields=["status", "certificate"],
-            )
-            if cert.status == "signed" and cert.certificate:
-                return Response(content=cert.certificate, media_type="text/plain")
-            else:
-                raise HTTPException(
-                    status_code=404, detail="Certificate not yet signed"
-                )
-        except ResourceNotFound:
+        # Query by CN and status to get the signed certificate
+        cert_doc = await self._crud_certificates.coll.find_one(
+            {"space_id": "puppet-ca", "cn": nodename, "status": "signed"}
+        )
+        if not cert_doc or not cert_doc.get("certificate"):
             raise HTTPException(status_code=404, detail="Certificate not found")
 
+        return Response(content=cert_doc["certificate"], media_type="text/plain")
+
     async def get_certificate_request(self, nodename: str, request: Request):
-        try:
-            cert = await self._crud_certificates.get(
-                space_id="puppet-ca", certname=nodename, fields=["csr"]
-            )
-            if cert.csr:
-                return Response(content=cert.csr, media_type="text/plain")
+        # Query by CN and status to get the pending CSR
+        cert_doc = await self._crud_certificates.coll.find_one(
+            {"space_id": "puppet-ca", "cn": nodename, "status": "requested"}
+        )
+        if not cert_doc or not cert_doc.get("csr"):
             raise HTTPException(status_code=404, detail="CSR not found")
-        except ResourceNotFound:
-            raise HTTPException(status_code=404, detail="CSR not found")
+
+        return Response(content=cert_doc["csr"], media_type="text/plain")
 
     async def submit_certificate_request(self, nodename: str, request: Request):
         body = await request.body()
         csr_pem = body.decode()
 
+        # Get CA ID for puppet-ca space
+        space = await self._crud_spaces.get("puppet-ca", fields=["ca_id"])
+
         await self._crud_certificates.submit_csr(
-            space_id="puppet-ca", certname=nodename, csr_pem=csr_pem, fields=["id"]
+            space_id="puppet-ca",
+            csr_pem=csr_pem,
+            ca_id=space.ca_id,
+            auto_revoke=True,  # Auto-revoke existing signed cert with same CN
+            fields=["id"]
         )
 
         if self._config.ca.autoSign:
@@ -112,22 +112,23 @@ class ControllerPuppetCaV1CA:
         return Response(content="CSR submitted", media_type="text/plain")
 
     async def get_certificate_status(self, nodename: str, request: Request):
-        try:
-            cert = await self._crud_certificates.get(
-                space_id="puppet-ca", certname=nodename
-            )
-            return {
-                "name": cert.id,
-                "state": cert.status,
-                "fingerprint": cert.fingerprint.sha256 if cert.fingerprint else None,
-                "fingerprints": {
-                    "SHA1": cert.fingerprint.sha1 if cert.fingerprint else None,
-                    "SHA256": cert.fingerprint.sha256 if cert.fingerprint else None,
-                    "default": cert.fingerprint.sha256 if cert.fingerprint else None,
-                },
-            }
-        except ResourceNotFound:
+        # Find any cert (any status) by CN
+        cert_doc = await self._crud_certificates.coll.find_one(
+            {"space_id": "puppet-ca", "cn": nodename}
+        )
+        if not cert_doc:
             raise HTTPException(status_code=404, detail="Certificate not found")
+
+        return {
+            "name": cert_doc["cn"],
+            "state": cert_doc["status"],
+            "fingerprint": cert_doc.get("fingerprint", {}).get("sha256"),
+            "fingerprints": {
+                "SHA1": cert_doc.get("fingerprint", {}).get("sha1"),
+                "SHA256": cert_doc.get("fingerprint", {}).get("sha256"),
+                "default": cert_doc.get("fingerprint", {}).get("sha256"),
+            },
+        }
 
     async def update_certificate_status(self, nodename: str, request: Request):
         data_json = await request.json()

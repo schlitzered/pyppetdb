@@ -20,7 +20,7 @@ from pyppetdb.model.ca_certificates import CAStatus
 from pyppetdb.model.common import sort_order_literal
 
 
-class ControllerApiV1CASpacesCertificates:
+class ControllerApiV1CASpacesCerts:
     def __init__(
         self,
         log: logging.Logger,
@@ -61,13 +61,6 @@ class ControllerApiV1CASpacesCertificates:
             response_model=CACertificateGet,
             response_model_exclude_unset=True,
         )
-        self._router.add_api_route(
-            "/{cert_id}",
-            self.delete,
-            methods=["DELETE"],
-            response_model=dict,
-            response_model_exclude_unset=True,
-        )
 
     @property
     def router(self):
@@ -75,16 +68,13 @@ class ControllerApiV1CASpacesCertificates:
 
     async def _populate_ca_info(self, cert: CACertificateGet) -> CACertificateGet:
         try:
-            space = await self._crud_spaces.get(cert.space_id, fields=["ca_id"])
             ca = await self._crud_authorities.get(
-                space.ca_id, fields=["certificate", "chain"]
+                cert.ca_id, fields=["certificate", "chain"]
             )
             cert.ca = ca.certificate
             cert.ca_chain = ca.chain
         except Exception as e:
-            self._log.warning(
-                f"Failed to populate CA info for cert {cert.id} in space {cert.space_id}: {e}"
-            )
+            self._log.warning(f"Failed to populate CA info for cert {cert.id}: {e}")
         return cert
 
     async def search(
@@ -134,9 +124,20 @@ class ControllerApiV1CASpacesCertificates:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self._authorize.require_admin(request=request)
-        cert = await self._crud_certificates.get(
-            space_id=space_id, certname=cert_id, fields=list(fields)
+        # Query by serial number (cert_id is the serial)
+        multi = await self._crud_certificates.search(
+            _id=f"^{cert_id}$",
+            space_id=space_id,
+            fields=list(fields),
+            limit=1,
         )
+        if not multi.result:
+            from pyppetdb.errors import ResourceNotFound
+
+            raise ResourceNotFound(
+                msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
+            )
+        cert = multi.result[0]
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)
         return cert
@@ -150,17 +151,29 @@ class ControllerApiV1CASpacesCertificates:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self._authorize.require_admin(request=request)
-        cert = await self._ca_service.update_certificate_status(space_id, cert_id, data)
+        # cert_id is the serial number, but service needs CN for signing
+        # Get the certificate to extract CN and ca_id
+        cert_doc = await self._crud_certificates.coll.find_one(
+            {"id": cert_id, "space_id": space_id}
+        )
+        if not cert_doc:
+            from pyppetdb.errors import ResourceNotFound
+
+            raise ResourceNotFound(
+                msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
+            )
+
+        if data.status == "signed":
+            # Use CN-based method for signing
+            cert = await self._ca_service.update_certificate_status(
+                space_id, cert_doc["cn"], data
+            )
+        elif data.status == "revoked":
+            # Use CA-based method for revoking by serial
+            cert = await self._ca_service.update_certificate_status_by_ca(
+                cert_doc["ca_id"], cert_id, data
+            )
+
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)
         return cert
-
-    async def delete(
-        self,
-        request: Request,
-        space_id: str,
-        cert_id: str,
-    ):
-        await self._authorize.require_admin(request=request)
-        await self._crud_certificates.delete(space_id=space_id, certname=cert_id)
-        return {}

@@ -23,41 +23,83 @@ class CrudCACertificates(CrudMongo):
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
+        # Serial number is globally unique (id field)
+        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
+        # Index for querying by space and CN
         await self.coll.create_index(
-            [("id", pymongo.ASCENDING), ("space_id", pymongo.ASCENDING)], unique=True
+            [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)]
         )
+        # Index for querying by CA
+        await self.coll.create_index([("ca_id", pymongo.ASCENDING)])
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def submit_csr(
-        self, space_id: str, certname: str, csr_pem: str, fields: list[str] = []
+        self,
+        space_id: str,
+        csr_pem: str,
+        ca_id: str,
+        auto_revoke: bool = True,
+        fields: list[str] = []
     ) -> CACertificateGet:
+        """Submit a CSR. Auto-revokes any existing signed cert with same CN if auto_revoke=True."""
+        # Extract CN from CSR
+        csr_info = CAUtils.get_csr_info(csr_pem.encode())
+        cn = csr_info["cn"]
+
+        # Auto-revoke existing signed cert with same CN in this space (if enabled)
+        if auto_revoke:
+            existing = await self.coll.find_one(
+                {"space_id": space_id, "cn": cn, "status": "signed"}
+            )
+            if existing:
+                self.log.info(
+                    f"Auto-revoking existing signed cert for CN '{cn}' in space '{space_id}'"
+                )
+                await self.coll.update_one(
+                    {"_id": existing["_id"]},
+                    {
+                        "$set": {
+                            "status": "revoked",
+                            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
+                        }
+                    },
+                )
+
+        # Generate temporary ID for the CSR (will be replaced with serial when signed)
+        # Use a combination of space_id and cn and timestamp to ensure uniqueness
+        import uuid
+        temp_id = f"csr-{uuid.uuid4()}"
+
         data = {
-            "id": certname,
+            "id": temp_id,
             "space_id": space_id,
+            "ca_id": ca_id,
+            "cn": cn,
             "status": "requested",
             "csr": csr_pem,
             "created": datetime.datetime.now(datetime.timezone.utc),
         }
-        # Upsert: if it exists, overwrite CSR (Puppet behavior)
-        await self.coll.update_one(
-            {"id": certname, "space_id": space_id}, {"$set": data}, upsert=True
-        )
-        return await self.get(space_id, certname, fields=fields)
+
+        await self.coll.insert_one(data)
+        result = await self._get(query={"id": temp_id}, fields=fields)
+        return CACertificateGet(**result)
 
     async def sign(
         self,
         space_id: str,
-        certname: str,
+        cn: str,
         ca_cert_pem: bytes,
         ca_key_pem: bytes,
         fields: list[str] = [],
     ) -> CACertificateGet:
-        cert_data = await self._get(
-            query={"id": certname, "space_id": space_id}, fields=[]
+        """Sign a CSR identified by space_id and CN. Updates ID to serial number."""
+        # Find the pending CSR by space_id and CN with status "requested"
+        cert_data = await self.coll.find_one(
+            {"space_id": space_id, "cn": cn, "status": "requested"}
         )
-        if cert_data["status"] != "requested":
+        if not cert_data:
             raise QueryParamValidationError(
-                msg="Certificate is not in 'requested' state"
+                msg=f"No pending CSR found for CN '{cn}' in space '{space_id}'"
             )
 
         cert_pem = CAUtils.sign_csr(
@@ -67,19 +109,29 @@ class CrudCACertificates(CrudMongo):
         )
 
         info = CAUtils.get_cert_info(cert_pem)
-        updates = {"status": "signed", "certificate": cert_pem.decode(), **info}
+        serial = info["serial_number"]
+
+        # Update the document: change ID to serial and add cert info
+        updates = {
+            "id": serial,  # Replace temp ID with actual serial
+            "status": "signed",
+            "certificate": cert_pem.decode(),
+            **info
+        }
 
         await self.coll.update_one(
-            {"id": certname, "space_id": space_id}, {"$set": updates}
+            {"_id": cert_data["_id"]}, {"$set": updates}
         )
-        return await self.get(space_id, certname, fields=fields)
+
+        # Return the signed certificate
+        result = await self._get(query={"id": serial}, fields=fields)
+        return CACertificateGet(**result)
 
     async def revoke(
-        self, space_id: str, certname: str, fields: list[str] = []
+        self, serial: str, fields: list[str] = []
     ) -> CACertificateGet:
-        cert_data = await self._get(
-            query={"id": certname, "space_id": space_id}, fields=[]
-        )
+        """Revoke a certificate by its serial number."""
+        cert_data = await self._get(query={"id": serial}, fields=[])
         if cert_data["status"] != "signed":
             raise QueryParamValidationError(
                 msg="Only 'signed' certificates can be revoked"
@@ -89,29 +141,14 @@ class CrudCACertificates(CrudMongo):
             "status": "revoked",
             "revocation_date": datetime.datetime.now(datetime.timezone.utc),
         }
-        await self.coll.update_one(
-            {"id": certname, "space_id": space_id}, {"$set": updates}
-        )
-        return await self.get(space_id, certname, fields=fields)
-
-    async def get(
-        self, space_id: str, certname: str, fields: list[str] = []
-    ) -> CACertificateGet:
-        _fields = list(fields) if fields else []
-        if _fields:
-            if "id" not in _fields:
-                _fields.append("id")
-            if "space_id" not in _fields:
-                _fields.append("space_id")
-            if "status" not in _fields:
-                _fields.append("status")
-        result = await self._get(
-            query={"id": certname, "space_id": space_id}, fields=_fields
-        )
+        await self.coll.update_one({"id": serial}, {"$set": updates})
+        result = await self._get(query={"id": serial}, fields=fields)
         return CACertificateGet(**result)
 
-    async def delete(self, space_id: str, certname: str) -> None:
-        await self._delete(query={"id": certname, "space_id": space_id})
+    async def get(self, serial: str, fields: list[str] = []) -> CACertificateGet:
+        """Get a certificate by its serial number (ID)."""
+        result = await self._get(query={"id": serial}, fields=fields)
+        return CACertificateGet(**result)
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
@@ -165,6 +202,7 @@ class CrudCACertificates(CrudMongo):
         self,
         _id: typing.Optional[str] = None,
         space_id: typing.Optional[str] = None,
+        ca_id: typing.Optional[str] = None,
         status: typing.Optional[CAStatus] = None,
         fingerprint: typing.Optional[str] = None,
         serial_number: typing.Optional[str] = None,
@@ -178,6 +216,8 @@ class CrudCACertificates(CrudMongo):
         self._filter_re(query, "id", _id)
         if space_id:
             query["space_id"] = space_id
+        if ca_id:
+            query["ca_id"] = ca_id
         if status:
             query["status"] = status
         self._filter_re(query, "fingerprint.sha256", fingerprint)

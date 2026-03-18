@@ -643,10 +643,12 @@ async def cli_init_ca(
 
     # 3. Submit CSR
     space_id = "puppet-ca"
+    space = await crud_ca_spaces.get(space_id, fields=["ca_id"])
     await crud_ca_certificates.submit_csr(
         space_id=space_id,
-        certname=common_name,
         csr_pem=csr_pem.decode(),
+        ca_id=space.ca_id,
+        auto_revoke=True,
     )
 
     # 4. Sign CSR
@@ -654,7 +656,7 @@ async def cli_init_ca(
 
     cert = await ca_service.update_certificate_status(
         space_id=space_id,
-        cert_id=common_name,
+        cn=common_name,
         data=CACertificatePut(status="signed"),
     )
 
