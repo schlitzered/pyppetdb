@@ -1,29 +1,29 @@
 import logging
 from fastapi import APIRouter, Request, Response, HTTPException
+from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
-from pyppetdb.crud.ca_crls import CrudCACRLs
 from pyppetdb.ca.service import CAService
 from pyppetdb.errors import ResourceNotFound
-from pyppetdb.model.ca_certificates import CACertificateStatusPut
+from pyppetdb.model.ca_certificates import CACertificatePut
 
 
 class ControllerPuppetCaV1CA:
     def __init__(
         self,
         log: logging.Logger,
+        config: Config,
         crud_authorities: CrudCAAuthorities,
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
-        crud_crls: CrudCACRLs,
         ca_service: CAService,
     ):
         self._log = log
+        self._config = config
         self._crud_authorities = crud_authorities
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
-        self._crud_crls = crud_crls
         self._ca_service = ca_service
         self._router = APIRouter(tags=["puppet-ca"])
 
@@ -68,8 +68,8 @@ class ControllerPuppetCaV1CA:
         if nodename == "ca":
             # Fetch CA certs for the current authority and all historical ones
             try:
-                space = await self._crud_spaces.get(space_id)
-                ca_ids = [space.authority_id] + space.authority_id_history
+                space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
+                ca_ids = [space.ca_id] + space.ca_id_history
 
                 full_chain_parts = []
                 processed_certs = set()
@@ -127,6 +127,20 @@ class ControllerPuppetCaV1CA:
         await self._crud_certificates.submit_csr(
             space_id=space_id, certname=nodename, csr_pem=csr_pem, fields=["id"]
         )
+
+        if self._config.ca.autoSign:
+            self._log.info(f"Auto-signing CSR for {nodename} in space {space_id}")
+            try:
+                await self._ca_service.update_certificate_status(
+                    space_id, nodename, CACertificatePut(status="signed")
+                )
+            except Exception as e:
+                self._log.error(f"Failed to auto-sign CSR for {nodename}: {e}")
+                # We don't fail the request if auto-signing fails, as the CSR is already submitted.
+                # But maybe we should? Puppet agent might expect it to be signed if it's auto-signing.
+                # However, submit_csr is a PUT request that just says "I've uploaded this".
+                # If it's not signed immediately, the agent will just poll later.
+
         return Response(content="CSR submitted", media_type="text/plain")
 
     async def get_certificate_status(self, nodename: str, request: Request):
@@ -157,12 +171,12 @@ class ControllerPuppetCaV1CA:
         try:
             if desired_state == "signed":
                 await self._ca_service.update_certificate_status(
-                    space_id, nodename, CACertificateStatusPut(status="signed")
+                    space_id, nodename, CACertificatePut(status="signed")
                 )
                 return Response(status_code=204)
             elif desired_state == "revoked":
                 await self._ca_service.update_certificate_status(
-                    space_id, nodename, CACertificateStatusPut(status="revoked")
+                    space_id, nodename, CACertificatePut(status="revoked")
                 )
                 return Response(status_code=204)
             else:
@@ -175,24 +189,31 @@ class ControllerPuppetCaV1CA:
 
     async def _get_crl_cached(self, ca_id: str) -> bytes:
         try:
-            crl = await self._crud_crls.get(ca_id)
-            return crl.crl_pem.encode()
+            ca = await self._crud_authorities.get(ca_id, fields=["crl"])
+            if ca.crl:
+                return ca.crl.crl_pem.encode()
+            # No CRL exists, generate it
+            await self._ca_service.sync_crl_for_authority(ca_id)
+            ca = await self._crud_authorities.get(ca_id, fields=["crl"])
+            return ca.crl.crl_pem.encode() if ca.crl else b""
         except ResourceNotFound:
             await self._ca_service.sync_crl_for_authority(ca_id)
-            crl = await self._crud_crls.get(ca_id)
-            return crl.crl_pem.encode()
+            ca = await self._crud_authorities.get(ca_id, fields=["crl"])
+            return ca.crl.crl_pem.encode() if ca.crl else b""
 
     async def get_crl(
         self,
         request: Request,
     ):
-        include_chain = request.query_params.get("include_chain", "true").lower() == "true"
+        include_chain = (
+            request.query_params.get("include_chain", "true").lower() == "true"
+        )
         space_id = await self._get_space_id(request)
         try:
-            space = await self._crud_spaces.get(space_id)
+            space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
 
             # Start with CA and its history for this space
-            ca_ids_to_process = [space.authority_id] + space.authority_id_history
+            ca_ids_to_process = [space.ca_id] + space.ca_id_history
             processed_ca_ids = set()
             crl_chain_pem = b""
 

@@ -20,6 +20,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 import orjson
+import pymongo
 
 import pyppetdb.controller
 import pyppetdb.controller.oauth
@@ -52,7 +53,6 @@ from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
-from pyppetdb.crud.ca_crls import CrudCACRLs
 from pyppetdb.ca.service import CAService
 
 from pyppetdb.model.ca_authorities import CAAuthorityPost
@@ -93,7 +93,7 @@ async def ensure_default_ca_setup(
     crud_ca_spaces: CrudCASpaces,
 ):
     default_id = "puppet-ca"
-    
+
     # 1. Ensure Authority exists
     try:
         await crud_ca_authorities.get(default_id)
@@ -108,24 +108,25 @@ async def ensure_default_ca_setup(
                     organization="PyppetDB",
                     country="DE",
                     state="Hessen",
-                    validity_days=3650
-                )
+                    validity_days=3650,
+                ),
             )
         except DuplicateResource:
-            log.info(f"Default CA Authority '{default_id}' was created by another process")
+            log.info(
+                f"Default CA Authority '{default_id}' was created by another process"
+            )
 
     # 2. Ensure Space exists
     try:
-        await crud_ca_spaces.get(default_id)
+        await crud_ca_spaces.get(default_id, fields=["id"])
         log.info(f"Default CA Space '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Space '{default_id}'")
         try:
             await crud_ca_spaces.create(
                 _id=default_id,
-                payload=CASpacePost(
-                    authority_id=default_id
-                )
+                payload=CASpacePost(ca_id=default_id),
+                fields=["id"],
             )
         except DuplicateResource:
             log.info(f"Default CA Space '{default_id}' was created by another process")
@@ -305,20 +306,11 @@ async def prepare_env():
     await crud_users_credentials.index_create()
     env["crud_users_credentials"] = crud_users_credentials
 
-    crud_ca_crls = CrudCACRLs(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_crls"],
-    )
-    await crud_ca_crls.index_create()
-    env["crud_ca_crls"] = crud_ca_crls
-
     crud_ca_authorities = CrudCAAuthorities(
         config=settings,
         log=log,
         coll=mongo_db["ca_authorities"],
         protector=nodes_data_protector,
-        crud_crls=crud_ca_crls,
     )
     await crud_ca_authorities.index_create()
     env["crud_ca_authorities"] = crud_ca_authorities
@@ -327,7 +319,6 @@ async def prepare_env():
         config=settings,
         log=log,
         coll=mongo_db["ca_spaces"],
-        crud_authorities=crud_ca_authorities,
     )
     await crud_ca_spaces.index_create()
     env["crud_ca_spaces"] = crud_ca_spaces
@@ -346,7 +337,6 @@ async def prepare_env():
         crud_authorities=crud_ca_authorities,
         crud_spaces=crud_ca_spaces,
         crud_certificates=crud_ca_certificates,
-        crud_crls=crud_ca_crls,
     )
     env["ca_service"] = ca_service
 
@@ -438,7 +428,6 @@ async def lifespan_dev(app: FastAPI):
         crud_ca_authorities=env["crud_ca_authorities"],
         crud_ca_spaces=env["crud_ca_spaces"],
         crud_ca_certificates=env["crud_ca_certificates"],
-        crud_ca_crls=env["crud_ca_crls"],
         ca_service=env["ca_service"],
         crud_oauth=env["crud_oauth"],
         http=env["http"],
@@ -446,12 +435,14 @@ async def lifespan_dev(app: FastAPI):
         pyhiera=env["pyhiera"],
     )
     app.include_router(controller.router_dev)
-    
+
     # Start CA background tasks
     refresh_task = None
     if settings.ca.enableCrlRefresh:
-        refresh_task = asyncio.create_task(env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh")
-    
+        refresh_task = asyncio.create_task(
+            env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
+        )
+
     yield
     if refresh_task:
         refresh_task.cancel()
@@ -607,19 +598,11 @@ async def cli_init_ca(
         log=log,
     )
 
-    crud_ca_crls = CrudCACRLs(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_crls"],
-    )
-    await crud_ca_crls.index_create()
-
     crud_ca_authorities = CrudCAAuthorities(
         config=settings,
         log=log,
         coll=mongo_db["ca_authorities"],
         protector=nodes_data_protector,
-        crud_crls=crud_ca_crls,
     )
     await crud_ca_authorities.index_create()
 
@@ -627,7 +610,6 @@ async def cli_init_ca(
         config=settings,
         log=log,
         coll=mongo_db["ca_spaces"],
-        crud_authorities=crud_ca_authorities,
     )
     await crud_ca_spaces.index_create()
 
@@ -644,7 +626,6 @@ async def cli_init_ca(
         crud_authorities=crud_ca_authorities,
         crud_spaces=crud_ca_spaces,
         crud_certificates=crud_ca_certificates,
-        crud_crls=crud_ca_crls,
     )
 
     # 1. Ensure CA and Space
@@ -669,11 +650,12 @@ async def cli_init_ca(
     )
 
     # 4. Sign CSR
-    from pyppetdb.model.ca_certificates import CACertificateStatusPut
+    from pyppetdb.model.ca_certificates import CACertificatePut
+
     cert = await ca_service.update_certificate_status(
         space_id=space_id,
         cert_id=common_name,
-        data=CACertificateStatusPut(status="signed"),
+        data=CACertificatePut(status="signed"),
     )
 
     # 5. Get CA Cert
@@ -774,7 +756,6 @@ async def main_run():
         crud_ca_authorities=env["crud_ca_authorities"],
         crud_ca_spaces=env["crud_ca_spaces"],
         crud_ca_certificates=env["crud_ca_certificates"],
-        crud_ca_crls=env["crud_ca_crls"],
         ca_service=env["ca_service"],
         crud_oauth=env["crud_oauth"],
         http=env["http"],
@@ -795,7 +776,9 @@ async def main_run():
     worker_tasks = list()
     if settings.ca.enableCrlRefresh:
         worker_tasks.append(
-            asyncio.create_task(env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh")
+            asyncio.create_task(
+                env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
+            )
         )
 
     if not apps:
@@ -810,7 +793,11 @@ async def main_run():
             _app.should_exit = True
         stop_event.set()
 
-    all_tasks = apps_tasks + worker_tasks + [asyncio.create_task(stop_event.wait(), name="stop-event")]
+    all_tasks = (
+        apps_tasks
+        + worker_tasks
+        + [asyncio.create_task(stop_event.wait(), name="stop-event")]
+    )
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -843,12 +830,12 @@ async def main_run():
                 t.cancel()
                 with suppress(asyncio.CancelledError):
                     await t
-        
+
         # Close LDAP pool if it exists
         if "ldap_pool" in env and env["ldap_pool"]:
             log.info("Closing LDAP pool...")
             await env["ldap_pool"].close()
-        
+
         # Close HTTP client
         if "http" in env and env["http"]:
             log.info("Closing HTTP client...")
@@ -867,13 +854,31 @@ def _build_parser() -> argparse.ArgumentParser:
     create_admin.add_argument("--name", default="admin")
     create_admin.add_argument("--password")
 
-    init_ca = subparsers.add_parser("init-ca", help="initialize the default puppet ca and generate a server cert")
+    init_ca = subparsers.add_parser(
+        "init-ca", help="initialize the default puppet ca and generate a server cert"
+    )
     fqdn = socket.getfqdn()
-    init_ca.add_argument("--common-name", default=fqdn, help=f"The common name for the server certificate (default: {fqdn})")
+    init_ca.add_argument(
+        "--common-name",
+        default=fqdn,
+        help=f"The common name for the server certificate (default: {fqdn})",
+    )
     init_ca.add_argument("--alt-names", help="Optional comma-separated list of SANs")
-    init_ca.add_argument("--ca-path", default="/etc/puppetlabs/puppet/ssl/certs/ca.pem", help="Path to save the CA certificate (default: /etc/puppetlabs/puppet/ssl/certs/ca.pem)")
-    init_ca.add_argument("--cert-path", default=f"/etc/puppetlabs/puppet/ssl/certs/{fqdn}.pem", help=f"Path to save the server certificate (default: /etc/puppetlabs/puppet/ssl/certs/{fqdn}.pem)")
-    init_ca.add_argument("--key-path", default=f"/etc/puppetlabs/puppet/ssl/private_keys/{fqdn}.pem", help=f"Path to save the server private key (default: /etc/puppetlabs/puppet/ssl/private_keys/{fqdn}.pem)")
+    init_ca.add_argument(
+        "--ca-path",
+        default="/etc/puppetlabs/puppet/ssl/certs/ca.pem",
+        help="Path to save the CA certificate (default: /etc/puppetlabs/puppet/ssl/certs/ca.pem)",
+    )
+    init_ca.add_argument(
+        "--cert-path",
+        default=f"/etc/puppetlabs/puppet/ssl/certs/{fqdn}.pem",
+        help=f"Path to save the server certificate (default: /etc/puppetlabs/puppet/ssl/certs/{fqdn}.pem)",
+    )
+    init_ca.add_argument(
+        "--key-path",
+        default=f"/etc/puppetlabs/puppet/ssl/private_keys/{fqdn}.pem",
+        help=f"Path to save the server private key (default: /etc/puppetlabs/puppet/ssl/private_keys/{fqdn}.pem)",
+    )
 
     return parser
 

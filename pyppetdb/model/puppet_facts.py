@@ -7,18 +7,18 @@ import re
 
 
 class PuppetFacts(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     values: Dict[str, Any]
     timestamp: str
     expiration: str
 
-    @field_validator('values')
+    @field_validator("values")
     @classmethod
     def validate_fact_names(cls, v: Dict[str, Any]) -> Dict[str, Any]:
         """Validate that all fact names match the pattern ^[a-z][a-z0-9_]*$"""
-        pattern = re.compile(r'^[a-z][a-z0-9_]*$')
+        pattern = re.compile(r"^[a-z][a-z0-9_]*$")
         for key in v.keys():
             if not pattern.match(key):
                 raise ValueError(

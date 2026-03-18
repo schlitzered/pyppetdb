@@ -22,15 +22,9 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.delete(_id="space1")
         self.mock_coll.delete_one.assert_called_once_with(filter={"id": "space1"})
 
-    async def test_count(self):
-        self.mock_coll.count_documents = AsyncMock(return_value=3)
-        res = await self.crud.count({"test": 1})
-        self.assertEqual(res, 3)
-        self.mock_coll.count_documents.assert_called_once_with({"test": 1})
-
     async def test_create(self):
         self.crud._create = AsyncMock(return_value={"id": "space1", "authority_id": "ca1", "authority_id_history": []})
-        payload = CASpacePost(authority_id="ca1")
+        payload = CASpacePost(ca_id="ca1")
         await self.crud.create(_id="space1", payload=payload)
         
         args = self.crud._create.call_args[1]

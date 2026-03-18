@@ -26,7 +26,6 @@ from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
-from pyppetdb.crud.ca_crls import CrudCACRLs
 from pyppetdb.ca.service import CAService
 
 
@@ -55,7 +54,6 @@ class ControllerApi:
         crud_ca_authorities: CrudCAAuthorities,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_certificates: CrudCACertificates,
-        crud_ca_crls: CrudCACRLs,
         ca_service: CAService,
         http: httpx.AsyncClient,
         pyhiera,
@@ -87,7 +85,6 @@ class ControllerApi:
                 crud_ca_authorities=crud_ca_authorities,
                 crud_ca_spaces=crud_ca_spaces,
                 crud_ca_certificates=crud_ca_certificates,
-                crud_ca_crls=crud_ca_crls,
                 ca_service=ca_service,
                 http=http,
                 pyhiera=pyhiera,

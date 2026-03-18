@@ -6,7 +6,9 @@ from pydantic import BaseModel, create_model, constr
 
 
 class SchemaModelFactory:
-    def create(self, schema: dict[str, Any], name: str | None = None) -> type[BaseModel]:
+    def create(
+        self, schema: dict[str, Any], name: str | None = None
+    ) -> type[BaseModel]:
         model_name = name or schema.get("title", "DynamicModel")
         return self._schema_object_to_model(schema, model_name)
 

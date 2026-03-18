@@ -12,24 +12,32 @@ from pyppetdb.ca.utils import CAUtils
 from pyppetdb.model.ca_authorities import CAAuthorityPost
 from pyppetdb.model.ca_authorities import CAAuthorityGet
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
+from pyppetdb.model.ca_authorities import CACRL
 from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
 
-from pyppetdb.crud.ca_crls import CrudCACRLs
 from pyppetdb.errors import QueryParamValidationError
 
+
 class CrudCAAuthorities(CrudMongo):
-    def __init__(self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection, protector: NodesDataProtector, crud_crls: CrudCACRLs = None):
+    def __init__(
+        self,
+        config: Config,
+        log: logging.Logger,
+        coll: AsyncIOMotorCollection,
+        protector: NodesDataProtector,
+    ):
         super().__init__(config, log, coll)
         self._protector = protector
-        self._crud_crls = crud_crls
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def create(self, _id: str, payload: CAAuthorityPost, fields: list[str] = []) -> CAAuthorityGet:
+    async def create(
+        self, _id: str, payload: CAAuthorityPost, fields: list[str] = []
+    ) -> CAAuthorityGet:
         if payload.certificate and payload.private_key:
             # External upload
             internal = False
@@ -52,7 +60,7 @@ class CrudCAAuthorities(CrudMongo):
                 country=payload.country,
                 state=payload.state,
                 locality=payload.locality,
-                validity_days=payload.validity_days
+                validity_days=payload.validity_days,
             )
             # Chain is parent cert + parent chain
             chain = [parent_ca.certificate] + parent_ca.chain
@@ -68,13 +76,13 @@ class CrudCAAuthorities(CrudMongo):
                 country=payload.country,
                 state=payload.state,
                 locality=payload.locality,
-                validity_days=payload.validity_days
+                validity_days=payload.validity_days,
             )
             chain = []
-        
+
         info = CAUtils.get_cert_info(cert_pem)
         encrypted_key = self._protector.encrypt_string(key_pem.decode())
-        
+
         data = {
             "id": _id,
             "parent_id": payload.parent_id,
@@ -83,20 +91,24 @@ class CrudCAAuthorities(CrudMongo):
             "internal": internal,
             "chain": chain,
             "status": "active",
-            **info
+            **info,
         }
-        
-        result = await self._create(payload=data, fields=fields)
-        
-        # Initialize generation 0 CRL (containing revoked child CAs)
-        if internal and self._crud_crls:
-            await self._crud_crls.sync_crl(
-                ca_id=_id,
-                ca_cert_pem=cert_pem,
-                ca_key_pem=key_pem,
-                revoked_certs=[]
+
+        # Initialize initial CRL (empty, no revoked certs yet) for internal CAs
+        if internal:
+            crl_pem, next_update = CAUtils.generate_crl(
+                ca_cert_pem=cert_pem, ca_key_pem=key_pem, revoked_certs=[]
             )
-            
+            now = datetime.datetime.now(datetime.timezone.utc)
+            data["crl"] = {
+                "crl_pem": crl_pem.decode(),
+                "generation": 1,
+                "updated_at": now,
+                "next_update": next_update,
+                "locked_at": None,
+            }
+
+        result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
     async def get(self, _id: str, fields: list[str] = []) -> CAAuthorityGet:
@@ -117,25 +129,24 @@ class CrudCAAuthorities(CrudMongo):
     async def revoke(self, _id: str) -> CAAuthorityGet:
         updates = {
             "status": "revoked",
-            "revocation_date": datetime.datetime.now(datetime.timezone.utc)
+            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
         }
-        await self.coll.update_one(
-            {"id": _id},
-            {"$set": updates}
-        )
+        await self.coll.update_one({"id": _id}, {"$set": updates})
         return await self.get(_id)
 
     async def get_revoked(self, parent_id: str) -> list[dict]:
         cursor = self.coll.find(
             {"parent_id": parent_id, "status": "revoked"},
-            {"serial_number": 1, "revocation_date": 1}
+            {"serial_number": 1, "revocation_date": 1},
         )
         revoked = []
         async for ca in cursor:
-            revoked.append({
-                "serial_number": int(ca["serial_number"]),
-                "revocation_date": ca["revocation_date"]
-            })
+            revoked.append(
+                {
+                    "serial_number": int(ca["serial_number"]),
+                    "revocation_date": ca["revocation_date"],
+                }
+            )
         return revoked
 
     async def search(
@@ -171,3 +182,80 @@ class CrudCAAuthorities(CrudMongo):
             limit=limit,
         )
         return CAAuthorityGetMulti(**result)
+
+    async def sync_crl(
+        self,
+        ca_id: str,
+        ca_cert_pem: bytes,
+        ca_key_pem: bytes,
+        revoked_certs: List[dict],
+    ) -> CACRL:
+        """Generate and update CRL for a CA"""
+        crl_pem, next_update = CAUtils.generate_crl(
+            ca_cert_pem=ca_cert_pem,
+            ca_key_pem=ca_key_pem,
+            revoked_certs=revoked_certs,
+        )
+
+        while True:
+            # Get current CA document
+            ca_doc = await self.coll.find_one({"id": ca_id}, {"crl": 1})
+            if not ca_doc:
+                raise Exception(f"CA {ca_id} not found")
+
+            current_generation = ca_doc.get("crl", {}).get("generation", 0)
+            now = datetime.datetime.now(datetime.timezone.utc)
+
+            # Update with generation check to prevent race conditions
+            result = await self.coll.update_one(
+                {"id": ca_id, "crl.generation": current_generation},
+                {
+                    "$set": {
+                        "crl.crl_pem": crl_pem.decode(),
+                        "crl.updated_at": now,
+                        "crl.next_update": next_update,
+                        "crl.locked_at": None,
+                        "crl.generation": current_generation + 1,
+                    }
+                },
+            )
+            if result.modified_count > 0:
+                # Get updated CRL
+                updated = await self.coll.find_one({"id": ca_id}, {"crl": 1})
+                return CACRL(**updated["crl"]) if updated.get("crl") else None
+
+    async def lock_crl_acquire(
+        self,
+        ca_id: str,
+        lock_timeout_minutes: int = 10,
+    ) -> bool:
+        """Acquire lock for CRL update"""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
+
+        result = await self.coll.update_one(
+            {
+                "id": ca_id,
+                "$or": [
+                    {"crl.locked_at": None},
+                    {"crl.locked_at": {"$lt": timeout}},
+                ],
+            },
+            {"$set": {"crl.locked_at": now}},
+        )
+        return result.modified_count > 0
+
+    async def lock_crl_release(self, ca_id: str) -> None:
+        """Release lock for CRL update"""
+        await self.coll.update_one({"id": ca_id}, {"$set": {"crl.locked_at": None}})
+
+    async def find_expiring_crls(self, threshold_hours: int = 4) -> List[str]:
+        """Find CAs with expiring CRLs"""
+        threshold = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            hours=threshold_hours
+        )
+        cursor = self.coll.find(
+            {"crl.next_update": {"$lt": threshold}},
+            {"id": 1}
+        )
+        return [doc["id"] async for doc in cursor]

@@ -7,7 +7,7 @@ from pydantic import ConfigDict
 
 
 class PuppetNode(BaseModel):
-    model_config = ConfigDict(extra='forbid')
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     environment: str

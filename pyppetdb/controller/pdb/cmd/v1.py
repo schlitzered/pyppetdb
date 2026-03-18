@@ -247,11 +247,11 @@ class ControllerPdbCmdV1:
 
     async def _proxy_to_puppetdb(self, request: Request, body: bytes):
         headers = dict(request.headers)
-        headers.pop('content-encoding', None)
-        headers.pop('x-uncompressed-length', None)
-        headers.pop('host', None)
-        headers.pop('content-length', None)
-        headers.pop('transfer-encoding', None)
+        headers.pop("content-encoding", None)
+        headers.pop("x-uncompressed-length", None)
+        headers.pop("host", None)
+        headers.pop("content-length", None)
+        headers.pop("transfer-encoding", None)
 
         await self.http.post(
             url=f"{self.config.app.puppetdb.serverurl}/pdb/cmd/v1",

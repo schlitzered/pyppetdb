@@ -9,7 +9,6 @@ from pydantic import StrictStr
 
 from pyppetdb.model.common import MetaMulti
 
-
 filter_literal = Literal[
     "id",
     "description",

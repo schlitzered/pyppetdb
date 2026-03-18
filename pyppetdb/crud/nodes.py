@@ -246,7 +246,9 @@ class CrudNodes(CrudMongo):
         # Count outdated nodes (not disabled, report older than threshold)
         if outdated_threshold:
             # Parse ISO timestamp
-            threshold_dt = datetime.fromisoformat(outdated_threshold.replace('Z', '+00:00'))
+            threshold_dt = datetime.fromisoformat(
+                outdated_threshold.replace("Z", "+00:00")
+            )
         else:
             # Default to now - 2 hours
             threshold_dt = datetime.now() - timedelta(hours=2)

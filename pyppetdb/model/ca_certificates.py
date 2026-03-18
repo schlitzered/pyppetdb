@@ -13,6 +13,8 @@ CAStatus = Literal["requested", "signed", "revoked", "expired"]
 
 filter_literal = Literal[
     "id",
+    "ca_id",
+    "cn",
     "space_id",
     "status",
     "fingerprint",
@@ -30,33 +32,35 @@ filter_list = set(typing_get_args(filter_literal))
 
 sort_literal = Literal[
     "id",
+    "ca_id",
+    "cn",
     "status",
     "not_before",
     "not_after",
     "created",
 ]
 
-class CACertificatePost(BaseModel):
-    # This is essentially submitting a CSR
-    csr: str
 
 class CACertificateGet(BaseModel):
-    id: str  # certname/common_name
-    space_id: str
-    status: CAStatus
+    id: Optional[str] = None
+    ca_id: Optional[str] = None
+    cn: Optional[str] = None
+    space_id: Optional[str] = None
+    status: Optional[CAStatus] = None
     fingerprint: Optional[Fingerprints] = None
     certificate: Optional[str] = None
     csr: Optional[str] = None
     not_before: Optional[datetime] = None
     not_after: Optional[datetime] = None
-    serial_number: Optional[str] = None
     created: Optional[datetime] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
+
 
 class CACertificateGetMulti(BaseModel):
     result: List[CACertificateGet]
     meta: MetaMulti
 
-class CACertificateStatusPut(BaseModel):
+
+class CACertificatePut(BaseModel):
     status: Literal["signed", "revoked"]

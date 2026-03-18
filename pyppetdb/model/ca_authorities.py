@@ -24,6 +24,7 @@ filter_literal = Literal[
     "internal",
     "chain",
     "status",
+    "crl",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -35,6 +36,7 @@ sort_literal = Literal[
     "not_before",
     "not_after",
 ]
+
 
 class CAAuthorityPost(BaseModel):
     parent_id: Optional[str] = None
@@ -50,25 +52,38 @@ class CAAuthorityPost(BaseModel):
     private_key: Optional[str] = None
     external_chain: Optional[List[str]] = None
 
+
+class CACRL(BaseModel):
+    """CRL sub-object for CA authorities"""
+
+    crl_pem: str
+    generation: int
+    updated_at: datetime
+    next_update: datetime
+    locked_at: Optional[datetime] = None
+
+
 class CAAuthorityGet(BaseModel):
-    id: str
+    id: Optional[str] = None
     parent_id: Optional[str] = None
-    common_name: str
-    issuer: str
-    serial_number: str
-    not_before: datetime
-    not_after: datetime
-    fingerprint: Fingerprints
-    certificate: str
-    internal: bool
-    chain: List[str]
-    status: CAStatus
+    common_name: Optional[str] = None
+    issuer: Optional[str] = None
+    serial_number: Optional[str] = None
+    not_before: Optional[datetime] = None
+    not_after: Optional[datetime] = None
+    fingerprint: Optional[Fingerprints] = None
+    certificate: Optional[str] = None
+    internal: Optional[bool] = None
+    chain: Optional[List[str]] = None
+    status: Optional[CAStatus] = None
     revocation_date: Optional[datetime] = None
-    # Private key is NEVER returned in GET
+    crl: Optional[CACRL] = None
+
 
 class CAAuthorityGetMulti(BaseModel):
     result: List[CAAuthorityGet]
     meta: MetaMulti
 
-class CAAuthorityStatusPut(BaseModel):
+
+class CAAuthorityPut(BaseModel):
     status: Literal["revoked"]
