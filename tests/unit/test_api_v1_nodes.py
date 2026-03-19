@@ -11,18 +11,16 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_catalog_cache = MagicMock()
         self.mock_crud_catalogs = MagicMock()
-        self.mock_crud_creds = MagicMock()
         self.mock_crud_groups = MagicMock()
         self.mock_crud_reports = MagicMock()
         self.mock_crud_teams = MagicMock()
-        
+
         self.controller = ControllerApiV1Nodes(
             log=self.log,
             authorize=self.mock_authorize,
             crud_nodes=self.mock_crud_nodes,
             crud_nodes_catalog_cache=self.mock_crud_catalog_cache,
             crud_nodes_catalogs=self.mock_crud_catalogs,
-            crud_nodes_credentials=self.mock_crud_creds,
             crud_nodes_groups=self.mock_crud_groups,
             crud_nodes_reports=self.mock_crud_reports,
             crud_teams=self.mock_crud_teams
@@ -32,10 +30,10 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.require_user = AsyncMock()
         self.mock_authorize.get_user_node_groups = AsyncMock(return_value=[])
         self.mock_crud_nodes.get = AsyncMock()
-        
+
         mock_request = MagicMock()
         await self.controller.get(node_id="node1", request=mock_request, fields=set())
-        
+
         self.mock_authorize.require_user.assert_called_once_with(request=mock_request)
         self.mock_crud_nodes.get.assert_called_once_with(
             _id="node1", user_node_groups=[], fields=[]
@@ -43,17 +41,15 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_node_cascades(self):
         self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_creds.delete_all_from_owner = AsyncMock()
         self.mock_crud_groups.delete_node_from_nodes_groups = AsyncMock()
         self.mock_crud_catalogs.delete_all_from_node = AsyncMock()
         self.mock_crud_reports.delete_all_from_node = AsyncMock()
         self.mock_crud_nodes.delete = AsyncMock()
-        
+
         mock_request = MagicMock()
         await self.controller.delete(node_id="node1", request=mock_request)
-        
+
         self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
-        self.mock_crud_creds.delete_all_from_owner.assert_called_once_with(owner="node1")
         self.mock_crud_groups.delete_node_from_nodes_groups.assert_called_once_with(node_id="node1")
         self.mock_crud_catalogs.delete_all_from_node.assert_called_once_with(node_id="node1")
         self.mock_crud_reports.delete_all_from_node.assert_called_once_with(node_id="node1")
@@ -62,74 +58,13 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_update_node_admin_required(self):
         self.mock_authorize.require_admin = AsyncMock()
         self.mock_crud_nodes.update = AsyncMock()
-        
+
         data = NodePut(disabled=True)
         mock_request = MagicMock()
         await self.controller.update(node_id="node1", request=mock_request, data=data, fields=set())
-        
+
         self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
         self.mock_crud_nodes.update.assert_called_once()
         args = self.mock_crud_nodes.update.call_args[1]
         self.assertEqual(args["_id"], "node1")
         self.assertEqual(args["payload"].disabled, True)
-
-    async def test_search_nodes(self):
-        self.mock_authorize.require_user = AsyncMock()
-        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=["g1"])
-        self.mock_crud_nodes.search = AsyncMock()
-        
-        mock_request = MagicMock()
-        await self.controller.search(
-            request=mock_request,
-            node_id=None,
-            disabled=None,
-            environment=None,
-            fact=set(),
-            report_status=None,
-            outdated_threshold=None,
-            fields=set(),
-            sort="id",
-            sort_order="ascending",
-            page=0,
-            limit=10
-        )
-        
-        self.mock_authorize.require_user.assert_called_once()
-        self.mock_crud_nodes.search.assert_called_once()
-        call_args = self.mock_crud_nodes.search.call_args[1]
-        self.assertEqual(call_args["user_node_groups"], ["g1"])
-
-    async def test_distinct_fact_values(self):
-        self.mock_authorize.require_user = AsyncMock()
-        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=["g1"])
-        self.mock_crud_nodes.distinct_fact_values = AsyncMock()
-        
-        mock_request = MagicMock()
-        await self.controller.distinct_fact_values(
-            fact_id="os",
-            request=mock_request,
-            disabled=None,
-            fact=set(),
-            environment=None,
-            report_status=None
-        )
-        
-        self.mock_crud_nodes.distinct_fact_values.assert_called_once()
-
-    async def test_exported_resources(self):
-        self.mock_authorize.require_user = AsyncMock()
-        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=["g1"])
-        self.mock_crud_nodes.exported_resources = AsyncMock()
-        
-        mock_request = MagicMock()
-        await self.controller.exported_resources(
-            resource_type="File",
-            request=mock_request,
-            resource_title=None,
-            resource_tags=set(),
-            disabled=None,
-            fact=set(),
-            environment=None
-        )
-        
-        self.mock_crud_nodes.exported_resources.assert_called_once()

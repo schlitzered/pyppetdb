@@ -4,7 +4,6 @@ import logging
 from fastapi import Request
 import httpx
 
-from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 
@@ -13,13 +12,11 @@ class ControllerPuppetV3Base:
 
     def __init__(
         self,
-        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
         authorize_client_cert: AuthorizeClientCert,
     ):
-        self._authorize_puppet = authorize_puppet
         self._config = config
         self._http = http
         self._log = log
@@ -29,10 +26,6 @@ class ControllerPuppetV3Base:
     @property
     def authorize_client_cert(self) -> AuthorizeClientCert:
         return self._authorize_client_cert
-
-    @property
-    def authorize(self) -> AuthorizePuppet:
-        return self._authorize_puppet
 
     @property
     def config(self):

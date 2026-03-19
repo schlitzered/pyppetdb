@@ -9,7 +9,6 @@ from pyppetdb.controller.puppet.v3.catalog import ControllerPuppetV3Catalog
 class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
-        self.mock_auth = MagicMock()
         self.mock_config = MagicMock()
         self.mock_http = AsyncMock(spec=httpx.AsyncClient)
         self.mock_cache = MagicMock()
@@ -22,7 +21,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.app.puppet.catalogCacheFacts = ["osfamily"]
         
         self.controller = ControllerPuppetV3Catalog(
-            self.mock_auth, self.log, self.mock_config, self.mock_http, self.mock_auth_cert, self.mock_cache
+            self.log, self.mock_config, self.mock_http, self.mock_auth_cert, self.mock_cache
         )
 
     async def test_post_cached(self):

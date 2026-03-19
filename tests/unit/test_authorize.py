@@ -1,24 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
-from pyppetdb.authorize import AuthorizePuppet, AuthorizePyppetDB
+from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.errors import AdminError, SessionCredentialError
 from pyppetdb.model.users import UserGet
 
 class TestAuthorizeUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
-
-    async def test_authorize_puppet_get_node(self):
-        mock_config = MagicMock()
-        mock_crud_nodes = MagicMock()
-        mock_crud_creds = MagicMock()
-        mock_crud_creds.check_credential = AsyncMock(return_value="node1")
-        
-        auth = AuthorizePuppet(self.log, mock_config, mock_crud_nodes, mock_crud_creds)
-        mock_request = MagicMock()
-        node = await auth.get_node(mock_request)
-        self.assertEqual(node, "node1")
 
     async def test_authorize_pyppetdb_get_user_session(self):
         mock_groups = MagicMock()

@@ -4,7 +4,6 @@ import typing
 from fastapi import APIRouter
 import httpx
 
-from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3.catalog import ControllerPuppetV3Catalog
@@ -22,7 +21,6 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 class ControllerPuppetV3:
     def __init__(
         self,
-        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
@@ -36,7 +34,6 @@ class ControllerPuppetV3:
         # Include specific endpoints first (they take precedence)
         self.router.include_router(
             ControllerPuppetV3Catalog(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -48,7 +45,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3FileBucketFile(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -59,7 +55,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3Facts(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -70,7 +65,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3Node(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -81,7 +75,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3FileContent(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -92,7 +85,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3FileMetadata(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,
@@ -103,7 +95,6 @@ class ControllerPuppetV3:
 
         self.router.include_router(
             ControllerPuppetV3Report(
-                authorize_puppet=authorize_puppet,
                 log=log,
                 config=config,
                 http=http,

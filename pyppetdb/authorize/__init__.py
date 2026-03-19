@@ -3,9 +3,6 @@ import typing
 
 from fastapi import Request
 
-from pyppetdb.config import ConfigAppPuppet
-
-from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
@@ -17,45 +14,7 @@ from pyppetdb.errors import CredentialError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import SessionCredentialError
 
-from pyppetdb.model.nodes import NodeGet
 from pyppetdb.model.users import UserGet
-
-
-class AuthorizePuppet:
-    def __init__(
-        self,
-        log: logging.Logger,
-        config: ConfigAppPuppet,
-        crud_nodes: CrudNodes,
-        crud_nodes_credentials: CrudCredentials,
-    ):
-        self._config = config
-        self._crud_nodes = crud_nodes
-        self._crud_nodes_credentials = crud_nodes_credentials
-        self._log = log
-
-    @property
-    def config(self) -> ConfigAppPuppet:
-        return self._config
-
-    @property
-    def crud_nodes(self) -> CrudNodes:
-        return self._crud_nodes
-
-    @property
-    def crud_nodes_credentials(self):
-        return self._crud_nodes_credentials
-
-    @property
-    def log(self):
-        return self._log
-
-    async def get_node(self, request: Request) -> str | NodeGet:
-        return await self.crud_nodes_credentials.check_credential(request=request)
-
-    async def require_node(self, request) -> NodeGet:
-        user = await self.get_node(request)
-        return user
 
 
 class AuthorizeClientCert:
@@ -92,7 +51,9 @@ class AuthorizeClientCert:
     async def require_cn_trusted(self, request: Request) -> str:
         cn = self.get_cn_from_request(request)
         if cn not in self._trusted_cns:
-            raise ClientCertError(detail=f"CN {cn} is not trusted")
+            raise ClientCertError(
+                detail=f"CN {cn} is not in trustedCns {self._trusted_cns}"
+            )
         return cn
 
 

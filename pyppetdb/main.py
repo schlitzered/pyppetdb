@@ -28,7 +28,6 @@ import pyppetdb.controller.oauth
 import pyppetdb.ca.utils
 from pyppetdb.ca.protocol import ClientCertProtocol
 
-from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizePyppetDB
 
 from pyppetdb.config import Config
@@ -241,14 +240,6 @@ async def prepare_env():
     await crud_nodes.index_create()
     env["crud_nodes"] = crud_nodes
 
-    crud_nodes_credentials = CrudCredentials(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_credentials"],
-    )
-    await crud_nodes_credentials.index_create()
-    env["crud_nodes_credentials"] = crud_nodes_credentials
-
     crud_nodes_secrets_redactor = CrudNodesSecretsRedactor(
         config=settings,
         log=log,
@@ -376,14 +367,6 @@ async def prepare_env():
     )
     env["crud_hiera_key_models_static"] = crud_hiera_key_models_static
 
-    authorize_puppet = AuthorizePuppet(
-        log=log,
-        config=settings.app.puppet,
-        crud_nodes=crud_nodes,
-        crud_nodes_credentials=crud_nodes_credentials,
-    )
-    env["authorize_puppet"] = authorize_puppet
-
     authorize_pyppetdb = AuthorizePyppetDB(
         log=log,
         crud_node_groups=crud_nodes_groups,
@@ -410,7 +393,6 @@ async def lifespan_dev(app: FastAPI):
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
-        authorize_puppet=env["authorize_puppet"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -421,7 +403,6 @@ async def lifespan_dev(app: FastAPI):
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalog_cache=env["crud_nodes_catalog_cache"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
-        crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
@@ -745,7 +726,6 @@ async def main_run():
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
-        authorize_puppet=env["authorize_puppet"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -756,7 +736,6 @@ async def main_run():
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalog_cache=env["crud_nodes_catalog_cache"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
-        crud_nodes_credentials=env["crud_nodes_credentials"],
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],

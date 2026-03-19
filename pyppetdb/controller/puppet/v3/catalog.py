@@ -8,7 +8,6 @@ from fastapi import HTTPException
 from fastapi import Request
 import httpx
 
-from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
@@ -19,7 +18,6 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
 
     def __init__(
         self,
-        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
@@ -27,7 +25,6 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         super().__init__(
-            authorize_puppet=authorize_puppet,
             config=config,
             log=log,
             http=http,

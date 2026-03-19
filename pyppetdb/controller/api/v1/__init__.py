@@ -18,7 +18,6 @@ from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLeve
 from pyppetdb.controller.api.v1.hiera_lookup import ControllerApiV1HieraLookup
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.controller.api.v1.nodes_catalogs import ControllerApiV1NodesCatalogs
-from pyppetdb.controller.api.v1.nodes_credentials import ControllerApiV1NodesCredentials
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
 
 from pyppetdb.controller.api.v1.nodes_reports import ControllerApiV1NodesReports
@@ -75,7 +74,6 @@ class ControllerApiV1:
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
-        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
@@ -178,20 +176,9 @@ class ControllerApiV1:
                 crud_nodes=crud_nodes,
                 crud_nodes_catalog_cache=crud_nodes_catalog_cache,
                 crud_nodes_catalogs=crud_nodes_catalogs,
-                crud_nodes_credentials=crud_nodes_credentials,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
                 crud_teams=crud_teams,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1NodesCredentials(
-                log=log,
-                authorize=authorize,
-                crud_nodes=crud_nodes,
-                crud_nodes_credentials=crud_nodes_credentials,
             ).router,
             responses={404: {"description": "Not found"}},
         )

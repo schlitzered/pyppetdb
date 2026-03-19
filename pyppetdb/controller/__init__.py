@@ -3,7 +3,6 @@ import logging
 import httpx
 from fastapi import APIRouter
 
-from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.authorize import AuthorizeClientCert
 
@@ -43,7 +42,6 @@ class Controller:
         self,
         log: logging.Logger,
         authorize_pyppetdb: AuthorizePyppetDB,
-        authorize_puppet: AuthorizePuppet,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -54,7 +52,6 @@ class Controller:
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
-        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
@@ -88,7 +85,6 @@ class Controller:
             crud_nodes=crud_nodes,
             crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             crud_nodes_catalogs=crud_nodes_catalogs,
-            crud_nodes_credentials=crud_nodes_credentials,
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,
             crud_nodes_secrets_redactor=crud_nodes_secrets_redactor,
@@ -131,7 +127,6 @@ class Controller:
         ).router
 
         router_puppet = ControllerPuppet(
-            authorize_puppet=authorize_puppet,
             log=log,
             config=config,
             http=http,
