@@ -62,6 +62,11 @@ class CredentialError(HTTPException):
         )
 
 
+class ClientCertError(HTTPException):
+    def __init__(self, detail: str = "Client certificate required"):
+        super(ClientCertError, self).__init__(status_code=403, detail=detail)
+
+
 class SessionCredentialError(HTTPException):
     def __init__(self):
         super(SessionCredentialError, self).__init__(

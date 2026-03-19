@@ -8,6 +8,7 @@ from fastapi import Response
 import httpx
 
 from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
@@ -20,12 +21,14 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         super().__init__(
             authorize_puppet=authorize_puppet,
             config=config,
             log=log,
             http=http,
+            authorize_client_cert=authorize_client_cert,
         )
         self._router = APIRouter(
             prefix="/file_bucket_file",
@@ -75,6 +78,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         raise HTTPException(
             status_code=404,
             detail=f"Not Found: Could not find file_bucket_file md5/{md5}",
@@ -86,6 +90,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         md5: str,
         original_path: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         raise HTTPException(
             status_code=404,
             detail=f"Not Found: Could not find file_bucket_file md5/{md5}/{original_path}",
@@ -96,6 +101,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         raise HTTPException(
             status_code=404,
             detail=f"Not Found: Could not find file_bucket_file md5/{md5}",
@@ -107,6 +113,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         md5: str,
         original_path: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         raise HTTPException(
             status_code=404,
             detail=f"Not Found: Could not find file_bucket_file md5/{md5}/{original_path}",
@@ -117,38 +124,8 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         request: Request,
         md5: str,
     ):
-        if not self.config.app.puppet.serverurl:
-            raise HTTPException(
-                status_code=502, detail="Puppet server URL not configured"
-            )
-
-        target_url = (
-            f"{self.config.app.puppet.serverurl}/puppet/v3/file_bucket_file/md5/{md5}"
-        )
-
-        body = await request.body()
-
-        headers = dict(request.headers)
-        headers.pop("host", None)
-
-        try:
-            response = await self._http.put(
-                url=target_url,
-                params=request.query_params,
-                headers=headers,
-                content=body,
-            )
-
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Error communicating with puppet server: {str(e)}",
-            )
+        await self.authorize_client_cert.require_cn(request)
+        raise HTTPException(status_code=400, detail=f"Not Implemented")
 
     async def put_with_path(
         self,
@@ -156,30 +133,5 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         md5: str,
         original_path: str,
     ):
-        if not self.config.app.puppet.serverurl:
-            raise HTTPException(
-                status_code=502, detail="Puppet server URL not configured"
-            )
-
-        target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/file_bucket_file/md5/{md5}/{original_path}"
-
-        body = await request.body()
-
-        try:
-            response = await self._http.put(
-                url=target_url,
-                params=request.query_params,
-                headers=self._headers(request),
-                content=body,
-            )
-
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-            )
-        except httpx.RequestError as e:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Error communicating with puppet server: {str(e)}",
-            )
+        await self.authorize_client_cert.require_cn(request)
+        raise HTTPException(status_code=400, detail=f"Not Implemented")

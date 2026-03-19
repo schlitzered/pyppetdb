@@ -5,6 +5,7 @@ from fastapi import APIRouter
 import httpx
 
 from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3.catalog import ControllerPuppetV3Catalog
 from pyppetdb.controller.puppet.v3.facts import ControllerPuppetV3Facts
@@ -25,9 +26,11 @@ class ControllerPuppetV3:
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
         crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         self._log = log
+        self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter()
 
         # Include specific endpoints first (they take precedence)
@@ -37,6 +40,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
                 crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             ).router,
             responses={404: {"description": "Not found"}},
@@ -48,6 +52,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -58,6 +63,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -68,6 +74,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -78,6 +85,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -88,6 +96,7 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -98,9 +107,14 @@ class ControllerPuppetV3:
                 log=log,
                 config=config,
                 http=http,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
+
+    @property
+    def authorize_client_cert(self):
+        return self._authorize_client_cert
 
     @property
     def router(self):

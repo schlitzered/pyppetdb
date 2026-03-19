@@ -7,6 +7,7 @@ from fastapi import Request
 import httpx
 
 from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
@@ -18,12 +19,14 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         super().__init__(
             authorize_puppet=authorize_puppet,
             config=config,
             log=log,
             http=http,
+            authorize_client_cert=authorize_client_cert,
         )
         self._router = APIRouter(
             tags=["puppet_v3_file_metadata"],
@@ -56,6 +59,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         mount_point: str,
         file_path: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"
@@ -87,6 +91,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         mount_point: str,
         file_path: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"
@@ -117,6 +122,7 @@ class ControllerPuppetV3FileMetadata(ControllerPuppetV3Base):
         request: Request,
         mount_point: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         self.log.info(f"GET file_metadatas for {mount_point}")
         if not self.config.app.puppet.serverurl:
             raise HTTPException(

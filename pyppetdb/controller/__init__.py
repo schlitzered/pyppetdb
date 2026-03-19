@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.config import Config
 
@@ -109,6 +110,16 @@ class Controller:
             http=http,
         ).router
 
+        authorize_client_cert_puppet = AuthorizeClientCert(
+            log=log,
+            trusted_cns=config.app.puppet.trustedCns,
+        )
+
+        authorize_client_cert_pdb = AuthorizeClientCert(
+            log=log,
+            trusted_cns=config.app.puppetdb.trustedCns,
+        )
+
         router_pdb = ControllerPdb(
             log=log,
             config=config,
@@ -116,6 +127,7 @@ class Controller:
             crud_nodes_catalogs=crud_nodes_catalogs,
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,
+            authorize_client_cert=authorize_client_cert_pdb,
         ).router
 
         router_puppet = ControllerPuppet(
@@ -124,6 +136,7 @@ class Controller:
             config=config,
             http=http,
             crud_nodes_catalog_cache=crud_nodes_catalog_cache,
+            authorize_client_cert=authorize_client_cert_puppet,
         ).router
 
         router_puppet_ca = ControllerPuppetCa(
@@ -133,6 +146,7 @@ class Controller:
             crud_spaces=crud_ca_spaces,
             crud_certificates=crud_ca_certificates,
             ca_service=ca_service,
+            authorize_client_cert=authorize_client_cert_puppet,
         ).router
 
         self.router_dev.include_router(

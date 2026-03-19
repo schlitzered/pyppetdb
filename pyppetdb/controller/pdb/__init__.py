@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
-
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.cmd import ControllerPdbCmd
 from pyppetdb.controller.pdb.query import ControllerPdbQuery
 
@@ -22,6 +22,7 @@ class ControllerPdb:
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
         self._router = APIRouter()
@@ -34,6 +35,7 @@ class ControllerPdb:
                 crud_nodes_catalogs=crud_nodes_catalogs,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             prefix="/cmd",
             responses={404: {"description": "Not found"}},
@@ -43,6 +45,7 @@ class ControllerPdb:
             ControllerPdbQuery(
                 log=log,
                 config=config,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             prefix="/query",
             responses={404: {"description": "Not found"}},

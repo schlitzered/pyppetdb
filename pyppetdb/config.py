@@ -52,10 +52,18 @@ class ConfigAppPuppet(BaseModel):
     serverurl: typing.Optional[str] = None
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None
+    trustedCns: typing.Optional[list[str]] = []
 
     @field_validator("catalogCacheFacts", mode="before")
     @classmethod
     def parse_catalog_cache_facts(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+    @field_validator("trustedCns", mode="before")
+    @classmethod
+    def parse_trusted_cns(cls, v):
         if isinstance(v, str):
             return json.loads(v)
         return v
@@ -67,6 +75,14 @@ class ConfigAppPuppetdb(BaseModel):
     host: str = "127.0.0.1"
     serverurl: typing.Optional[str] = None
     ssl: typing.Optional[ConfigAppSSL] = None
+    trustedCns: typing.Optional[list[str]] = []
+
+    @field_validator("trustedCns", mode="before")
+    @classmethod
+    def parse_trusted_cns(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
 
 class ConfigApp(BaseModel):

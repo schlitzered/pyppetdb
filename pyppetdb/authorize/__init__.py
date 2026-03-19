@@ -12,6 +12,7 @@ from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.teams import CrudTeams
 
 from pyppetdb.errors import AdminError
+from pyppetdb.errors import ClientCertError
 from pyppetdb.errors import CredentialError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import SessionCredentialError
@@ -55,6 +56,43 @@ class AuthorizePuppet:
     async def require_node(self, request) -> NodeGet:
         user = await self.get_node(request)
         return user
+
+
+class AuthorizeClientCert:
+    def __init__(
+        self,
+        log: logging.Logger,
+        trusted_cns: list[str],
+    ):
+        self._log = log
+        self._trusted_cns = trusted_cns
+
+    def get_cn_from_request(self, request: Request) -> str | None:
+        cert_dict = request.scope.get("client_cert_dict")
+        if not cert_dict:
+            return None
+        subject = {
+            key: value for rdn in cert_dict.get("subject", []) for key, value in rdn
+        }
+        cn = subject.get("commonName")
+        if not cn:
+            raise ClientCertError(detail="No client certificate provided")
+        return cn
+
+    async def require_cn(self, request: Request):
+        return self.get_cn_from_request(request)
+
+    async def require_cn_match(self, request: Request, match: str):
+        cn = self.get_cn_from_request(request)
+        if cn != match:
+            raise ClientCertError(detail=f"CN {cn} does not match {match}")
+        return cn
+
+    async def require_cn_trusted(self, request: Request) -> str:
+        cn = self.get_cn_from_request(request)
+        if cn not in self._trusted_cns:
+            raise ClientCertError(detail=f"CN {cn} is not trusted")
+        return cn
 
 
 class AuthorizePyppetDB:

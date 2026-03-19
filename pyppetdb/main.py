@@ -5,6 +5,7 @@ import logging
 import secrets
 import signal
 import socket
+import ssl
 import string
 import sys
 import time
@@ -25,6 +26,7 @@ import pymongo
 import pyppetdb.controller
 import pyppetdb.controller.oauth
 import pyppetdb.ca.utils
+from pyppetdb.ca.protocol import ClientCertProtocol
 
 from pyppetdb.authorize import AuthorizePuppet
 from pyppetdb.authorize import AuthorizePyppetDB
@@ -730,6 +732,8 @@ def main_run_get_app(
         ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
         ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
         ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
+        ssl_cert_reqs=ssl.CERT_OPTIONAL if _settings.ssl else ssl.CERT_NONE,
+        http=ClientCertProtocol if _settings.ssl else "auto",
     )
     config.install_signal_handlers = False
     return uvicorn.Server(config)

@@ -9,6 +9,7 @@ from fastapi import Request
 import httpx
 
 from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -22,6 +23,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
         crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         super().__init__(
@@ -29,6 +31,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             config=config,
             log=log,
             http=http,
+            authorize_client_cert=authorize_client_cert,
         )
         self._crud_nodes_catalog_cache = crud_nodes_catalog_cache
         self._router = APIRouter(
@@ -110,6 +113,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         request: Request,
         nodename: str,
     ):
+        await self.authorize_client_cert.require_cn_match(request, nodename)
         if self.config.app.puppet.catalogCache:
             cached_catalog = await self.crud_nodes_catalog_cache.get_catalog(
                 node_id=nodename

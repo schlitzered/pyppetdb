@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.puppet_ca.v1.ca import ControllerPuppetCaV1CA
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
@@ -18,6 +19,7 @@ class ControllerPuppetCaV1:
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
         ca_service: CAService,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         self._router = APIRouter()
         self._log = log
@@ -30,6 +32,7 @@ class ControllerPuppetCaV1:
                 crud_spaces=crud_spaces,
                 crud_certificates=crud_certificates,
                 ca_service=ca_service,
+                authorize_client_cert=authorize_client_cert,
             ).router,
             responses={404: {"description": "Not found"}},
         )
