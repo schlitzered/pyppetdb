@@ -46,4 +46,6 @@ uvloop==0.21.0
 watchfiles==1.0.3
 websockets==14.1
 pyhiera
-pyahocorasick==2.1.0orjson==3.11.7
+pyahocorasick==2.1.0
+orjson==3.11.7
+
