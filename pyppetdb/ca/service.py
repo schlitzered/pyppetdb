@@ -34,7 +34,9 @@ class CAService:
         self._crud_certificates = crud_certificates
 
     async def refresh_crl(self, ca_id: str) -> None:
-        ca = await self._crud_authorities.get(ca_id)
+        ca = await self._crud_authorities.get(
+            ca_id, fields=["internal", "certificate"]
+        )
         if not ca.internal:
             return
 
@@ -83,7 +85,9 @@ class CAService:
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost
     ) -> CAAuthorityGet:
-        return await self._crud_authorities.create(_id=_id, payload=payload)
+        return await self._crud_authorities.create(
+            _id=_id, payload=payload, fields=["id"]
+        )
 
     async def delete_authority(self, ca_id: str) -> None:
         # 1. Check if used by any space (current or history)
@@ -115,9 +119,12 @@ class CAService:
         await self._crud_spaces.remove_ca_from_history(ca_id=ca_id)
 
     async def update_certificate_status(
-        self, space_id: str, cn: str, data: CACertificatePut
+        self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
     ) -> CACertificateGet:
         """Update certificate status by space_id and CN (common name)."""
+        if fields is None:
+            fields = ["id", "status", "ca_id"]
+
         if data.status == "signed":
             space = await self._crud_spaces.get(space_id, fields=["ca_id"])
             ca_cert = await self._crud_authorities.get(
@@ -129,6 +136,7 @@ class CAService:
                 cn=cn,
                 ca_cert_pem=ca_cert.certificate.encode(),
                 ca_key_pem=ca_key,
+                fields=fields,
             )
         elif data.status == "revoked":
             # Find the signed cert by space_id and CN, then revoke by serial
@@ -139,26 +147,33 @@ class CAService:
                 raise QueryParamValidationError(
                     msg=f"No signed certificate found for CN '{cn}' in space '{space_id}'"
                 )
-            cert = await self._crud_certificates.revoke(serial=cert_doc["id"])
+            cert = await self._crud_certificates.revoke(
+                serial=cert_doc["id"], fields=fields
+            )
             space = await self._crud_spaces.get(space_id, fields=["ca_id"])
             await self.refresh_crl(space.ca_id)
             return cert
 
     async def update_certificate_status_by_ca(
-        self, ca_id: str, serial: str, data: CACertificatePut
+        self, ca_id: str, serial: str, data: CACertificatePut, fields: list = None
     ) -> CACertificateGet:
         """Update certificate status by CA ID and serial number."""
+        if fields is None:
+            fields = ["id", "status", "ca_id"]
+
         if data.status == "signed":
             raise QueryParamValidationError(
                 msg="Cannot sign a certificate by serial number. Use space_id and CN instead."
             )
         elif data.status == "revoked":
-            cert = await self._crud_certificates.revoke(serial=serial)
+            cert = await self._crud_certificates.revoke(
+                serial=serial, fields=fields
+            )
             await self.refresh_crl(ca_id)
             return cert
 
     async def revoke_authority(self, ca_id: str) -> CAAuthorityGet:
-        ca = await self._crud_authorities.get(ca_id)
+        ca = await self._crud_authorities.get(ca_id, fields=["parent_id"])
         revoked_ca = await self._crud_authorities.revoke(_id=ca_id)
         if ca.parent_id:
             await self.refresh_crl(ca.parent_id)

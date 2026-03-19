@@ -36,7 +36,7 @@ class CrudCAAuthorities(CrudMongo):
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
-        self, _id: str, payload: CAAuthorityPost, fields: list[str] = []
+        self, _id: str, payload: CAAuthorityPost, fields: list
     ) -> CAAuthorityGet:
         if payload.certificate and payload.private_key:
             # External upload
@@ -47,7 +47,9 @@ class CrudCAAuthorities(CrudMongo):
         elif payload.parent_id:
             # Signed by parent CA
             internal = True
-            parent_ca = await self.get(payload.parent_id)
+            parent_ca = await self.get(
+                payload.parent_id, fields=["certificate", "chain"]
+            )
             parent_key = await self.get_private_key(payload.parent_id)
             if not payload.common_name:
                 payload.common_name = f"PyppetDB CA {_id}"
@@ -111,7 +113,7 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
-    async def get(self, _id: str, fields: list[str] = []) -> CAAuthorityGet:
+    async def get(self, _id: str, fields: list) -> CAAuthorityGet:
         result = await self._get(query={"id": _id}, fields=fields)
         return CAAuthorityGet(**result)
 
@@ -132,7 +134,7 @@ class CrudCAAuthorities(CrudMongo):
             "revocation_date": datetime.datetime.now(datetime.timezone.utc),
         }
         await self.coll.update_one({"id": _id}, {"$set": updates})
-        return await self.get(_id)
+        return await self.get(_id, fields=["status", "revocation_date"])
 
     async def get_revoked(self, parent_id: str) -> list[dict]:
         cursor = self.coll.find(

@@ -103,7 +103,7 @@ class ControllerApiV1CASpaces:
     ):
         await self.authorize.require_admin(request=request)
         if data.ca_id:
-            await self.crud_ca_authorities.get(data.ca_id)
+            await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
         return await self.crud_ca_spaces.update(
             _id=space_id, payload=data, fields=list(fields)
         )

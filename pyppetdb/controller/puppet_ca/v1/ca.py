@@ -92,12 +92,18 @@ class ControllerPuppetCaV1CA:
         # Get CA ID for puppet-ca space
         space = await self._crud_spaces.get("puppet-ca", fields=["ca_id"])
 
+        cert_doc = await self._crud_certificates.coll.find_one(
+            {"space_id": "puppet-ca", "cn": nodename, "status": "signed"}
+        )
+
+        if cert_doc:
+            return Response(content="CSR submitted", media_type="text/plain")
+
         await self._crud_certificates.submit_csr(
             space_id="puppet-ca",
             csr_pem=csr_pem,
             ca_id=space.ca_id,
-            auto_revoke=True,  # Auto-revoke existing signed cert with same CN
-            fields=["id"]
+            fields=["id"],
         )
 
         if self._config.ca.autoSign:

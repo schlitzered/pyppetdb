@@ -96,13 +96,18 @@ class ControllerApiV1CAAuthoritiesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
+        # If CA info is requested, ensure ca_id is fetched
+        fetch_fields = list(fields)
+        if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
+            fetch_fields.append("ca_id")
+
         multi = await self._crud_certificates.search(
             _id=cert_id,
             ca_id=ca_id,
             status=status,
             fingerprint=fingerprint,
             serial_number=serial_number,
-            fields=list(fields),
+            fields=fetch_fields,
             sort=sort,
             sort_order=sort_order,
             page=page,
@@ -124,10 +129,15 @@ class ControllerApiV1CAAuthoritiesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
+        # If CA info is requested, ensure ca_id is fetched
+        fetch_fields = list(fields)
+        if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
+            fetch_fields.append("ca_id")
+
         multi = await self._crud_certificates.search(
             _id=f"^{cert_id}$",
             ca_id=ca_id,
-            fields=list(fields),
+            fields=fetch_fields,
             limit=1,
         )
         if not multi.result:
@@ -149,9 +159,15 @@ class ControllerApiV1CAAuthoritiesCerts:
         fields: Set[cert_filter_literal] = Query(default=cert_filter_list),
     ):
         await self._authorize.require_admin(request=request)
+
+        # Prepare fields to fetch - always include ca_id if CA info is requested
+        fetch_fields = list(fields)
+        if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
+            fetch_fields.append("ca_id")
+
         # cert_id is the serial number
         cert = await self._ca_service.update_certificate_status_by_ca(
-            ca_id, cert_id, data
+            ca_id, cert_id, data, fields=fetch_fields
         )
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)

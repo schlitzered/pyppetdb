@@ -96,7 +96,7 @@ async def ensure_default_ca_setup(
 
     # 1. Ensure Authority exists
     try:
-        await crud_ca_authorities.get(default_id)
+        await crud_ca_authorities.get(default_id, fields=["id"])
         log.info(f"Default CA Authority '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Authority '{default_id}'")
@@ -110,6 +110,7 @@ async def ensure_default_ca_setup(
                     state="Hessen",
                     validity_days=3650,
                 ),
+                fields=["id"],
             )
         except DuplicateResource:
             log.info(
@@ -648,7 +649,7 @@ async def cli_init_ca(
         space_id=space_id,
         csr_pem=csr_pem.decode(),
         ca_id=space.ca_id,
-        auto_revoke=True,
+        fields=["id"],
     )
 
     # 4. Sign CSR
@@ -658,10 +659,13 @@ async def cli_init_ca(
         space_id=space_id,
         cn=common_name,
         data=CACertificatePut(status="signed"),
+        fields=["certificate"],
     )
 
     # 5. Get CA Cert
-    ca_authority = await crud_ca_authorities.get(space_id)
+    ca_authority = await crud_ca_authorities.get(
+        space_id, fields=["certificate", "chain"]
+    )
 
     # 6. Write Files
     if not ca_path:

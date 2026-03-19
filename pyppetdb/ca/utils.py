@@ -175,19 +175,26 @@ class CAUtils:
 
     @staticmethod
     def sign_csr(
-        csr_pem: bytes, ca_cert_pem: bytes, ca_key_pem: bytes, validity_days: int = 365
+        csr_pem: bytes,
+        ca_cert_pem: bytes,
+        ca_key_pem: bytes,
+        validity_days: int = 365,
+        serial_number: Optional[int] = None,
     ) -> bytes:
         """Sign a CSR with the CA certificate and key."""
         csr = x509.load_pem_x509_csr(csr_pem)
         ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
         ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
 
+        if serial_number is None:
+            serial_number = uuid.uuid4().int
+
         builder = (
             x509.CertificateBuilder()
             .subject_name(csr.subject)
             .issuer_name(ca_cert.subject)
             .public_key(csr.public_key())
-            .serial_number(uuid.uuid4().int)
+            .serial_number(serial_number)
             .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
             .not_valid_after(
                 datetime.datetime.now(datetime.timezone.utc)

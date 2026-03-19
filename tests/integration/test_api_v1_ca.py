@@ -160,7 +160,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         sub_ca_id = f"sub-{uuid.uuid4().hex}"
         space_id = f"space-{uuid.uuid4().hex}"
         cert_cn = "test-node-cert"
-        cert_id = f"temp-id-{uuid.uuid4().hex}"
+        cert_id = str(uuid.uuid4().int)
 
         # 1. Setup Hierarchy
         self.client.post(f"/api/v1/ca/authorities/{root_ca_id}", headers=self._auth_headers(), json={"common_name": "Root"})
@@ -234,7 +234,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         ca_id = f"ca-certs-test-{uuid.uuid4().hex}"
         space_id = f"space-certs-test-{uuid.uuid4().hex}"
         cert_cn = "test-cert-authority-endpoint"
-        cert_id = f"temp-id-{uuid.uuid4().hex}"
+        cert_id = str(uuid.uuid4().int)
 
         # 1. Create CA and Space
         self.client.post(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers(), json={"common_name": "Test Auth Endpoints"})
