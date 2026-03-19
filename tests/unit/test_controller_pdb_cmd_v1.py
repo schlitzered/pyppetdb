@@ -20,9 +20,11 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_catalogs = MagicMock()
         self.mock_groups = MagicMock()
         self.mock_reports = MagicMock()
+        self.mock_auth_cert = MagicMock()
+        self.mock_auth_cert.require_cn_trusted = AsyncMock()
         
         self.controller = ControllerPdbCmdV1(
-            self.log, self.mock_config, self.mock_nodes, self.mock_catalogs, self.mock_groups, self.mock_reports
+            self.log, self.mock_config, self.mock_nodes, self.mock_catalogs, self.mock_groups, self.mock_reports, self.mock_auth_cert
         )
 
     async def test_replace_facts(self):

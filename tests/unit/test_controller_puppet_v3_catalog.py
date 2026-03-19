@@ -13,13 +13,16 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config = MagicMock()
         self.mock_http = AsyncMock(spec=httpx.AsyncClient)
         self.mock_cache = MagicMock()
+        self.mock_auth_cert = MagicMock()
+        self.mock_auth_cert.require_cn_trusted = AsyncMock()
+        self.mock_auth_cert.require_cn_match = AsyncMock()
         
         self.mock_config.app.puppet.catalogCache = True
         self.mock_config.app.puppet.serverurl = "http://puppetmaster"
         self.mock_config.app.puppet.catalogCacheFacts = ["osfamily"]
         
         self.controller = ControllerPuppetV3Catalog(
-            self.mock_auth, self.log, self.mock_config, self.mock_http, self.mock_cache
+            self.mock_auth, self.log, self.mock_config, self.mock_http, self.mock_auth_cert, self.mock_cache
         )
 
     async def test_post_cached(self):
