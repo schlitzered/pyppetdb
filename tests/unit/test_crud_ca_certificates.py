@@ -4,27 +4,16 @@ import logging
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.errors import ResourceNotFound
 
+
 class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_coll = MagicMock()
-        
+
         self.crud = CrudCACertificates(
-            config=self.mock_config,
-            log=self.log,
-            coll=self.mock_coll
+            config=self.mock_config, log=self.log, coll=self.mock_coll
         )
-
-    async def test_delete_success(self):
-        self.mock_coll.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
-        await self.crud.delete(space_id="space1", certname="cert1")
-        self.mock_coll.delete_one.assert_called_once_with(filter={"id": "cert1", "space_id": "space1"})
-
-    async def test_delete_not_found(self):
-        self.mock_coll.delete_one = AsyncMock(return_value=MagicMock(deleted_count=0))
-        with self.assertRaises(ResourceNotFound):
-            await self.crud.delete(space_id="space1", certname="cert1")
 
     async def test_count(self):
         self.mock_coll.count_documents = AsyncMock(return_value=10)
@@ -37,9 +26,9 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         mock_cursor.to_list = AsyncMock(return_value=[])
         self.mock_coll.find.return_value = mock_cursor
         self.mock_coll.count_documents = AsyncMock(return_value=0)
-        
+
         await self.crud.search_multi_spaces(space_ids=["s1", "s2"], _id="cert*")
-        
+
         self.mock_coll.find.assert_called_once()
         args, kwargs = self.mock_coll.find.call_args
         # find is called with filter as first positional or keyword

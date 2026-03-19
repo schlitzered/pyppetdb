@@ -23,31 +23,31 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll.delete_one.assert_called_once_with(filter={"id": "space1"})
 
     async def test_create(self):
-        self.crud._create = AsyncMock(return_value={"id": "space1", "authority_id": "ca1", "authority_id_history": []})
+        self.crud._create = AsyncMock(return_value={"id": "space1", "ca_id": "ca1", "ca_id_history": []})
         payload = CASpacePost(ca_id="ca1")
-        await self.crud.create(_id="space1", payload=payload)
+        await self.crud.create(_id="space1", payload=payload, fields=[])
         
         args = self.crud._create.call_args[1]
         self.assertEqual(args["payload"]["id"], "space1")
-        self.assertEqual(args["payload"]["authority_id"], "ca1")
-        self.assertEqual(args["payload"]["authority_id_history"], [])
+        self.assertEqual(args["payload"]["ca_id"], "ca1")
+        self.assertEqual(args["payload"]["ca_id_history"], [])
 
     async def test_update_authority(self):
         # Setup mock for get()
         self.mock_coll.find_one = AsyncMock(side_effect=[
-            {"id": "space1", "authority_id": "ca1", "authority_id_history": []}, # first call inside update
-            {"id": "space1", "authority_id": "ca2", "authority_id_history": ["ca1"]} # final get()
+            {"id": "space1", "ca_id": "ca1", "ca_id_history": []}, # first call inside update
+            {"id": "space1", "ca_id": "ca2", "ca_id_history": ["ca1"]} # final get()
         ])
-        self.mock_coll.update_one = AsyncMock()
+        self.mock_coll.find_one_and_update = AsyncMock(return_value={"id": "space1", "ca_id": "ca2", "ca_id_history": ["ca1"]})
         
-        payload = CASpacePut(authority_id="ca2")
-        await self.crud.update("space1", payload)
+        payload = CASpacePut(ca_id="ca2")
+        await self.crud.update("space1", payload, fields=[])
         
-        self.mock_coll.update_one.assert_called_once()
-        args, kwargs = self.mock_coll.update_one.call_args
-        self.assertEqual(args[0], {"id": "space1"})
-        self.assertEqual(args[1]["$set"], {"authority_id": "ca2"})
-        self.assertEqual(args[1]["$push"], {"authority_id_history": "ca1"})
+        self.mock_coll.find_one_and_update.assert_called_once()
+        args, kwargs = self.mock_coll.find_one_and_update.call_args
+        self.assertEqual(kwargs["filter"], {"id": "space1"})
+        self.assertEqual(kwargs["update"]["$set"]["ca_id"], "ca2")
+        self.assertEqual(kwargs["update"]["$set"]["ca_id_history"], ["ca1"])
 
     async def test_search_by_ca(self):
         mock_cursor = MagicMock()

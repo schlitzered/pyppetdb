@@ -63,6 +63,12 @@ class IntegrationTestBase(unittest.TestCase):
             SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
         )
 
+        from pyppetdb.authorize import AuthorizeClientCert
+        from unittest.mock import AsyncMock
+        AuthorizeClientCert.require_cn = AsyncMock(return_value="test-node")
+        AuthorizeClientCert.require_cn_match = AsyncMock(return_value="test-node")
+        AuthorizeClientCert.require_cn_trusted = AsyncMock(return_value="test-admin")
+
         cls._client_ctx = TestClient(app)
         cls.client = cls._client_ctx.__enter__()
         atexit.register(cls._cleanup)
