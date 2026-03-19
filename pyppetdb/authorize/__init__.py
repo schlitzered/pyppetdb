@@ -67,7 +67,8 @@ class AuthorizeClientCert:
         self._log = log
         self._trusted_cns = trusted_cns
 
-    def get_cn_from_request(self, request: Request) -> str | None:
+    @staticmethod
+    def get_cn_from_request(request: Request) -> str | None:
         cert_dict = request.scope.get("client_cert_dict")
         if not cert_dict:
             return None
