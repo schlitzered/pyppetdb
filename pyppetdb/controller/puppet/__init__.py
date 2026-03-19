@@ -30,7 +30,7 @@ class ControllerPuppet:
                 http=http,
                 crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             ).router,
-            prefix="/v3",
+            prefix="/puppet/v3",
             responses={404: {"description": "Not found"}},
         )
 

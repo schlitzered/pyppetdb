@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi.responses import FileResponse
@@ -46,8 +45,11 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
         request: Request,
         mount_point: str,
         file_path: str,
-        environment: str = Query(...),
     ):
+        environment = request.query_params.get("environment")
+        if not environment:
+            raise HTTPException(status_code=400, detail="Missing environment parameter")
+
         codedir = Path("/etc/puppetlabs/code")
         env_modules = codedir / "environments" / environment / "modules"
 

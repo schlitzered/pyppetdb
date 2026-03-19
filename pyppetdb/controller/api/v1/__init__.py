@@ -22,12 +22,21 @@ from pyppetdb.controller.api.v1.nodes_credentials import ControllerApiV1NodesCre
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
 
 from pyppetdb.controller.api.v1.nodes_reports import ControllerApiV1NodesReports
-from pyppetdb.controller.api.v1.nodes_secrets_redactor import ControllerApiV1NodesSecretsRedactor
+from pyppetdb.controller.api.v1.nodes_secrets_redactor import (
+    ControllerApiV1NodesSecretsRedactor,
+)
 from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
+from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthorities
+from pyppetdb.controller.api.v1.ca_authorities_certs import (
+    ControllerApiV1CAAuthoritiesCerts,
+)
+from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
+from pyppetdb.controller.api.v1.ca_spaces_certs import (
+    ControllerApiV1CASpacesCerts,
+)
 
-# from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
@@ -45,6 +54,10 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
+from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.ca.service import CAService
 
 
 class ControllerApiV1:
@@ -69,6 +82,10 @@ class ControllerApiV1:
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,
+        crud_ca_authorities: CrudCAAuthorities,
+        crud_ca_spaces: CrudCASpaces,
+        crud_ca_certificates: CrudCACertificates,
+        ca_service: CAService,
         http: httpx.AsyncClient,
         pyhiera,
     ):
@@ -247,6 +264,51 @@ class ControllerApiV1:
                 authorize=authorize,
                 crud_users=crud_users,
                 crud_users_credentials=crud_users_credentials,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CAAuthorities(
+                log=log,
+                authorize=authorize,
+                crud_authorities=crud_ca_authorities,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CAAuthoritiesCerts(
+                log=log,
+                authorize=authorize,
+                crud_authorities=crud_ca_authorities,
+                crud_certificates=crud_ca_certificates,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CASpaces(
+                log=log,
+                authorize=authorize,
+                crud_ca_spaces=crud_ca_spaces,
+                crud_ca_authorities=crud_ca_authorities,
+                crud_ca_certificates=crud_ca_certificates,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1CASpacesCerts(
+                log=log,
+                authorize=authorize,
+                crud_certificates=crud_ca_certificates,
+                crud_authorities=crud_ca_authorities,
+                crud_spaces=crud_ca_spaces,
+                ca_service=ca_service,
             ).router,
             responses={404: {"description": "Not found"}},
         )

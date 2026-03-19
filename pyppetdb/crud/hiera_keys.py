@@ -15,7 +15,7 @@ from pyppetdb.model.hiera_keys import HieraKeyGet
 from pyppetdb.model.hiera_keys import HieraKeyGetMulti
 from pyppetdb.model.hiera_keys import HieraKeyPost
 from pyppetdb.model.hiera_keys import HieraKeyPut
-from pyppetdb.pyhiera import PyHiera
+from pyppetdb.hiera import PyHiera
 from pyhiera.errors import PyHieraError
 
 

@@ -7,7 +7,6 @@ from pydantic import constr
 from pydantic import Field
 from typing_extensions import Annotated
 
-
 sort_order_literal = Literal[
     "ascending",
     "descending",
@@ -22,6 +21,12 @@ filter_complex_search = Set[constr(pattern=filter_complex_search_pattern.pattern
 
 class MetaMulti(BaseModel):
     result_size: Annotated[int, Field(gt=-1)]
+
+
+class Fingerprints(BaseModel):
+    sha256: str
+    sha1: str
+    md5: str
 
 
 class DataDelete(BaseModel):

@@ -14,8 +14,8 @@ from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.errors import QueryParamValidationError
-from pyppetdb.pyhiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
-from pyppetdb.pyhiera import PyHiera
+from pyppetdb.hiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
+from pyppetdb.hiera import PyHiera
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal

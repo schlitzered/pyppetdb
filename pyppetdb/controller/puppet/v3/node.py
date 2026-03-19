@@ -3,7 +3,6 @@ import logging
 
 from fastapi import APIRouter
 from fastapi import HTTPException
-from fastapi import Query
 from fastapi import Request
 import httpx
 
@@ -42,9 +41,6 @@ class ControllerPuppetV3Node(ControllerPuppetV3Base):
         self,
         request: Request,
         certname: str,
-        environment: str = Query(...),
-        transaction_uuid: str = Query(...),
-        configured_environment: str = Query(None),
     ):
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
@@ -56,11 +52,7 @@ class ControllerPuppetV3Node(ControllerPuppetV3Base):
         try:
             response = await self._http.get(
                 url=target_url,
-                params={
-                    "environment": environment,
-                    "transaction_uuid": transaction_uuid,
-                    "configured_environment": configured_environment,
-                },
+                params=request.query_params,
                 headers=self._headers(request),
             )
             return response.json()

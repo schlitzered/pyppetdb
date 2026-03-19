@@ -12,7 +12,7 @@ log_levels = typing.Literal[
 class ConfigAppFacts(BaseModel):
     index: typing.Optional[typing.List[str]] = None
 
-    @field_validator('index', mode='before')
+    @field_validator("index", mode="before")
     @classmethod
     def parse_index(cls, v):
         if isinstance(v, str):
@@ -53,7 +53,7 @@ class ConfigAppPuppet(BaseModel):
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None
 
-    @field_validator('catalogCacheFacts', mode='before')
+    @field_validator("catalogCacheFacts", mode="before")
     @classmethod
     def parse_catalog_cache_facts(cls, v):
         if isinstance(v, str):
@@ -115,8 +115,14 @@ class ConfigHiera(BaseModel):
     plugin: typing.Optional[dict[str, str]] = None
 
 
+class ConfigCA(BaseModel):
+    enableCrlRefresh: bool = True
+    autoSign: bool = False
+
+
 class Config(BaseSettings):
     app: ConfigApp = ConfigApp()
+    ca: ConfigCA = ConfigCA()
     hiera: ConfigHiera = ConfigHiera()
     ldap: ConfigLdap = ConfigLdap()
     mongodb: ConfigMongodb = ConfigMongodb()
