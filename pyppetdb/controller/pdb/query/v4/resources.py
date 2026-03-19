@@ -6,6 +6,7 @@ from fastapi import Request
 import httpx
 
 from pyppetdb.config import Config
+from pyppetdb.authorize import AuthorizeClientCert
 
 
 class ControllerPdbQueryV4Resources:
@@ -13,10 +14,12 @@ class ControllerPdbQueryV4Resources:
         self,
         log: logging.Logger,
         config: Config,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
         self._http = None
         self._config = config
+        self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(
             prefix="/resources",
             tags=["pdb_query_v4_resources"],
@@ -30,6 +33,10 @@ class ControllerPdbQueryV4Resources:
             methods=["GET"],
             status_code=200,
         )
+
+    @property
+    def authorize_client_cert(self):
+        return self._authorize_client_cert
 
     @property
     def log(self):
@@ -63,6 +70,7 @@ class ControllerPdbQueryV4Resources:
         self,
         request: Request,
     ):
+        await self.authorize_client_cert.require_cn_trusted(request)
         if not self.config.app.puppetdb.serverurl:
             return []
         resp = await self.http.get(

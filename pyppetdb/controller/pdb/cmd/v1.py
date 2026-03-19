@@ -13,6 +13,7 @@ import httpx
 import orjson
 
 from pyppetdb.config import Config
+from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
@@ -36,6 +37,7 @@ class ControllerPdbCmdV1:
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
         self._http = None
@@ -44,6 +46,7 @@ class ControllerPdbCmdV1:
         self._crud_nodes_catalogs = crud_nodes_catalogs
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
+        self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(
             prefix="/v1",
             tags=["pdb_api_v1"],
@@ -57,6 +60,10 @@ class ControllerPdbCmdV1:
             methods=["POST"],
             status_code=201,
         )
+
+    @property
+    def authorize_client_cert(self):
+        return self._authorize_client_cert
 
     @property
     def config(self) -> Config:
@@ -110,6 +117,7 @@ class ControllerPdbCmdV1:
         producer_timestamp=Query(alias="producer-timestamp"),
         version=Query(),
     ):
+        await self.authorize_client_cert.require_cn_trusted(request)
         body = await request.body()
         is_gzip = request.headers.get(
             "content-encoding", ""

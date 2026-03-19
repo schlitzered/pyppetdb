@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from fastapi import Request
 import httpx
 
-from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
@@ -14,16 +14,16 @@ from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 class ControllerPuppetV3Node(ControllerPuppetV3Base):
     def __init__(
         self,
-        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         super().__init__(
-            authorize_puppet=authorize_puppet,
             config=config,
             log=log,
             http=http,
+            authorize_client_cert=authorize_client_cert,
         )
         self._router = APIRouter(
             prefix="/node",
@@ -42,6 +42,7 @@ class ControllerPuppetV3Node(ControllerPuppetV3Base):
         request: Request,
         certname: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"

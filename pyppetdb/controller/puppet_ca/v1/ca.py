@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Request, Response, HTTPException
 from pyppetdb.config import Config
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
@@ -18,6 +19,7 @@ class ControllerPuppetCaV1CA:
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
         ca_service: CAService,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
         self._config = config
@@ -25,6 +27,7 @@ class ControllerPuppetCaV1CA:
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
         self._ca_service = ca_service
+        self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(tags=["puppet-ca"])
 
         self._router.add_api_route(
@@ -55,6 +58,10 @@ class ControllerPuppetCaV1CA:
         )
 
     @property
+    def authorize_client_cert(self):
+        return self._authorize_client_cert
+
+    @property
     def router(self):
         return self._router
 
@@ -76,6 +83,7 @@ class ControllerPuppetCaV1CA:
         return Response(content=cert_doc["certificate"], media_type="text/plain")
 
     async def get_certificate_request(self, nodename: str, request: Request):
+        await self.authorize_client_cert.require_cn_trusted(request)
         # Query by CN and status to get the pending CSR
         cert_doc = await self._crud_certificates.coll.find_one(
             {"space_id": "puppet-ca", "cn": nodename, "status": "requested"}
@@ -118,6 +126,7 @@ class ControllerPuppetCaV1CA:
         return Response(content="CSR submitted", media_type="text/plain")
 
     async def get_certificate_status(self, nodename: str, request: Request):
+        await self.authorize_client_cert.require_cn_trusted(request)
         # Find any cert (any status) by CN
         cert_doc = await self._crud_certificates.coll.find_one(
             {"space_id": "puppet-ca", "cn": nodename}
@@ -137,6 +146,7 @@ class ControllerPuppetCaV1CA:
         }
 
     async def update_certificate_status(self, nodename: str, request: Request):
+        await self.authorize_client_cert.require_cn_trusted(request)
         data_json = await request.json()
         desired_state = data_json.get("desired_state")
 

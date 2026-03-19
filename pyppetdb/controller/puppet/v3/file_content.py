@@ -8,7 +8,7 @@ from fastapi import Response
 from fastapi.responses import FileResponse
 import httpx
 
-from pyppetdb.authorize import AuthorizePuppet
+from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 
@@ -17,16 +17,16 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
 
     def __init__(
         self,
-        authorize_puppet: AuthorizePuppet,
         log: logging.Logger,
         config: Config,
         http: httpx.AsyncClient,
+        authorize_client_cert: AuthorizeClientCert,
     ):
         super().__init__(
-            authorize_puppet=authorize_puppet,
             config=config,
             log=log,
             http=http,
+            authorize_client_cert=authorize_client_cert,
         )
         self._router = APIRouter(
             prefix="/file_content",
@@ -46,6 +46,7 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
         mount_point: str,
         file_path: str,
     ):
+        await self.authorize_client_cert.require_cn(request)
         environment = request.query_params.get("environment")
         if not environment:
             raise HTTPException(status_code=400, detail="Missing environment parameter")

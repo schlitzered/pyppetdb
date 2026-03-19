@@ -47,3 +47,5 @@ watchfiles==1.0.3
 websockets==14.1
 pyhiera
 pyahocorasick==2.1.0
+orjson==3.11.7
+

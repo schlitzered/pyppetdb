@@ -38,7 +38,6 @@ class ControllerApiV1Nodes:
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
-        crud_nodes_credentials: CrudCredentials,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_teams: CrudTeams,
@@ -47,7 +46,6 @@ class ControllerApiV1Nodes:
         self._crud_nodes = crud_nodes
         self._crud_nodes_catalog_cache = crud_nodes_catalog_cache
         self._crud_nodes_catalogs = crud_nodes_catalogs
-        self._crud_nodes_credentials = crud_nodes_credentials
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
         self._crud_teams = crud_teams
@@ -124,10 +122,6 @@ class ControllerApiV1Nodes:
         return self._crud_nodes_catalogs
 
     @property
-    def crud_nodes_credentials(self):
-        return self._crud_nodes_credentials
-
-    @property
     def crud_nodes_groups(self):
         return self._crud_nodes_groups
 
@@ -149,7 +143,6 @@ class ControllerApiV1Nodes:
 
     async def delete(self, request: Request, node_id: str):
         await self.authorize.require_admin(request=request)
-        await self.crud_nodes_credentials.delete_all_from_owner(owner=node_id)
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
         await self.crud_nodes_catalogs.delete_all_from_node(node_id=node_id)
         await self.crud_nodes_reports.delete_all_from_node(node_id=node_id)

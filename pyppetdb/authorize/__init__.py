@@ -3,58 +3,58 @@ import typing
 
 from fastapi import Request
 
-from pyppetdb.config import ConfigAppPuppet
-
-from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.teams import CrudTeams
 
 from pyppetdb.errors import AdminError
+from pyppetdb.errors import ClientCertError
 from pyppetdb.errors import CredentialError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import SessionCredentialError
 
-from pyppetdb.model.nodes import NodeGet
 from pyppetdb.model.users import UserGet
 
 
-class AuthorizePuppet:
+class AuthorizeClientCert:
     def __init__(
         self,
         log: logging.Logger,
-        config: ConfigAppPuppet,
-        crud_nodes: CrudNodes,
-        crud_nodes_credentials: CrudCredentials,
+        trusted_cns: list[str],
     ):
-        self._config = config
-        self._crud_nodes = crud_nodes
-        self._crud_nodes_credentials = crud_nodes_credentials
         self._log = log
+        self._trusted_cns = trusted_cns
 
-    @property
-    def config(self) -> ConfigAppPuppet:
-        return self._config
+    @staticmethod
+    def get_cn_from_request(request: Request) -> str | None:
+        cert_dict = request.scope.get("client_cert_dict")
+        if not cert_dict:
+            return None
+        subject = {
+            key: value for rdn in cert_dict.get("subject", []) for key, value in rdn
+        }
+        cn = subject.get("commonName")
+        if not cn:
+            raise ClientCertError(detail="No client certificate provided")
+        return cn
 
-    @property
-    def crud_nodes(self) -> CrudNodes:
-        return self._crud_nodes
+    async def require_cn(self, request: Request):
+        return self.get_cn_from_request(request)
 
-    @property
-    def crud_nodes_credentials(self):
-        return self._crud_nodes_credentials
+    async def require_cn_match(self, request: Request, match: str):
+        cn = self.get_cn_from_request(request)
+        if cn != match:
+            raise ClientCertError(detail=f"CN {cn} does not match {match}")
+        return cn
 
-    @property
-    def log(self):
-        return self._log
-
-    async def get_node(self, request: Request) -> str | NodeGet:
-        return await self.crud_nodes_credentials.check_credential(request=request)
-
-    async def require_node(self, request) -> NodeGet:
-        user = await self.get_node(request)
-        return user
+    async def require_cn_trusted(self, request: Request) -> str:
+        cn = self.get_cn_from_request(request)
+        if cn not in self._trusted_cns:
+            raise ClientCertError(
+                detail=f"CN {cn} is not in trustedCns {self._trusted_cns}"
+            )
+        return cn
 
 
 class AuthorizePyppetDB:

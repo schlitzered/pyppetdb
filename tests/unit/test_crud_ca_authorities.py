@@ -33,6 +33,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
     @patch("pyppetdb.crud.ca_authorities.CAUtils")
     async def test_create_self_signed(self, mock_cautils):
         mock_cautils.generate_ca.return_value = (b"CERT", b"KEY")
+        mock_cautils.generate_crl.return_value = (b"CRL", datetime.now(timezone.utc))
         mock_cautils.get_cert_info.return_value = {
             "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
             "common_name": "CA1",
@@ -51,7 +52,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         })
         
         payload = CAAuthorityPost(common_name="CA1")
-        await self.crud.create(_id="ca1", payload=payload)
+        await self.crud.create(_id="ca1", payload=payload, fields=[])
         
         args = self.crud._create.call_args[1]
         self.assertEqual(args["payload"]["id"], "ca1")
