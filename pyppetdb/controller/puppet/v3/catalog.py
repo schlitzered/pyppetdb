@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import typing
+import urllib.parse
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -136,31 +137,13 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                 data=body,
             )
             catalog = response.json()
-            if self.config.app.puppet.catalogCache:
+            if response.is_success and self.config.app.puppet.catalogCache:
                 facts_raw = body.get("facts")
                 if facts_raw:
                     try:
-                        import urllib.parse
 
-                        if isinstance(facts_raw, bytes):
-                            facts_str = facts_raw.decode("utf-8")
-                        else:
-                            facts_str = facts_raw
-
-                        try:
-                            facts_str = urllib.parse.unquote(facts_str)
-                        except Exception:
-                            pass
-
-                        facts_decoded = json.loads(facts_str)
-
-                        if isinstance(facts_decoded, str):
-                            facts_dict = json.loads(facts_decoded)
-                        else:
-                            facts_dict = facts_decoded
-
-                        if isinstance(facts_dict, dict) and "values" in facts_dict:
-                            facts_dict = facts_dict["values"]
+                        facts_str = urllib.parse.unquote(facts_raw)
+                        facts_dict = json.loads(facts_str).get("values", {})
 
                         filtered_facts = self._filter_facts(
                             facts_dict, self.config.app.puppet.catalogCacheFacts
