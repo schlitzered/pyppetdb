@@ -10,7 +10,7 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 import httpx
-import orjson
+import json
 
 from pyppetdb.config import Config
 from pyppetdb.authorize import AuthorizeClientCert
@@ -100,9 +100,9 @@ class ControllerPdbCmdV1:
                     certfile=self.config.app.puppetdb.ssl.cert,
                     keyfile=self.config.app.puppetdb.ssl.key,
                 )
-                self._http = httpx.AsyncClient(verify=ssl_ctx)
+                self._http = httpx.AsyncClient(verify=ssl_ctx, timeout=self.config.app.puppetdb.timeout)
             else:
-                self._http = httpx.AsyncClient()
+                self._http = httpx.AsyncClient(timeout=self.config.app.puppetdb.timeout)
         return self._http
 
     @property
@@ -127,7 +127,7 @@ class ControllerPdbCmdV1:
         else:
             body_json_bytes = body
 
-        data_decomp = orjson.loads(body_json_bytes)
+        data_decomp = json.loads(body_json_bytes)
 
         _datetime = datetime.now(UTC)
         start_time_ns = time.perf_counter_ns()

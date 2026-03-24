@@ -50,6 +50,7 @@ class ConfigAppPuppet(BaseModel):
     catalogCacheFacts: typing.Optional[list[str]] = []
     catalogCacheTTL: typing.Optional[int] = 86400
     serverurl: typing.Optional[str] = None
+    timeout: int = 60
     authSecret: typing.Optional[bool] = True
     ssl: typing.Optional[ConfigAppSSL] = None
     trustedCns: typing.Optional[list[str]] = []
@@ -74,6 +75,7 @@ class ConfigAppPuppetdb(BaseModel):
     port: int = 8002
     host: str = "127.0.0.1"
     serverurl: typing.Optional[str] = None
+    timeout: int = 60
     ssl: typing.Optional[ConfigAppSSL] = None
     trustedCns: typing.Optional[list[str]] = []
 

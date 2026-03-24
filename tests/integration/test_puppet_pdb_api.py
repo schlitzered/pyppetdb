@@ -12,9 +12,12 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
 
     @patch("httpx.AsyncClient.put")
     def test_puppet_v3_facts_put(self, mock_put):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"status": "success"}
+        mock_response_data = {"status": "success"}
+        mock_response = httpx.Response(
+            200, 
+            content=json.dumps(mock_response_data).encode(),
+            headers={"Content-Type": "application/json"}
+        )
         mock_put.return_value = mock_response
         
         facts_data = {
@@ -35,9 +38,12 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
 
     @patch("httpx.AsyncClient.get")
     def test_puppet_v3_node_get(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"name": "test-node"}
+        mock_response_data = {"name": "test-node"}
+        mock_response = httpx.Response(
+            200,
+            content=json.dumps(mock_response_data).encode(),
+            headers={"Content-Type": "application/json"}
+        )
         mock_get.return_value = mock_response
         
         resp = self.client.get("/puppet/v3/node/test-node")
@@ -47,9 +53,12 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
 
     @patch("httpx.AsyncClient.put")
     def test_puppet_v3_report_put(self, mock_put):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"status": "received"}
+        mock_response_data = {"status": "received"}
+        mock_response = httpx.Response(
+            200,
+            content=json.dumps(mock_response_data).encode(),
+            headers={"Content-Type": "application/json"}
+        )
         mock_put.return_value = mock_response
         
         report_data = {"report": "data"}
@@ -64,9 +73,12 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
 
     @patch("httpx.AsyncClient.get")
     def test_pdb_query_v4_resources(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = [{"certname": "node1"}]
+        mock_response_data = [{"certname": "node1"}]
+        mock_response = httpx.Response(
+            200,
+            content=json.dumps(mock_response_data).encode(),
+            headers={"Content-Type": "application/json"}
+        )
         mock_get.return_value = mock_response
         
         resp = self.client.get("/pdb/query/v4/resources?query=[\"=\", \"type\", \"Class\"]")

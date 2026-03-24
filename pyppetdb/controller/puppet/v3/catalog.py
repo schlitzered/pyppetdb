@@ -7,6 +7,7 @@ import urllib.parse
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
+from fastapi import Response
 import httpx
 
 from pyppetdb.authorize import AuthorizeClientCert
@@ -120,6 +121,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                 self.log.debug(f"Serving cached catalog for node {nodename}")
                 return cached_catalog
 
+        self.log.info(f"Catalog for {nodename} not found in cache, falling back to puppet server")
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"
@@ -135,9 +137,10 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                 params=request.query_params,
                 headers=self._headers(request, node=nodename),
                 data=body,
+                timeout=self.config.app.puppet.timeout,
             )
-            catalog = response.json()
             if response.is_success and self.config.app.puppet.catalogCache:
+                catalog = response.json()
                 facts_raw = body.get("facts")
                 if facts_raw:
                     try:
@@ -161,7 +164,11 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                             f"Failed to parse facts for caching node {nodename}: {e}"
                         )
 
-            return catalog
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                media_type=response.headers.get("content-type"),
+            )
 
         except httpx.RequestError as e:
             raise HTTPException(

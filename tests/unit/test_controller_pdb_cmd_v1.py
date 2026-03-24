@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
-import orjson
+import json
 import gzip
 from datetime import datetime, UTC
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
@@ -36,7 +36,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             "producer_timestamp": "2026-03-06T00:00:00Z",
             "producer": "pm1"
         }
-        mock_request.body = AsyncMock(return_value=orjson.dumps(data))
+        mock_request.body = AsyncMock(return_value=json.dumps(data).encode())
         mock_request.headers = {}
         
         self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])
@@ -65,7 +65,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             "catalog_uuid": "uuid1",
             "resources": [{"type": "File", "title": "/t", "exported": True, "tags": [], "parameters": {}}]
         }
-        mock_request.body = AsyncMock(return_value=orjson.dumps(data))
+        mock_request.body = AsyncMock(return_value=json.dumps(data).encode())
         mock_request.headers = {}
         
         self.mock_nodes.update = AsyncMock()
@@ -96,7 +96,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             "metrics": [],
             "resources": [{"skipped": False, "timestamp": "now", "resource_type": "F", "resource_title": "t", "containment_path": [], "corrective_change": False, "events": [], "file": None, "line": None}]
         }
-        mock_request.body = AsyncMock(return_value=orjson.dumps(data))
+        mock_request.body = AsyncMock(return_value=json.dumps(data).encode())
         mock_request.headers = {}
         
         self.mock_nodes.update = AsyncMock()
@@ -118,7 +118,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
     async def test_create_gzip(self):
         mock_request = MagicMock()
         data = {"environment": "prod"}
-        body = gzip.compress(orjson.dumps(data))
+        body = gzip.compress(json.dumps(data).encode())
         mock_request.body = AsyncMock(return_value=body)
         mock_request.headers = {"content-encoding": "gzip"}
         

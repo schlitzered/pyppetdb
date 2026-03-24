@@ -44,8 +44,6 @@ class IntegrationTestBase(unittest.TestCase):
         )
 
         from fastapi import FastAPI
-        from pyppetdb.main import ORJSONRequest
-        from pyppetdb.main import ORJSONResponse
         from pyppetdb.main import lifespan_dev
         from pyppetdb.main import settings
         from pyppetdb.main import version
@@ -56,8 +54,6 @@ class IntegrationTestBase(unittest.TestCase):
             title="pyppetdb all in one dev server",
             version=version,
             lifespan=lifespan_dev,
-            default_response_class=ORJSONResponse,
-            request_class=ORJSONRequest,
         )
         app.add_middleware(
             SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600

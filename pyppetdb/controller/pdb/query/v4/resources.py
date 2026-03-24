@@ -53,9 +53,9 @@ class ControllerPdbQueryV4Resources:
                     certfile=self.config.app.puppetdb.ssl.cert,
                     keyfile=self.config.app.puppetdb.ssl.key,
                 )
-                self._http = httpx.AsyncClient(verify=ssl_ctx)
+                self._http = httpx.AsyncClient(verify=ssl_ctx, timeout=self.config.app.puppetdb.timeout)
             else:
-                self._http = httpx.AsyncClient()
+                self._http = httpx.AsyncClient(timeout=self.config.app.puppetdb.timeout)
         return self._http
 
     @property

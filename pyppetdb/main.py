@@ -15,12 +15,10 @@ import bonsai.asyncio
 import httpx
 from fastapi import FastAPI
 from fastapi import Request
-from fastapi.responses import ORJSONResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
-import orjson
 import pymongo
 
 import pyppetdb.controller
@@ -70,12 +68,6 @@ from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 
 version = "0.0.0"
-
-
-class ORJSONRequest(Request):
-    async def json(self):
-        body = await self.body()
-        return orjson.loads(body)
 
 
 settings = Config()
@@ -143,7 +135,7 @@ async def prepare_env():
 
     log.info(settings)
 
-    http = httpx.AsyncClient()
+    http = httpx.AsyncClient(timeout=60)
     env["http"] = http
 
     ldap_pool = await setup_ldap(
@@ -671,8 +663,6 @@ app_dev = FastAPI(
     title="pyppetdb all in one dev server",
     version=version,
     lifespan=lifespan_dev,
-    default_response_class=ORJSONResponse,
-    request_class=ORJSONRequest,
 )
 app_dev.add_middleware(
     SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
@@ -698,8 +688,6 @@ def main_run_get_app(
     app = FastAPI(
         title=f"pyppetdb {app_name} server",
         version=version,
-        default_response_class=ORJSONResponse,
-        request_class=ORJSONRequest,
     )
     app.add_middleware(
         SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600

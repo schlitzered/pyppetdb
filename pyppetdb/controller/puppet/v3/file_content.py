@@ -54,27 +54,27 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
         codedir = Path("/etc/puppetlabs/code")
         env_modules = codedir / "environments" / environment / "modules"
 
-        if mount_point.startswith("modules/"):
-            # modules/<MODULE> mount: accesses files/ subdirectory of the module
-            # URL: /puppet/v3/file_content/modules/apache/httpd.conf
-            # Maps to: $codedir/environments/{env}/modules/apache/files/httpd.conf
-            module_name = mount_point.split("/", 1)[1]
-            full_path = env_modules / module_name / "files" / file_path
-            base_path = env_modules / module_name / "files"
+        full_path = None
+        base_path = None
 
-        elif mount_point.startswith("tasks/"):
-            # tasks/<MODULE> mount: accesses tasks/ subdirectory of the module
+        if mount_point == "modules":
+            # URL: /puppet/v3/file_content/modules/apache/httpd.conf
+            # mount_point: modules, file_path: apache/httpd.conf
+            if "/" in file_path:
+                module_name, rel_path = file_path.split("/", 1)
+                full_path = env_modules / module_name / "files" / rel_path
+                base_path = env_modules / module_name / "files"
+
+        elif mount_point == "tasks":
             # URL: /puppet/v3/file_content/tasks/apache/init.sh
-            # Maps to: $codedir/environments/{env}/modules/apache/tasks/init.sh
-            module_name = mount_point.split("/", 1)[1]
-            full_path = env_modules / module_name / "tasks" / file_path
-            base_path = env_modules / module_name / "tasks"
+            # mount_point: tasks, file_path: apache/init.sh
+            if "/" in file_path:
+                module_name, rel_path = file_path.split("/", 1)
+                full_path = env_modules / module_name / "tasks" / rel_path
+                base_path = env_modules / module_name / "tasks"
 
         elif mount_point == "plugins":
-            # plugins mount: magical mount that merges lib/ from all modules
-            # Searches through all modules for lib/{file_path}
-            # URL: /puppet/v3/file_content/plugins/facter/my_fact.rb
-            full_path = None
+            # ... (rest of plugins logic remains similar but optimized)
             for module_dir in env_modules.iterdir():
                 if module_dir.is_dir():
                     candidate = module_dir / "lib" / file_path
@@ -83,17 +83,7 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
                         base_path = module_dir / "lib"
                         break
 
-            if not full_path:
-                raise HTTPException(
-                    status_code=404,
-                    detail="File not found in any module's lib directory",
-                )
-
         elif mount_point == "pluginfacts":
-            # pluginfacts mount: magical mount that merges facts.d/ from all modules
-            # Searches through all modules for facts.d/{file_path}
-            # URL: /puppet/v3/file_content/pluginfacts/my_fact.sh
-            full_path = None
             for module_dir in env_modules.iterdir():
                 if module_dir.is_dir():
                     candidate = module_dir / "facts.d" / file_path
@@ -102,32 +92,42 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
                         base_path = module_dir / "facts.d"
                         break
 
-            if not full_path:
-                raise HTTPException(
-                    status_code=404,
-                    detail="File not found in any module's facts.d directory",
-                )
+        if full_path and base_path:
+            # Security: ensure the resolved path is within the base directory
+            try:
+                full_path_resolved = full_path.resolve()
+                full_path_resolved.relative_to(base_path.resolve())
+                if full_path_resolved.is_file():
+                    return FileResponse(
+                        path=full_path_resolved,
+                        media_type="application/octet-stream",
+                    )
+            except (ValueError, FileNotFoundError):
+                pass
 
-        else:
-            # Could be custom mount from fileserver.conf - not supported yet
+        # Proxy fallback if not found locally or unsupported mount
+        self.log.info(f"File {mount_point}/{file_path} not found locally, falling back to puppet server")
+        if not self.config.app.puppet.serverurl:
             raise HTTPException(
-                status_code=400, detail=f"Unsupported mount point: {mount_point}"
+                status_code=502, detail="Puppet server URL not configured and file not found locally"
             )
 
-        # Security: ensure the resolved path is within the base directory
+        target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/file_content/{mount_point}/{file_path}"
+
         try:
-            full_path = full_path.resolve()
-            full_path.relative_to(base_path.resolve())
-        except ValueError:
-            raise HTTPException(
-                status_code=403, detail="Access denied: path traversal detected"
+            response = await self._http.get(
+                url=target_url,
+                params=request.query_params,
+                headers=self._headers(request),
+                timeout=self.config.app.puppet.timeout,
             )
-
-        # Check if file exists
-        if not full_path.is_file():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(
-            path=full_path,
-            media_type="application/octet-stream",
-        )
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                media_type=response.headers.get("content-type"),
+            )
+        except httpx.RequestError as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Error communicating with puppet server: {str(e)}",
+            )
