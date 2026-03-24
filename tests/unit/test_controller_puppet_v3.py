@@ -4,7 +4,7 @@ import logging
 import json
 import asyncio
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from pyppetdb.controller.puppet.v3.facts import ControllerPuppetV3Facts
 from pyppetdb.controller.puppet.v3.node import ControllerPuppetV3Node
 from pyppetdb.controller.puppet.v3.report import ControllerPuppetV3Report
@@ -53,13 +53,19 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         
         self.mock_crud_catalog_cache.get_catalog.return_value = None
         
-        mock_response = MagicMock()
+        catalog_data = {"name": "node1", "resources": []}
+        mock_response = MagicMock(spec=httpx.Response)
         mock_response.is_success = True
-        mock_response.json.return_value = {"name": "node1", "resources": []}
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(catalog_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = catalog_data
         self.mock_http.post.return_value = mock_response
         
         result = await controller.post(mock_request, "node1")
-        self.assertEqual(result, {"name": "node1", "resources": []})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), catalog_data)
         
         # Check if facts were filtered correctly before caching (background task)
         # We need to wait a bit for the background task to be scheduled/run
@@ -90,10 +96,12 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
             
             mock_path.return_value = mock_path
             mock_path.__truediv__.return_value = mock_path
+            # New logic: env_modules / module_name / "files" / rel_path
+            # We need to make sure the / operator chain leads to mock_full_path
             mock_path.__truediv__.side_effect = lambda x: mock_full_path if x == "motd" else mock_path
             
             with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as mock_file_response:
-                result = await controller.get(mock_request, "modules/testmod", "motd")
+                result = await controller.get(mock_request, "modules", "testmod/motd")
                 self.assertIsInstance(result, MagicMock)
 
     async def test_file_content_get_tasks(self):
@@ -109,10 +117,11 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
             
             mock_path.return_value = mock_path
             mock_path.__truediv__.return_value = mock_path
+            # New logic: env_modules / module_name / "tasks" / rel_path
             mock_path.__truediv__.side_effect = lambda x: mock_full_path if x == "init.sh" else mock_path
             
             with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as mock_file_response:
-                result = await controller.get(mock_request, "tasks/testmod", "init.sh")
+                result = await controller.get(mock_request, "tasks", "testmod/init.sh")
                 self.assertIsInstance(result, MagicMock)
 
     async def test_file_content_get_plugins(self):
@@ -181,14 +190,30 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         controller = ControllerPuppetV3FileContent(self.log, self.mock_config, self.mock_http, self.mock_auth_cert)
         mock_request = MagicMock()
         mock_request.query_params = {"environment": "prod"}
-        with self.assertRaises(HTTPException) as cm:
-            await controller.get(mock_request, "unsupported", "f")
-        self.assertEqual(cm.exception.status_code, 400)
+        mock_request.headers = {}
+        
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = b"proxied content"
+        mock_response.headers = {"Content-Type": "application/octet-stream"}
+        self.mock_http.get.return_value = mock_response
+        
+        result = await controller.get(mock_request, "unsupported", "f")
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.body, b"proxied content")
 
     async def test_file_content_traversal(self):
         controller = ControllerPuppetV3FileContent(self.log, self.mock_config, self.mock_http, self.mock_auth_cert)
         mock_request = MagicMock()
         mock_request.query_params = {"environment": "prod"}
+        mock_request.headers = {}
+        
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = b"proxied content"
+        mock_response.headers = {"Content-Type": "application/octet-stream"}
+        self.mock_http.get.return_value = mock_response
         
         with patch("pyppetdb.controller.puppet.v3.file_content.Path") as mock_path:
             mock_full_path = MagicMock()
@@ -199,9 +224,10 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
             mock_path.__truediv__.return_value = mock_path
             mock_path.__truediv__.side_effect = lambda x: mock_full_path if x == "motd" else mock_path
             
-            with self.assertRaises(HTTPException) as cm:
-                await controller.get(mock_request, "modules/m", "motd")
-            self.assertEqual(cm.exception.status_code, 403)
+            result = await controller.get(mock_request, "modules", "m/motd")
+            self.assertIsInstance(result, Response)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.body, b"proxied content")
 
     async def test_facts_put(self):
         controller = ControllerPuppetV3Facts(self.log, self.mock_config, self.mock_http, self.mock_auth_cert)
@@ -217,12 +243,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "success"}
+        mock_response_data = {"status": "success"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.put.return_value = mock_response
         
         result = await controller.put(mock_request, "node1")
-        self.assertEqual(result, {"status": "success"})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
         self.mock_http.put.assert_called_once()
 
     async def test_facts_put_no_server_url(self):
@@ -239,12 +271,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"name": "node1"}
+        mock_response_data = {"name": "node1"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.get.return_value = mock_response
         
         result = await controller.get(mock_request, "node1")
-        self.assertEqual(result, {"name": "node1"})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
         self.mock_http.get.assert_called_once()
 
     async def test_report_put(self):
@@ -254,12 +292,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "received"}
+        mock_response_data = {"status": "received"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.put.return_value = mock_response
         
         result = await controller.put(mock_request, "node1")
-        self.assertEqual(result, {"status": "received"})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
         self.mock_http.put.assert_called_once()
 
     async def test_file_metadata_get_single(self):
@@ -268,12 +312,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"path": "/etc/motd"}
+        mock_response_data = {"path": "/etc/motd"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.get.return_value = mock_response
         
         result = await controller.get_single(mock_request, "modules", "motd")
-        self.assertEqual(result, {"path": "/etc/motd"})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
         self.mock_http.get.assert_called_once()
 
     async def test_file_metadata_get_multiple(self):
@@ -282,12 +332,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = [{"path": "/etc/motd"}]
+        mock_response_data = [{"path": "/etc/motd"}]
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.get.return_value = mock_response
         
         result = await controller.get_multiple(mock_request, "modules", "motd")
-        self.assertEqual(result, [{"path": "/etc/motd"}])
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
 
     async def test_file_metadata_get_multiple_root(self):
         controller = ControllerPuppetV3FileMetadata(self.log, self.mock_config, self.mock_http, self.mock_auth_cert)
@@ -295,12 +351,18 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.query_params = {}
         mock_request.headers = {}
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = [{"path": "/etc/motd"}]
+        mock_response_data = [{"path": "/etc/motd"}]
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.get.return_value = mock_response
         
         result = await controller.get_multiple_root(mock_request, "modules")
-        self.assertEqual(result, [{"path": "/etc/motd"}])
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
 
     async def test_file_metadata_get_error(self):
         controller = ControllerPuppetV3FileMetadata(self.log, self.mock_config, self.mock_http, self.mock_auth_cert)

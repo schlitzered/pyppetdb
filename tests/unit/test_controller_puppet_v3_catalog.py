@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 import httpx
+from fastapi import Response
 from pyppetdb.controller.puppet.v3.catalog import ControllerPuppetV3Catalog
 
 class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
@@ -36,8 +37,12 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_cache.get_catalog = AsyncMock(return_value=None)
         self.mock_cache.upsert = AsyncMock()
         
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"proxied": "catalog"}
+        mock_response_data = {"proxied": "catalog"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = json.dumps(mock_response_data).encode()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = mock_response_data
         self.mock_http.post.return_value = mock_response
         
         mock_request = MagicMock()
@@ -51,7 +56,9 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         with patch.object(self.controller, "_headers", return_value={}):
             result = await self.controller.post(mock_request, "node1")
         
-        self.assertEqual(result, {"proxied": "catalog"})
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(json.loads(result.body), mock_response_data)
         await asyncio.sleep(0.1) # Wait for background task
         self.mock_cache.upsert.assert_called_once()
         call_args = self.mock_cache.upsert.call_args[1]
