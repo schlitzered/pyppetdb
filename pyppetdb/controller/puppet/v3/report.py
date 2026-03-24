@@ -59,9 +59,14 @@ class ControllerPuppetV3Report(ControllerPuppetV3Base):
                 params=request.query_params,
                 headers=self._headers(request, node=nodename),
                 content=body_bytes,
+                timeout=self.config.app.puppet.timeout,
             )
 
-            return response.json()
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                media_type=response.headers.get("content-type"),
+            )
 
         except httpx.RequestError as e:
             raise HTTPException(

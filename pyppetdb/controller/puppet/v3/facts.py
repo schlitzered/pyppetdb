@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
+from fastapi import Response
 import httpx
 
 from pyppetdb.authorize import AuthorizeClientCert
@@ -67,8 +68,13 @@ class ControllerPuppetV3Facts(
                 params=request.query_params,
                 headers=self._headers(request),
                 content=body_bytes,
+                timeout=self.config.app.puppet.timeout,
             )
-            return response.json()
+            return Response(
+                content=response.content,
+                status_code=response.status_code,
+                media_type=response.headers.get("content-type"),
+            )
         except httpx.RequestError as e:
             raise HTTPException(
                 status_code=502,
