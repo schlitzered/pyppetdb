@@ -14,12 +14,10 @@ from authlib.integrations.starlette_client import OAuth
 import bonsai.asyncio
 import httpx
 from fastapi import FastAPI
-from fastapi import Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
-import pymongo
 
 import pyppetdb.controller
 import pyppetdb.controller.oauth
@@ -27,6 +25,7 @@ import pyppetdb.ca.utils
 from pyppetdb.ca.protocol import ClientCertProtocol
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.config import Config
 from pyppetdb.config import ConfigLdap as SettingsLdap
@@ -57,6 +56,7 @@ from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_authorities import CAAuthorityPost
 from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.users import UserPost
+from pyppetdb.model.ca_certificates import CACertificatePut
 
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
@@ -368,6 +368,20 @@ async def prepare_env():
     )
     env["authorize_pyppetdb"] = authorize_pyppetdb
 
+    authorize_client_cert_puppet = AuthorizeClientCert(
+        log=log,
+        trusted_cns=settings.app.puppet.trustedCns,
+        crud_ca_certificates=crud_ca_certificates,
+    )
+    env["authorize_client_cert_puppet"] = authorize_client_cert_puppet
+
+    authorize_client_cert_pdb = AuthorizeClientCert(
+        log=log,
+        trusted_cns=settings.app.puppetdb.trustedCns,
+        crud_ca_certificates=crud_ca_certificates,
+    )
+    env["authorize_client_cert_pdb"] = authorize_client_cert_pdb
+
     # Ensure default CA and Space setup
     await ensure_default_ca_setup(
         log=log,
@@ -385,6 +399,8 @@ async def lifespan_dev(app: FastAPI):
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
+        authorize_client_cert_puppet=env["authorize_client_cert_puppet"],
+        authorize_client_cert_pdb=env["authorize_client_cert_pdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
@@ -628,7 +644,6 @@ async def cli_init_ca(
     )
 
     # 4. Sign CSR
-    from pyppetdb.model.ca_certificates import CACertificatePut
 
     cert = await ca_service.update_certificate_status(
         space_id=space_id,
@@ -714,6 +729,8 @@ async def main_run():
     controller = pyppetdb.controller.Controller(
         log=env["log"],
         authorize_pyppetdb=env["authorize_pyppetdb"],
+        authorize_client_cert_puppet=env["authorize_client_cert_puppet"],
+        authorize_client_cert_pdb=env["authorize_client_cert_pdb"],
         crud_ldap=env["crud_ldap"],
         crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
         crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
