@@ -58,6 +58,7 @@ class ControllerApiV1CAAuthoritiesCerts:
             response_model=CACertificateGet,
             response_model_exclude_unset=True,
         )
+
     @property
     def router(self):
         return self._router
@@ -70,9 +71,7 @@ class ControllerApiV1CAAuthoritiesCerts:
             cert.ca = ca.certificate
             cert.ca_chain = ca.chain
         except Exception as e:
-            self._log.warning(
-                f"Failed to populate CA info for cert {cert.id}: {e}"
-            )
+            self._log.warning(f"Failed to populate CA info for cert {cert.id}: {e}")
         return cert
 
     async def search(
@@ -96,7 +95,6 @@ class ControllerApiV1CAAuthoritiesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
-        # If CA info is requested, ensure ca_id is fetched
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
@@ -129,7 +127,6 @@ class ControllerApiV1CAAuthoritiesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
-        # If CA info is requested, ensure ca_id is fetched
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
@@ -160,16 +157,13 @@ class ControllerApiV1CAAuthoritiesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
-        # Prepare fields to fetch - always include ca_id if CA info is requested
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
 
-        # cert_id is the serial number
         cert = await self._ca_service.update_certificate_status_by_ca(
             ca_id, cert_id, data, fields=fetch_fields
         )
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)
         return cert
-

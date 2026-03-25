@@ -251,7 +251,7 @@ class CAUtils:
         ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
 
         last_update = datetime.datetime.now(datetime.timezone.utc)
-        next_update = last_update + datetime.timedelta(days=1)
+        next_update = last_update + datetime.timedelta(days=1825)
 
         builder = x509.CertificateRevocationListBuilder()
         builder = builder.issuer_name(ca_cert.subject)

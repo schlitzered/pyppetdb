@@ -136,7 +136,6 @@ class ControllerApiV1CASpaces:
     ):
         await self.authorize.require_admin(request=request)
 
-        # Check if there are any certificates in this space
         count = await self.crud_ca_certificates.count({"space_id": space_id})
         if count > 0:
             raise QueryParamValidationError(

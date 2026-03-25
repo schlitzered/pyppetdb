@@ -17,39 +17,92 @@ from pyppetdb.errors import SessionCredentialError
 from pyppetdb.model.users import UserGet
 
 
+from pyppetdb.crud.ca_certificates import CrudCACertificates
+
+
 class AuthorizeClientCert:
     def __init__(
         self,
         log: logging.Logger,
         trusted_cns: list[str],
+        crud_ca_certificates: typing.Optional[CrudCACertificates] = None,
     ):
         self._log = log
         self._trusted_cns = trusted_cns
+        self._crud_ca_certificates = crud_ca_certificates
 
-    @staticmethod
-    def get_cn_from_request(request: Request) -> str | None:
-        cert_dict = request.scope.get("client_cert_dict")
-        if not cert_dict:
-            return None
-        subject = {
-            key: value for rdn in cert_dict.get("subject", []) for key, value in rdn
-        }
-        cn = subject.get("commonName")
-        if not cn:
+    @property
+    def log(self):
+        return self._log
+
+    @property
+    def crud_ca_certificates(self):
+        return self._crud_ca_certificates
+
+    async def get_cert_info(self, request: Request) -> dict | None:
+        cert = request.scope.get("client_cert_dict")
+        if not cert:
             raise ClientCertError(detail="No client certificate provided")
-        return cn
+        self.log.debug(cert)
+        subject = {key: value for rdn in cert.get("subject", []) for key, value in rdn}
+
+        serial_hex = cert.get("serialNumber")
+        if not serial_hex:
+            raise ClientCertError(detail="Certificate serial number missing")
+
+        try:
+            serial_dec = str(int(serial_hex, 16))
+        except ValueError:
+            raise ClientCertError(detail="Invalid certificate serial number format")
+
+        cert_info = {
+            "cn": subject.get("commonName"),
+            "serial": serial_dec,
+        }
+        await self._check_revocation(cert_info=cert_info)
+        return cert_info
+
+    async def _check_revocation(self, cert_info):
+        cn = cert_info["cn"]
+        serial = cert_info["serial"]
+        if self.crud_ca_certificates:
+            try:
+                cert = await self.crud_ca_certificates.get(
+                    _id=serial, fields=["status", "cn"]
+                )
+
+                if cert.cn != cn:
+                    self._log.error(
+                        f"Access denied: CN mismatch. Cert: {cn}, DB: {cert.cn}"
+                    )
+                    raise ClientCertError(detail="Certificate CN mismatch")
+
+                if cert.status != "signed":
+                    self._log.warning(
+                        f"Access denied: certificate for {cn} (serial {serial}) has status '{cert.status}'"
+                    )
+                    raise ClientCertError(detail=f"Certificate is {cert.status}")
+            except ResourceNotFound:
+                self._log.error(
+                    f"Access denied: certificate for {cn} (serial {serial}) not found in database (unauthorized certificate)"
+                )
+                raise ClientCertError(detail="Certificate not found in database")
 
     async def require_cn(self, request: Request):
-        return self.get_cn_from_request(request)
+        cert = await self.get_cert_info(request)
+        cn = cert["cn"]
+        return cn
 
     async def require_cn_match(self, request: Request, match: str):
-        cn = self.get_cn_from_request(request)
+        cert = await self.get_cert_info(request)
+        cn = cert["cn"]
         if cn != match:
             raise ClientCertError(detail=f"CN {cn} does not match {match}")
         return cn
 
     async def require_cn_trusted(self, request: Request) -> str:
-        cn = self.get_cn_from_request(request)
+        cert = await self.get_cert_info(request)
+        cn = cert["cn"]
         if cn not in self._trusted_cns:
             raise ClientCertError(
                 detail=f"CN {cn} is not in trustedCns {self._trusted_cns}"

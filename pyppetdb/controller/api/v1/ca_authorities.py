@@ -33,35 +33,35 @@ class ControllerApiV1CAAuthorities:
 
         self._router.add_api_route(
             "",
-            self.search_authorities,
+            self.search,
             methods=["GET"],
             response_model=CAAuthorityGetMulti,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{ca_id}",
-            self.create_authority,
+            self.create,
             methods=["POST"],
             response_model=CAAuthorityGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{ca_id}",
-            self.get_authority,
+            self.get,
             methods=["GET"],
             response_model=CAAuthorityGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{ca_id}",
-            self.update_authority_status,
+            self.update,
             methods=["PUT"],
             response_model=CAAuthorityGet,
             response_model_exclude_unset=True,
         )
         self._router.add_api_route(
             "/{ca_id}",
-            self.delete_authority,
+            self.delete,
             methods=["DELETE"],
             response_model=dict,
             response_model_exclude_unset=True,
@@ -71,7 +71,7 @@ class ControllerApiV1CAAuthorities:
     def router(self):
         return self._router
 
-    async def update_authority_status(
+    async def update(
         self,
         request: Request,
         ca_id: str,
@@ -80,8 +80,9 @@ class ControllerApiV1CAAuthorities:
         await self._authorize.require_admin(request=request)
         if data.status == "revoked":
             return await self._ca_service.revoke_authority(ca_id)
+        return None
 
-    async def delete_authority(
+    async def delete(
         self,
         request: Request,
         ca_id: str,
@@ -90,7 +91,7 @@ class ControllerApiV1CAAuthorities:
         await self._ca_service.delete_authority(ca_id)
         return {}
 
-    async def create_authority(
+    async def create(
         self,
         request: Request,
         ca_id: str,
@@ -102,7 +103,7 @@ class ControllerApiV1CAAuthorities:
             _id=ca_id, payload=data, fields=list(fields)
         )
 
-    async def get_authority(
+    async def get(
         self,
         request: Request,
         ca_id: str,
@@ -111,7 +112,7 @@ class ControllerApiV1CAAuthorities:
         await self._authorize.require_admin(request=request)
         return await self._crud_authorities.get(_id=ca_id, fields=list(fields))
 
-    async def search_authorities(
+    async def search(
         self,
         request: Request,
         ca_id: str = Query(description="filter: regular_expressions", default=None),
