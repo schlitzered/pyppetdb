@@ -109,11 +109,13 @@ class Controller:
         authorize_client_cert_puppet = AuthorizeClientCert(
             log=log,
             trusted_cns=config.app.puppet.trustedCns,
+            crud_ca_certificates=crud_ca_certificates,
         )
 
         authorize_client_cert_pdb = AuthorizeClientCert(
             log=log,
             trusted_cns=config.app.puppetdb.trustedCns,
+            crud_ca_certificates=crud_ca_certificates,
         )
 
         router_pdb = ControllerPdb(

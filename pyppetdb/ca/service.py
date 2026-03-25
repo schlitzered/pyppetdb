@@ -34,9 +34,7 @@ class CAService:
         self._crud_certificates = crud_certificates
 
     async def refresh_crl(self, ca_id: str) -> None:
-        ca = await self._crud_authorities.get(
-            ca_id, fields=["internal", "certificate"]
-        )
+        ca = await self._crud_authorities.get(ca_id, fields=["internal", "certificate"])
         if not ca.internal:
             return
 
@@ -58,7 +56,9 @@ class CAService:
 
     async def refresh_expiring_crls(self) -> None:
         self._log.info("Checking for expiring CRLs...")
-        ca_ids = await self._crud_authorities.find_expiring_crls(threshold_hours=4)
+        ca_ids = await self._crud_authorities.find_expiring_crls(
+            threshold_hours=24 * 30
+        )
 
         for ca_id in ca_ids:
             if await self._crud_authorities.lock_crl_acquire(ca_id):
@@ -80,7 +80,7 @@ class CAService:
                 await self.refresh_expiring_crls()
             except Exception as e:
                 self._log.error(f"Error in CRL refresh worker: {e}")
-            await asyncio.sleep(3600)  # Run once every hour
+            await asyncio.sleep(43200)  # Run once every 12 hours
 
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost
@@ -148,7 +148,7 @@ class CAService:
                     msg=f"No signed certificate found for CN '{cn}' in space '{space_id}'"
                 )
             cert = await self._crud_certificates.revoke(
-                serial=cert_doc["id"], fields=fields
+                _id=cert_doc["id"], fields=fields
             )
             space = await self._crud_spaces.get(space_id, fields=["ca_id"])
             await self.refresh_crl(space.ca_id)
@@ -166,9 +166,7 @@ class CAService:
                 msg="Cannot sign a certificate by serial number. Use space_id and CN instead."
             )
         elif data.status == "revoked":
-            cert = await self._crud_certificates.revoke(
-                serial=serial, fields=fields
-            )
+            cert = await self._crud_certificates.revoke(_id=serial, fields=fields)
             await self.refresh_crl(ca_id)
             return cert
 
