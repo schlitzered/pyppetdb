@@ -39,13 +39,11 @@ class CrudCAAuthorities(CrudMongo):
         self, _id: str, payload: CAAuthorityPost, fields: list
     ) -> CAAuthorityGet:
         if payload.certificate and payload.private_key:
-            # External upload
             internal = False
             cert_pem = payload.certificate.encode()
             key_pem = payload.private_key.encode()
             chain = payload.external_chain or []
         elif payload.parent_id:
-            # Signed by parent CA
             internal = True
             parent_ca = await self.get(
                 payload.parent_id, fields=["certificate", "chain"]
@@ -64,10 +62,8 @@ class CrudCAAuthorities(CrudMongo):
                 locality=payload.locality,
                 validity_days=payload.validity_days,
             )
-            # Chain is parent cert + parent chain
             chain = [parent_ca.certificate] + parent_ca.chain
         else:
-            # Generate new self-signed
             internal = True
             if not payload.common_name:
                 payload.common_name = f"PyppetDB CA {_id}"
@@ -96,7 +92,6 @@ class CrudCAAuthorities(CrudMongo):
             **info,
         }
 
-        # Initialize initial CRL (empty, no revoked certs yet) for internal CAs
         if internal:
             crl_pem, next_update = CAUtils.generate_crl(
                 ca_cert_pem=cert_pem, ca_key_pem=key_pem, revoked_certs=[]
@@ -192,7 +187,6 @@ class CrudCAAuthorities(CrudMongo):
         ca_key_pem: bytes,
         revoked_certs: List[dict],
     ) -> CACRL:
-        """Generate and update CRL for a CA. CRL must already exist."""
         crl_pem, next_update = CAUtils.generate_crl(
             ca_cert_pem=ca_cert_pem,
             ca_key_pem=ca_key_pem,
@@ -200,7 +194,6 @@ class CrudCAAuthorities(CrudMongo):
         )
 
         while True:
-            # Get current CA document
             ca_doc = await self.coll.find_one({"id": ca_id}, {"crl": 1})
             if not ca_doc:
                 raise Exception(f"CA {ca_id} not found")
@@ -210,7 +203,6 @@ class CrudCAAuthorities(CrudMongo):
             current_generation = ca_doc["crl"]["generation"]
             now = datetime.datetime.now(datetime.timezone.utc)
 
-            # Update with generation check to prevent race conditions
             result = await self.coll.update_one(
                 {"id": ca_id, "crl.generation": current_generation},
                 {
@@ -224,7 +216,6 @@ class CrudCAAuthorities(CrudMongo):
                 },
             )
             if result.modified_count > 0:
-                # Get updated CRL
                 updated = await self.coll.find_one({"id": ca_id}, {"crl": 1})
                 return CACRL(**updated["crl"])
 
@@ -233,7 +224,6 @@ class CrudCAAuthorities(CrudMongo):
         ca_id: str,
         lock_timeout_minutes: int = 10,
     ) -> bool:
-        """Acquire lock for CRL update"""
         now = datetime.datetime.now(datetime.timezone.utc)
         timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
 
@@ -250,16 +240,11 @@ class CrudCAAuthorities(CrudMongo):
         return result.modified_count > 0
 
     async def lock_crl_release(self, ca_id: str) -> None:
-        """Release lock for CRL update"""
         await self.coll.update_one({"id": ca_id}, {"$set": {"crl.locked_at": None}})
 
     async def find_expiring_crls(self, threshold_hours: int = 4) -> List[str]:
-        """Find CAs with expiring CRLs"""
         threshold = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
             hours=threshold_hours
         )
-        cursor = self.coll.find(
-            {"crl.next_update": {"$lt": threshold}},
-            {"id": 1}
-        )
+        cursor = self.coll.find({"crl.next_update": {"$lt": threshold}}, {"id": 1})
         return [doc["id"] async for doc in cursor]

@@ -23,43 +23,61 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
             "subject": (
                 (("commonName", "admin.example.com"),),
                 (("organizationName", "PyppetDB"),),
-            )
+            ),
+            "serialNumber": "01",
         }
         mock_request = self._create_mock_request(cert_dict)
-        cn = self.auth.get_cert_info(mock_request)
-        self.assertEqual(cn, "admin.example.com")
+        cert_info = await self.auth.get_cert_info(mock_request)
+        self.assertEqual(cert_info["cn"], "admin.example.com")
+        self.assertEqual(cert_info["serial"], "1")
 
     async def test_get_cn_from_request_no_cert(self):
         mock_request = self._create_mock_request(None)
-        cn = self.auth.get_cert_info(mock_request)
-        self.assertIsNone(cn)
+        with self.assertRaises(ClientCertError) as cm:
+            await self.auth.get_cert_info(mock_request)
+        self.assertEqual(cm.exception.detail, "No client certificate provided")
 
     async def test_require_cn(self):
-        cert_dict = {"subject": ((("commonName", "any.example.com"),),)}
+        cert_dict = {
+            "subject": ((("commonName", "any.example.com"),),),
+            "serialNumber": "02",
+        }
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn(mock_request)
         self.assertEqual(cn, "any.example.com")
 
     async def test_require_cn_trusted_success(self):
-        cert_dict = {"subject": ((("commonName", "admin.example.com"),),)}
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "03",
+        }
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn_trusted(mock_request)
         self.assertEqual(cn, "admin.example.com")
 
     async def test_require_cn_trusted_untrusted(self):
-        cert_dict = {"subject": ((("commonName", "untrusted.example.com"),),)}
+        cert_dict = {
+            "subject": ((("commonName", "untrusted.example.com"),),),
+            "serialNumber": "04",
+        }
         mock_request = self._create_mock_request(cert_dict)
         with self.assertRaises(ClientCertError):
             await self.auth.require_cn_trusted(mock_request)
 
     async def test_require_cn_match_success(self):
-        cert_dict = {"subject": ((("commonName", "match.example.com"),),)}
+        cert_dict = {
+            "subject": ((("commonName", "match.example.com"),),),
+            "serialNumber": "05",
+        }
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn_match(mock_request, "match.example.com")
         self.assertEqual(cn, "match.example.com")
 
     async def test_require_cn_match_failure(self):
-        cert_dict = {"subject": ((("commonName", "no-match.example.com"),),)}
+        cert_dict = {
+            "subject": ((("commonName", "no-match.example.com"),),),
+            "serialNumber": "06",
+        }
         mock_request = self._create_mock_request(cert_dict)
         with self.assertRaises(ClientCertError):
             await self.auth.require_cn_match(mock_request, "match.example.com")

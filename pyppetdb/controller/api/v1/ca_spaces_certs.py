@@ -98,7 +98,6 @@ class ControllerApiV1CASpacesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
-        # If CA info is requested, ensure ca_id is fetched
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
@@ -131,12 +130,10 @@ class ControllerApiV1CASpacesCerts:
     ):
         await self._authorize.require_admin(request=request)
 
-        # If CA info is requested, ensure ca_id is fetched
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
 
-        # Query by serial number (cert_id is the serial)
         multi = await self._crud_certificates.search(
             _id=f"^{cert_id}$",
             space_id=space_id,
@@ -163,8 +160,6 @@ class ControllerApiV1CASpacesCerts:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self._authorize.require_admin(request=request)
-        # cert_id is the serial number, but service needs CN for signing
-        # Get the certificate to extract CN and ca_id
         cert_doc = await self._crud_certificates.coll.find_one(
             {"id": cert_id, "space_id": space_id}
         )
@@ -175,18 +170,15 @@ class ControllerApiV1CASpacesCerts:
                 msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
 
-        # Prepare fields to fetch - always include ca_id if CA info is requested
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
 
         if data.status == "signed":
-            # Use CN-based method for signing
             cert = await self._ca_service.update_certificate_status(
                 space_id, cert_doc["cn"], data, fields=fetch_fields
             )
         elif data.status == "revoked":
-            # Use CA-based method for revoking by serial
             cert = await self._ca_service.update_certificate_status_by_ca(
                 cert_doc["ca_id"], cert_id, data, fields=fetch_fields
             )

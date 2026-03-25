@@ -23,13 +23,10 @@ class CrudCACertificates(CrudMongo):
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
-        # Serial number is globally unique (id field)
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        # Index for querying by space and CN
         await self.coll.create_index(
             [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)]
         )
-        # Index for querying by CA
         await self.coll.create_index([("ca_id", pymongo.ASCENDING)])
         self.log.info(f"creating {self.resource_type} indices, done")
 
@@ -40,12 +37,9 @@ class CrudCACertificates(CrudMongo):
         ca_id: str,
         fields: list,
     ) -> CACertificateGet:
-        """Submit a CSR. Updates existing pending CSR if present."""
-        # Extract CN from CSR
         csr_info = CAUtils.get_csr_info(csr_pem.encode())
         cn = csr_info["cn"]
 
-        # Check if a pending CSR already exists for this CN in this space
         existing_csr = await self.coll.find_one(
             {"space_id": space_id, "cn": cn, "status": "requested"}
         )
@@ -66,7 +60,6 @@ class CrudCACertificates(CrudMongo):
                 },
             )
         else:
-            # Generate random integer for the ID (will be used as serial number when signed)
             import uuid
 
             new_id = str(uuid.uuid4().int)
@@ -95,8 +88,6 @@ class CrudCACertificates(CrudMongo):
         ca_key_pem: bytes,
         fields: list,
     ) -> CACertificateGet:
-        """Sign a CSR identified by space_id and CN. Uses the existing ID as serial number."""
-        # Find the pending CSR by space_id and CN with status "requested"
         cert_data = await self.coll.find_one(
             {"space_id": space_id, "cn": cn, "status": "requested"}
         )
@@ -116,17 +107,14 @@ class CrudCACertificates(CrudMongo):
 
         info = CAUtils.get_cert_info(cert_pem)
 
-        # Update the document with cert info
         updates = {"status": "signed", "certificate": cert_pem.decode(), **info}
 
         await self.coll.update_one({"_id": cert_data["_id"]}, {"$set": updates})
 
-        # Return the signed certificate
         result = await self._get(query={"id": serial}, fields=fields)
         return CACertificateGet(**result)
 
     async def revoke(self, _id: str, fields: list) -> CACertificateGet:
-        """Revoke a certificate by its serial number."""
         cert_data = await self._get(query={"id": _id}, fields=[])
         if cert_data["status"] != "signed":
             raise QueryParamValidationError(
@@ -142,7 +130,6 @@ class CrudCACertificates(CrudMongo):
         return CACertificateGet(**result)
 
     async def get(self, _id: str, fields: list) -> CACertificateGet:
-        """Get a certificate by its serial number (ID)."""
         result = await self._get(query={"id": _id}, fields=fields)
         return CACertificateGet(**result)
 
