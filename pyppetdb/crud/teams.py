@@ -48,6 +48,11 @@ class CrudTeams(CrudMongo):
                 ("users", pymongo.ASCENDING),
             ]
         )
+        await self.coll.create_index(
+            [
+                ("permissions", pymongo.ASCENDING),
+            ]
+        )
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
@@ -72,6 +77,14 @@ class CrudTeams(CrudMongo):
     async def delete_user_from_teams(self, user_id):
         query = {}
         update = {"$pull": {"users": user_id}}
+        await self._coll.update_many(
+            filter=query,
+            update=update,
+        )
+
+    async def drop_permissions_by_pattern(self, pattern: str):
+        query = {"permissions": {"$regex": pattern}}
+        update = {"$pull": {"permissions": {"$regex": pattern}}}
         await self._coll.update_many(
             filter=query,
             update=update,

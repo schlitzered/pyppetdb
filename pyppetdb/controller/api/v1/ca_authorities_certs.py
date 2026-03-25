@@ -93,7 +93,7 @@ class ControllerApiV1CAAuthoritiesCerts:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_user(request=request)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -125,7 +125,7 @@ class ControllerApiV1CAAuthoritiesCerts:
         cert_id: str,
         fields: Set[cert_filter_literal] = Query(default=cert_filter_list),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_user(request=request)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -155,7 +155,9 @@ class ControllerApiV1CAAuthoritiesCerts:
         data: CACertificatePut,
         fields: Set[cert_filter_literal] = Query(default=cert_filter_list),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_perm(
+            request=request, permission=f"CA:AUTHORITIES:{ca_id}:CERTS:UPDATE"
+        )
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:

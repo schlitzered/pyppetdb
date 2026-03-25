@@ -55,6 +55,11 @@ class AdminError(HTTPException):
         )
 
 
+class PermissionError(HTTPException):
+    def __init__(self, msg="Permission denied"):
+        super(PermissionError, self).__init__(status_code=403, detail=msg)
+
+
 class CredentialError(HTTPException):
     def __init__(self):
         super(CredentialError, self).__init__(

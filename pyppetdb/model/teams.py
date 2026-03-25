@@ -11,6 +11,7 @@ filter_literal = Literal[
     "id",
     "ldap_group",
     "users",
+    "permissions",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -22,6 +23,7 @@ class TeamGet(BaseModel):
     id: Optional[StrictStr] = None
     ldap_group: Optional[StrictStr] = ""
     users: Optional[List[StrictStr]] = None
+    permissions: Optional[List[StrictStr]] = None
 
 
 class TeamGetMulti(BaseModel):
@@ -32,8 +34,10 @@ class TeamGetMulti(BaseModel):
 class TeamPost(BaseModel):
     ldap_group: Optional[StrictStr] = ""
     users: Optional[List[StrictStr]] = []
+    permissions: Optional[List[StrictStr]] = []
 
 
 class TeamPut(BaseModel):
     ldap_group: Optional[StrictStr] = None
     users: Optional[List[StrictStr]] = None
+    permissions: Optional[List[StrictStr]] = None

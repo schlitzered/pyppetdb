@@ -96,7 +96,7 @@ class ControllerApiV1CASpacesCerts:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_user(request=request)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -128,7 +128,7 @@ class ControllerApiV1CASpacesCerts:
         cert_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_user(request=request)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -159,7 +159,9 @@ class ControllerApiV1CASpacesCerts:
         data: CACertificatePut,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_perm(
+            request=request, permission=f"CA:SPACES:{space_id}:CERTS:UPDATE"
+        )
         cert_doc = await self._crud_certificates.coll.find_one(
             {"id": cert_id, "space_id": space_id}
         )

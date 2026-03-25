@@ -8,6 +8,7 @@ from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.ca_spaces import CASpaceGet
@@ -28,6 +29,7 @@ class ControllerApiV1CASpaces:
         crud_ca_spaces: CrudCASpaces,
         crud_ca_authorities: CrudCAAuthorities,
         crud_ca_certificates: CrudCACertificates,
+        crud_teams: CrudTeams,
         ca_service: CAService,
     ):
         self._log = log
@@ -35,6 +37,7 @@ class ControllerApiV1CASpaces:
         self._crud_ca_spaces = crud_ca_spaces
         self._crud_ca_authorities = crud_ca_authorities
         self._crud_ca_certificates = crud_ca_certificates
+        self._crud_teams = crud_teams
         self._ca_service = ca_service
         self._router = APIRouter(prefix="/ca/spaces", tags=["ca spaces"])
 
@@ -101,7 +104,7 @@ class ControllerApiV1CASpaces:
         data: CASpacePut,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission="CA:SPACES:UPDATE")
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
         return await self.crud_ca_spaces.update(
@@ -115,7 +118,7 @@ class ControllerApiV1CASpaces:
         data: CASpacePost,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission="CA:SPACES:CREATE")
         return await self.crud_ca_spaces.create(
             _id=space_id, payload=data, fields=list(fields)
         )
@@ -126,7 +129,7 @@ class ControllerApiV1CASpaces:
         space_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_ca_spaces.get(_id=space_id, fields=list(fields))
 
     async def delete(
@@ -134,7 +137,7 @@ class ControllerApiV1CASpaces:
         request: Request,
         space_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission="CA:SPACES:DELETE")
 
         count = await self.crud_ca_certificates.count({"space_id": space_id})
         if count > 0:
@@ -143,6 +146,7 @@ class ControllerApiV1CASpaces:
             )
 
         await self.crud_ca_spaces.delete(_id=space_id)
+        await self._crud_teams.drop_permissions_by_pattern(f"^CA:SPACES:{space_id}:")
         return {}
 
     async def search(
@@ -161,7 +165,7 @@ class ControllerApiV1CASpaces:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_ca_spaces.search(
             _id=space_id,
             ca_id=ca_id,

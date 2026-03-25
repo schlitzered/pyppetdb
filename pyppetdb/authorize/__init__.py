@@ -11,6 +11,7 @@ from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.errors import AdminError
 from pyppetdb.errors import ClientCertError
 from pyppetdb.errors import CredentialError
+from pyppetdb.errors import PermissionError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import SessionCredentialError
 
@@ -192,3 +193,19 @@ class AuthorizePyppetDB:
     async def require_user(self, request) -> UserGet:
         user = await self.get_user(request)
         return user
+
+    async def require_perm(
+        self, request: Request, permission: str, user=None
+    ) -> UserGet:
+        if not user:
+            user = await self.get_user(request=request)
+        if user.admin:
+            return user
+
+        teams = await self.crud_teams.search(
+            users=f"^{user.id}$", permissions=f"^{permission}$", fields=["id"]
+        )
+        if teams.meta.result_size > 0:
+            return user
+
+        raise PermissionError(msg=f"Permission {permission} required")
