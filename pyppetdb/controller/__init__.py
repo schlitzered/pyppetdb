@@ -42,6 +42,8 @@ class Controller:
         self,
         log: logging.Logger,
         authorize_pyppetdb: AuthorizePyppetDB,
+        authorize_client_cert_puppet: AuthorizeClientCert,
+        authorize_client_cert_pdb: AuthorizeClientCert,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -105,18 +107,6 @@ class Controller:
             crud_users=crud_users,
             http=http,
         ).router
-
-        authorize_client_cert_puppet = AuthorizeClientCert(
-            log=log,
-            trusted_cns=config.app.puppet.trustedCns,
-            crud_ca_certificates=crud_ca_certificates,
-        )
-
-        authorize_client_cert_pdb = AuthorizeClientCert(
-            log=log,
-            trusted_cns=config.app.puppetdb.trustedCns,
-            crud_ca_certificates=crud_ca_certificates,
-        )
 
         router_pdb = ControllerPdb(
             log=log,
