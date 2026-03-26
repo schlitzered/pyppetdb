@@ -7,28 +7,37 @@ import httpx
 from fastapi import Response
 from pyppetdb.controller.puppet.v3.catalog import ControllerPuppetV3Catalog
 
+
 class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_http = AsyncMock(spec=httpx.AsyncClient)
         self.mock_cache = MagicMock()
+        self.mock_cache.upsert = AsyncMock()
+        self.mock_nodes = AsyncMock()
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
         self.mock_auth_cert.require_cn_match = AsyncMock()
-        
+
         self.mock_config.app.puppet.catalogCache = True
         self.mock_config.app.puppet.serverurl = "http://puppetmaster"
         self.mock_config.app.puppet.catalogCacheFacts = ["osfamily"]
-        
+        self.mock_config.app.puppet.timeout = 10
+
         self.controller = ControllerPuppetV3Catalog(
-            self.log, self.mock_config, self.mock_http, self.mock_auth_cert, self.mock_cache
+            self.log,
+            self.mock_config,
+            self.mock_http,
+            self.mock_auth_cert,
+            self.mock_nodes,
+            self.mock_cache,
         )
 
     async def test_post_cached(self):
         self.mock_cache.get_catalog = AsyncMock(return_value={"resources": []})
         mock_request = MagicMock()
-        
+
         result = await self.controller.post(mock_request, "node1")
         self.assertEqual(result, {"resources": []})
         self.mock_cache.get_catalog.assert_called_once_with(node_id="node1")
@@ -36,7 +45,8 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
     async def test_post_not_cached_proxy_and_store(self):
         self.mock_cache.get_catalog = AsyncMock(return_value=None)
         self.mock_cache.upsert = AsyncMock()
-        
+        self.mock_nodes.get = AsyncMock(return_value=None)
+
         mock_response_data = {"proxied": "catalog"}
         mock_response = MagicMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -44,29 +54,129 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         mock_response.headers = {"Content-Type": "application/json"}
         mock_response.json.return_value = mock_response_data
         self.mock_http.post.return_value = mock_response
-        
+
         mock_request = MagicMock()
         facts_data = {"values": {"osfamily": "RedHat"}}
         # FastAPI request.form() mock
         mock_request.form = AsyncMock(return_value={"facts": json.dumps(facts_data)})
         mock_request.headers = {}
         mock_request.query_params = {}
-        
+
         # Mock _headers from base class
         with patch.object(self.controller, "_headers", return_value={}):
             result = await self.controller.post(mock_request, "node1")
-        
+
         self.assertIsInstance(result, Response)
         self.assertEqual(result.status_code, 200)
         self.assertEqual(json.loads(result.body), mock_response_data)
-        await asyncio.sleep(0.1) # Wait for background task
+        await asyncio.sleep(0.1)  # Wait for background task
         self.mock_cache.upsert.assert_called_once()
         call_args = self.mock_cache.upsert.call_args[1]
         self.assertEqual(call_args["facts"], {"osfamily": "RedHat"})
 
+    async def test_post_facts_injection(self):
+        from pyppetdb.model.nodes import NodeGet
+        import urllib.parse
+
+        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+
+        # Mock node with facts_inject
+        mock_node = MagicMock(spec=NodeGet)
+        mock_node.facts_inject = {"location": "Frankfurt"}
+        self.mock_nodes.get = AsyncMock(return_value=mock_node)
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = b'{"catalog": "data"}'
+        mock_response.headers = {"Content-Type": "application/json"}
+        self.mock_http.post.return_value = mock_response
+
+        mock_request = MagicMock()
+        facts_data = {"values": {"osfamily": "RedHat"}, "name": "node1"}
+        mock_request.form = AsyncMock(return_value={"facts": json.dumps(facts_data)})
+        mock_request.query_params = {}
+
+        with patch.object(self.controller, "_headers", return_value={}):
+            await self.controller.post(mock_request, "node1")
+
+        # Verify httpx.post call args
+        call_args = self.mock_http.post.call_args
+        sent_data = call_args[1]["data"]
+        # Use unquote in case it was quoted by the controller's logic
+        sent_facts = json.loads(urllib.parse.unquote(sent_data["facts"]))
+        self.assertEqual(sent_facts["values"]["pyppetdb"], {"location": "Frankfurt"})
+
+    async def test_post_node_not_found_no_injection(self):
+        from pyppetdb.errors import ResourceNotFound
+
+        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        self.mock_nodes.get.side_effect = ResourceNotFound()
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = b'{"catalog": "data"}'
+        mock_response.headers = {"Content-Type": "application/json"}
+        self.mock_http.post.return_value = mock_response
+
+        mock_request = MagicMock()
+        facts_data = {"values": {"osfamily": "RedHat"}, "name": "node1"}
+        original_facts_json = json.dumps(facts_data)
+        mock_request.form = AsyncMock(return_value={"facts": original_facts_json})
+        mock_request.query_params = {}
+
+        with patch.object(self.controller, "_headers", return_value={}):
+            await self.controller.post(mock_request, "node1")
+
+        # Verify httpx.post call args
+        call_args = self.mock_http.post.call_args
+        sent_data = call_args[1]["data"]
+        # Should be original facts
+        self.assertEqual(sent_data["facts"], original_facts_json)
+
+    async def test_post_facts_injection_quoted(self):
+        from pyppetdb.model.nodes import NodeGet
+        import urllib.parse
+
+        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        mock_node = MagicMock(spec=NodeGet)
+        mock_node.facts_inject = {"location": "Frankfurt"}
+        self.mock_nodes.get = AsyncMock(return_value=mock_node)
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.content = b'{"catalog": "data"}'
+        mock_response.headers = {"Content-Type": "application/json"}
+        self.mock_http.post.return_value = mock_response
+
+        mock_request = MagicMock()
+        facts_data = {"values": {"osfamily": "RedHat"}}
+        facts_json = json.dumps(facts_data, separators=(",", ":"))
+        quoted_facts = urllib.parse.quote(facts_json, safe="")
+
+        # Simulate double encoded: request.form() returns the first level decoded
+        mock_request.form = AsyncMock(return_value={"facts": quoted_facts})
+        mock_request.query_params = {}
+
+        with patch.object(self.controller, "_headers", return_value={}):
+            await self.controller.post(mock_request, "node1")
+
+        call_args = self.mock_http.post.call_args
+        sent_data = call_args[1]["data"]
+        sent_facts_raw = sent_data["facts"]
+
+        # It should be quoted back to match original format
+        self.assertTrue(sent_facts_raw.startswith("%7B"))
+
+        unquoted_sent_facts = json.loads(urllib.parse.unquote(sent_facts_raw))
+        self.assertEqual(
+            unquoted_sent_facts["values"]["pyppetdb"], {"location": "Frankfurt"}
+        )
+
     def test_extract_nested_fact(self):
         facts = {"os": {"family": "RedHat"}}
-        self.assertEqual(self.controller._extract_nested_fact(facts, "os.family"), "RedHat")
+        self.assertEqual(
+            self.controller._extract_nested_fact(facts, "os.family"), "RedHat"
+        )
         self.assertIsNone(self.controller._extract_nested_fact(facts, "os.unknown"))
 
     def test_filter_facts(self):

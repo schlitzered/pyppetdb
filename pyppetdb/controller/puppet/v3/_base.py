@@ -41,7 +41,9 @@ class ControllerPuppetV3Base:
 
     @staticmethod
     def _headers(request: Request, node: str = "dummy"):
-        headers = dict(request.headers)
+        # Use a case-insensitive approach to exclude headers that must be recalculated
+        exclude = {"content-length"}
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in exclude}
         headers["X-Client-Verify"] = "SUCCESS"
         headers["X-Client-DN"] = f"CN={node}"
         return headers
