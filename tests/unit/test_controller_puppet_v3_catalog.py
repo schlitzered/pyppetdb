@@ -76,6 +76,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_post_facts_injection(self):
         from pyppetdb.model.nodes import NodeGet
+        import urllib.parse
 
         self.mock_cache.get_catalog = AsyncMock(return_value=None)
 
@@ -101,7 +102,8 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         # Verify httpx.post call args
         call_args = self.mock_http.post.call_args
         sent_data = call_args[1]["data"]
-        sent_facts = json.loads(sent_data["facts"])
+        # Use unquote in case it was quoted by the controller's logic
+        sent_facts = json.loads(urllib.parse.unquote(sent_data["facts"]))
         self.assertEqual(sent_facts["values"]["pyppetdb"], {"location": "Frankfurt"})
 
     async def test_post_node_not_found_no_injection(self):
