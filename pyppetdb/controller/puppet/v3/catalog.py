@@ -13,7 +13,9 @@ import httpx
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
+from pyppetdb.errors import ResourceNotFound
 
 
 class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
@@ -24,6 +26,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         config: Config,
         http: httpx.AsyncClient,
         authorize_client_cert: AuthorizeClientCert,
+        crud_nodes: typing.Optional[CrudNodes] = None,
         crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         super().__init__(
@@ -32,6 +35,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             http=http,
             authorize_client_cert=authorize_client_cert,
         )
+        self._crud_nodes = crud_nodes
         self._crud_nodes_catalog_cache = crud_nodes_catalog_cache
         self._router = APIRouter(
             prefix="/catalog",
@@ -53,6 +57,10 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             methods=["POST"],
             status_code=200,
         )
+
+    @property
+    def crud_nodes(self):
+        return self._crud_nodes
 
     @property
     def crud_nodes_catalog_cache(self):
@@ -107,62 +115,74 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             detail="GET method not allowed - this endpoint is deprecated",
         )
 
-    async def post(
-        self,
-        request: Request,
-        nodename: str,
-    ):
+    async def post(self, request: Request, nodename: str):
         await self.authorize_client_cert.require_cn_match(request, nodename)
+
+        # Check cache
         if self.config.app.puppet.catalogCache:
-            cached_catalog = await self.crud_nodes_catalog_cache.get_catalog(
+            if cached_catalog := await self.crud_nodes_catalog_cache.get_catalog(
                 node_id=nodename
-            )
-            if cached_catalog is not None:
+            ):
                 self.log.debug(f"Serving cached catalog for node {nodename}")
                 return cached_catalog
 
-        self.log.info(f"Catalog for {nodename} not found in cache, falling back to puppet server")
+        # Validate puppet server config
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"
             )
 
-        target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/catalog/{nodename}"
+        self.log.info(
+            f"Catalog for {nodename} not found in cache, falling back to puppet server"
+        )
 
+        # Inject custom facts if needed
         body = await request.form()
+        if facts_raw := body.get("facts"):
+            try:
+                node = await self._crud_nodes.get(_id=nodename, fields=["facts_inject"])
+                if node and node.facts_inject:
+                    facts_json = json.loads(urllib.parse.unquote(facts_raw))
+                    facts_json.setdefault("values", {})["pyppetdb"] = node.facts_inject
+                    body = dict(body)
+                    body["facts"] = urllib.parse.quote(
+                        json.dumps(facts_json, separators=(",", ":")), safe=""
+                    )
+            except ResourceNotFound:
+                pass
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+                self.log.warning(f"Failed to inject facts for node {nodename}: {e}")
 
         try:
             response = await self._http.post(
-                url=target_url,
+                url=f"{self.config.app.puppet.serverurl}/puppet/v3/catalog/{nodename}",
                 params=request.query_params,
                 headers=self._headers(request, node=nodename),
                 data=body,
                 timeout=self.config.app.puppet.timeout,
             )
-            if response.is_success and self.config.app.puppet.catalogCache:
-                catalog = response.json()
-                facts_raw = body.get("facts")
-                if facts_raw:
-                    try:
 
-                        facts_str = urllib.parse.unquote(facts_raw)
-                        facts_dict = json.loads(facts_str).get("values", {})
-
-                        filtered_facts = self._filter_facts(
-                            facts_dict, self.config.app.puppet.catalogCacheFacts
+            if (
+                response.is_success
+                and self.config.app.puppet.catalogCache
+                and (facts_raw := body.get("facts"))
+            ):
+                try:
+                    facts_dict = json.loads(urllib.parse.unquote(facts_raw)).get(
+                        "values", {}
+                    )
+                    filtered_facts = self._filter_facts(
+                        facts_dict, self.config.app.puppet.catalogCacheFacts
+                    )
+                    asyncio.create_task(
+                        self._store_to_cache_async(
+                            nodename, filtered_facts, response.json()
                         )
-
-                        asyncio.create_task(
-                            self._store_to_cache_async(
-                                node_id=nodename,
-                                facts=filtered_facts,
-                                catalog=catalog,
-                            )
-                        )
-                    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-                        self.log.warning(
-                            f"Failed to parse facts for caching node {nodename}: {e}"
-                        )
+                    )
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+                    self.log.warning(
+                        f"Failed to parse facts for caching node {nodename}: {e}"
+                    )
 
             return Response(
                 content=response.content,

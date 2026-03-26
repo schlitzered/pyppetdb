@@ -122,6 +122,7 @@ class Controller:
             log=log,
             config=config,
             http=http,
+            crud_nodes=crud_nodes,
             crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             authorize_client_cert=authorize_client_cert_puppet,
         ).router

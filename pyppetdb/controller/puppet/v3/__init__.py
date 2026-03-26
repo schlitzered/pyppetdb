@@ -15,6 +15,7 @@ from pyppetdb.controller.puppet.v3.file_content import ControllerPuppetV3FileCon
 from pyppetdb.controller.puppet.v3.file_metadata import ControllerPuppetV3FileMetadata
 from pyppetdb.controller.puppet.v3.node import ControllerPuppetV3Node
 from pyppetdb.controller.puppet.v3.report import ControllerPuppetV3Report
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 
 
@@ -25,6 +26,7 @@ class ControllerPuppetV3:
         config: Config,
         http: httpx.AsyncClient,
         authorize_client_cert: AuthorizeClientCert,
+        crud_nodes: typing.Optional[CrudNodes] = None,
         crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
     ):
         self._log = log
@@ -38,6 +40,7 @@ class ControllerPuppetV3:
                 config=config,
                 http=http,
                 authorize_client_cert=authorize_client_cert,
+                crud_nodes=crud_nodes,
                 crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             ).router,
             responses={404: {"description": "Not found"}},

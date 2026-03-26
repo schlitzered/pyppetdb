@@ -24,7 +24,7 @@ filter_literal = Literal[
     "disabled",
     "environment",
     "facts",
-    "facts_override",
+    "facts_inject",
     "report",
     "report.catalog_uuid",
     "report.status",
@@ -131,7 +131,7 @@ class NodeGet(BaseModel):
     environment: str = None
     facts: Optional[Dict] = None
     report: Optional[NodeGetReport] = None
-    facts_override: Optional[Dict[str, str]] = None
+    facts_inject: Optional[Dict[str, str]] = None
 
 
 class NodeGetMultiMeta(MetaMulti):
@@ -149,7 +149,7 @@ class NodeGetMulti(BaseModel):
 
 class NodePut(BaseModel):
     disabled: Optional[bool] = False
-    facts_override: Optional[Dict[str, str]] = None
+    facts_inject: Optional[Dict[str, str]] = None
 
 
 class NodePutInternal(BaseModel):
@@ -161,7 +161,7 @@ class NodePutInternal(BaseModel):
     disabled: Optional[bool] = False
     environment: str = None
     facts: Optional[Dict] = None
-    facts_override: Optional[Dict[str, str]] = None
+    facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None
     node_groups: Optional[List[str]] = None
 
