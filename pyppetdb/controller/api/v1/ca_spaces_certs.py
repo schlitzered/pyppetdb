@@ -82,6 +82,7 @@ class ControllerApiV1CASpacesCerts:
         request: Request,
         space_id: str,
         cert_id: str = Query(description="filter: regular_expressions", default=None),
+        cn: str = Query(description="filter: regular_expressions", default=None),
         status: CAStatus = Query(default=None),
         fingerprint: str = Query(default=None),
         serial_number: str = Query(default=None),
@@ -105,6 +106,7 @@ class ControllerApiV1CASpacesCerts:
         multi = await self._crud_certificates.search(
             _id=cert_id,
             space_id=space_id,
+            cn=cn,
             status=status,
             fingerprint=fingerprint,
             serial_number=serial_number,

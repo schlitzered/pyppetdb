@@ -277,3 +277,40 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200)
         self.assertIsNotNone(resp.json().get("crl"))
         self.assertIn("BEGIN X509 CRL", resp.json()["crl"]["crl_pem"])
+
+    def test_search_certs_by_cn(self):
+        ca_id = f"ca-search-test-{uuid.uuid4().hex}"
+        space_id = f"space-search-test-{uuid.uuid4().hex}"
+        cert_cn = "test-cert-to-search"
+        cert_id = str(uuid.uuid4().int)
+
+        # 1. Setup
+        self.client.post(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers(), json={"cn": "Search Test Auth"})
+        self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": ca_id})
+
+        # 2. Insert cert
+        self._db["ca_certificates"].insert_one({
+            "id": cert_id,
+            "space_id": space_id,
+            "ca_id": ca_id,
+            "cn": cert_cn,
+            "status": "signed",
+            "created": datetime.datetime.now(datetime.timezone.utc)
+        })
+
+        # 3. Search by CN on spaces endpoint
+        resp = self.client.get(f"/api/v1/ca/spaces/{space_id}/certs", headers=self._auth_headers(), params={"cn": cert_cn})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()["result"]), 1)
+        self.assertEqual(resp.json()["result"][0]["cn"], cert_cn)
+
+        # 4. Search by CN on authorities endpoint
+        resp = self.client.get(f"/api/v1/ca/authorities/{ca_id}/certs", headers=self._auth_headers(), params={"cn": cert_cn})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(resp.json()["result"]), 1)
+        self.assertEqual(resp.json()["result"][0]["cn"], cert_cn)
+
+        # 5. Search with regex
+        resp = self.client.get(f"/api/v1/ca/spaces/{space_id}/certs", headers=self._auth_headers(), params={"cn": "test-cert-.*"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(len(resp.json()["result"]) >= 1)

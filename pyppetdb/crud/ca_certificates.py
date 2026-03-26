@@ -156,6 +156,7 @@ class CrudCACertificates(CrudMongo):
         _id: typing.Optional[str] = None,
         space_id: typing.Optional[str] = None,
         ca_id: typing.Optional[str] = None,
+        cn: typing.Optional[str] = None,
         status: typing.Optional[CAStatus] = None,
         fingerprint: typing.Optional[str] = None,
         serial_number: typing.Optional[str] = None,
@@ -167,12 +168,10 @@ class CrudCACertificates(CrudMongo):
     ) -> CACertificateGetMulti:
         query = {}
         self._filter_re(query, "id", _id)
-        if space_id:
-            query["space_id"] = space_id
-        if ca_id:
-            query["ca_id"] = ca_id
-        if status:
-            query["status"] = status
+        self._filter_literal(query, "space_id", space_id)
+        self._filter_literal(query, "ca_id", ca_id)
+        self._filter_literal(query, "status", status)
+        self._filter_re(query, "cn", cn)
         self._filter_re(query, "fingerprint.sha256", fingerprint)
         self._filter_re(query, "serial_number", serial_number)
 
