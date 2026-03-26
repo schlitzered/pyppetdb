@@ -127,7 +127,7 @@ class ControllerApiV1CAAuthorities:
         request: Request,
         ca_id: str = Query(description="filter: regular_expressions", default=None),
         parent_id: str = Query(description="filter: regular_expressions", default=None),
-        common_name: str = Query(
+        cn: str = Query(
             description="filter: regular_expressions", default=None
         ),
         fingerprint: str = Query(
@@ -149,7 +149,7 @@ class ControllerApiV1CAAuthorities:
         return await self._crud_authorities.search(
             _id=ca_id,
             parent_id=parent_id,
-            common_name=common_name,
+            cn=cn,
             fingerprint=fingerprint,
             internal=internal,
             fields=list(fields),

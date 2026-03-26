@@ -17,7 +17,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/authorities/{ca_id}",
             headers=self._auth_headers(),
             json={
-                "common_name": "Root CA",
+                "cn": "Root CA",
                 "organization": "Test Org"
             }
         )
@@ -40,7 +40,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={
                 "parent_id": ca_id,
-                "common_name": "Sub CA"
+                "cn": "Sub CA"
             }
         )
         self.assertEqual(resp.status_code, 200)
@@ -134,7 +134,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
 
     def test_external_ca_upload(self):
         from pyppetdb.ca.utils import CAUtils
-        cert_pem, key_pem = CAUtils.generate_ca(common_name="External CA")
+        cert_pem, key_pem = CAUtils.generate_ca(cn="External CA")
         ca_id = f"external-ca-{uuid.uuid4().hex}"
         external_chain = ["DUMMY CHAIN CERT 1", "DUMMY CHAIN CERT 2"]
 
@@ -142,6 +142,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/authorities/{ca_id}",
             headers=self._auth_headers(),
             json={
+                "cn": "External CA",
                 "certificate": cert_pem.decode(),
                 "private_key": key_pem.decode(),
                 "external_chain": external_chain
@@ -163,8 +164,8 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         cert_id = str(uuid.uuid4().int)
 
         # 1. Setup Hierarchy
-        self.client.post(f"/api/v1/ca/authorities/{root_ca_id}", headers=self._auth_headers(), json={"common_name": "Root"})
-        self.client.post(f"/api/v1/ca/authorities/{sub_ca_id}", headers=self._auth_headers(), json={"parent_id": root_ca_id, "common_name": "Sub"})
+        self.client.post(f"/api/v1/ca/authorities/{root_ca_id}", headers=self._auth_headers(), json={"cn": "Root"})
+        self.client.post(f"/api/v1/ca/authorities/{sub_ca_id}", headers=self._auth_headers(), json={"parent_id": root_ca_id, "cn": "Sub"})
         self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": sub_ca_id})
 
         # 2. Revoke Sub CA
@@ -214,11 +215,11 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         space_id = f"space-{uuid.uuid4().hex}"
 
         # 1. Create Space with root1
-        self.client.post(f"/api/v1/ca/authorities/{root1_id}", headers=self._auth_headers(), json={"common_name": "Root1"})
+        self.client.post(f"/api/v1/ca/authorities/{root1_id}", headers=self._auth_headers(), json={"cn": "Root1"})
         self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": root1_id})
 
         # 2. Update Space to use root2
-        self.client.post(f"/api/v1/ca/authorities/{root2_id}", headers=self._auth_headers(), json={"common_name": "Root2"})
+        self.client.post(f"/api/v1/ca/authorities/{root2_id}", headers=self._auth_headers(), json={"cn": "Root2"})
         resp = self.client.put(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": root2_id})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["ca_id"], root2_id)
@@ -237,7 +238,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         cert_id = str(uuid.uuid4().int)
 
         # 1. Create CA and Space
-        self.client.post(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers(), json={"common_name": "Test Auth Endpoints"})
+        self.client.post(f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers(), json={"cn": "Test Auth Endpoints"})
         self.client.post(f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers(), json={"ca_id": ca_id})
 
         # 2. Submit and Sign Cert

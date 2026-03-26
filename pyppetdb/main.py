@@ -97,7 +97,7 @@ async def ensure_default_ca_setup(
             await crud_ca_authorities.create(
                 _id=default_id,
                 payload=CAAuthorityPost(
-                    common_name="PyppetDB Internal Root CA",
+                    cn="PyppetDB Internal Root CA",
                     organization="PyppetDB",
                     country="DE",
                     state="Hessen",
@@ -572,7 +572,7 @@ def cli_init_ca_write_file(path: str, content: bytes) -> None:
 
 
 async def cli_init_ca(
-    common_name: str,
+    cn: str,
     alt_names: list[str] | None,
     ca_path: str | None,
     cert_path: str | None,
@@ -629,7 +629,7 @@ async def cli_init_ca(
 
     # 2. Generate CSR and Key
     csr_pem, key_pem = pyppetdb.ca.utils.CAUtils.generate_csr(
-        common_name=common_name,
+        cn=cn,
         alt_names=alt_names,
     )
 
@@ -647,7 +647,7 @@ async def cli_init_ca(
 
     cert = await ca_service.update_certificate_status(
         space_id=space_id,
-        cn=common_name,
+        cn=cn,
         data=CACertificatePut(status="signed"),
         fields=["certificate"],
     )
@@ -853,7 +853,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     fqdn = socket.getfqdn()
     init_ca.add_argument(
-        "--common-name",
+        "--cn",
         default=fqdn,
         help=f"The common name for the server certificate (default: {fqdn})",
     )
@@ -896,7 +896,7 @@ def main():
             alt_names = args.alt_names.split(",")
         asyncio.run(
             cli_init_ca(
-                common_name=args.common_name,
+                cn=args.cn,
                 alt_names=alt_names,
                 ca_path=args.ca_path,
                 cert_path=args.cert_path,
