@@ -14,7 +14,7 @@ CAStatus = Literal["active", "revoked"]
 filter_literal = Literal[
     "id",
     "parent_id",
-    "common_name",
+    "cn",
     "issuer",
     "serial_number",
     "not_before",
@@ -32,7 +32,7 @@ filter_list = set(typing_get_args(filter_literal))
 sort_literal = Literal[
     "id",
     "parent_id",
-    "common_name",
+    "cn",
     "not_before",
     "not_after",
 ]
@@ -40,7 +40,7 @@ sort_literal = Literal[
 
 class CAAuthorityPost(BaseModel):
     parent_id: Optional[str] = None
-    common_name: Optional[str] = None
+    cn: str
     organization: Optional[str] = "PyppetDB"
     organizational_unit: Optional[str] = "CA"
     country: Optional[str] = "DE"
@@ -66,7 +66,7 @@ class CACRL(BaseModel):
 class CAAuthorityGet(BaseModel):
     id: Optional[str] = None
     parent_id: Optional[str] = None
-    common_name: Optional[str] = None
+    cn: Optional[str] = None
     issuer: Optional[str] = None
     serial_number: Optional[str] = None
     not_before: Optional[datetime] = None

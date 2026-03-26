@@ -10,7 +10,7 @@ from cryptography.x509.oid import NameOID
 class CAUtils:
     @staticmethod
     def generate_csr(
-        common_name: str,
+        cn: str,
         organization: str = "PyppetDB",
         organizational_unit: str = "Nodes",
         country: str = "DE",
@@ -25,7 +25,7 @@ class CAUtils:
         )
 
         name_parts = [
-            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+            x509.NameAttribute(NameOID.COMMON_NAME, cn),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization),
             x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, organizational_unit),
             x509.NameAttribute(NameOID.COUNTRY_NAME, country),
@@ -57,7 +57,7 @@ class CAUtils:
 
     @staticmethod
     def generate_ca(
-        common_name: str,
+        cn: str,
         organization: str = "PyppetDB",
         organizational_unit: str = "CA",
         country: str = "DE",
@@ -72,7 +72,7 @@ class CAUtils:
         )
 
         name_parts = [
-            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+            x509.NameAttribute(NameOID.COMMON_NAME, cn),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization),
             x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, organizational_unit),
             x509.NameAttribute(NameOID.COUNTRY_NAME, country),
@@ -113,7 +113,7 @@ class CAUtils:
 
     @staticmethod
     def sign_ca(
-        common_name: str,
+        cn: str,
         ca_cert_pem: bytes,
         ca_key_pem: bytes,
         organization: str = "PyppetDB",
@@ -133,7 +133,7 @@ class CAUtils:
         parent_key = serialization.load_pem_private_key(ca_key_pem, password=None)
 
         name_parts = [
-            x509.NameAttribute(NameOID.COMMON_NAME, common_name),
+            x509.NameAttribute(NameOID.COMMON_NAME, cn),
             x509.NameAttribute(NameOID.ORGANIZATION_NAME, organization),
             x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, organizational_unit),
             x509.NameAttribute(NameOID.COUNTRY_NAME, country),

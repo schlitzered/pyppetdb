@@ -49,10 +49,8 @@ class CrudCAAuthorities(CrudMongo):
                 payload.parent_id, fields=["certificate", "chain"]
             )
             parent_key = await self.get_private_key(payload.parent_id)
-            if not payload.common_name:
-                payload.common_name = f"PyppetDB CA {_id}"
             cert_pem, key_pem = CAUtils.sign_ca(
-                common_name=payload.common_name,
+                cn=payload.cn,
                 ca_cert_pem=parent_ca.certificate.encode(),
                 ca_key_pem=parent_key,
                 organization=payload.organization,
@@ -65,10 +63,8 @@ class CrudCAAuthorities(CrudMongo):
             chain = [parent_ca.certificate] + parent_ca.chain
         else:
             internal = True
-            if not payload.common_name:
-                payload.common_name = f"PyppetDB CA {_id}"
             cert_pem, key_pem = CAUtils.generate_ca(
-                common_name=payload.common_name,
+                cn=payload.cn,
                 organization=payload.organization,
                 organizational_unit=payload.organizational_unit,
                 country=payload.country,
@@ -150,7 +146,7 @@ class CrudCAAuthorities(CrudMongo):
         self,
         _id: typing.Optional[str] = None,
         parent_id: typing.Optional[str] = None,
-        common_name: typing.Optional[str] = None,
+        cn: typing.Optional[str] = None,
         fingerprint: typing.Optional[str] = None,
         internal: typing.Optional[bool] = None,
         status: typing.Optional[CAStatus] = None,
@@ -163,7 +159,7 @@ class CrudCAAuthorities(CrudMongo):
         query = {}
         self._filter_re(query, "id", _id)
         self._filter_re(query, "parent_id", parent_id)
-        self._filter_re(query, "common_name", common_name)
+        self._filter_re(query, "cn", cn)
         self._filter_re(query, "fingerprint.sha256", fingerprint)
         if internal is not None:
             query["internal"] = internal

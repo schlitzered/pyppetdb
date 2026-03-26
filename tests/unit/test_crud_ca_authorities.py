@@ -36,7 +36,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         mock_cautils.generate_crl.return_value = (b"CRL", datetime.now(timezone.utc))
         mock_cautils.get_cert_info.return_value = {
             "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
-            "common_name": "CA1",
+            "cn": "CA1",
             "issuer": "CA1",
             "serial_number": "1",
             "not_before": datetime.now(timezone.utc),
@@ -44,14 +44,14 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         }
         self.mock_protector.encrypt_string.return_value = "encrypted"
         self.crud._create = AsyncMock(return_value={
-            "id": "ca1", "common_name": "CA1", "issuer": "CA1", 
+            "id": "ca1", "cn": "CA1", "issuer": "CA1", 
             "serial_number": "1", "not_before": datetime.now(timezone.utc), 
             "not_after": datetime.now(timezone.utc),
             "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"}, "certificate": "CERT",
             "internal": True, "chain": [], "status": "active"
         })
         
-        payload = CAAuthorityPost(common_name="CA1")
+        payload = CAAuthorityPost(cn="CA1")
         await self.crud.create(_id="ca1", payload=payload, fields=[])
         
         args = self.crud._create.call_args[1]
