@@ -1,7 +1,6 @@
 import datetime
 import logging
 import typing
-from typing import List
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -103,6 +102,7 @@ class CrudCACertificates(CrudMongo):
             ca_cert_pem=ca_cert_pem,
             ca_key_pem=ca_key_pem,
             serial_number=int(serial),
+            validity_days=self.config.ca.certificateValidityDays,
         )
 
         info = CAUtils.get_cert_info(cert_pem)
@@ -136,9 +136,9 @@ class CrudCACertificates(CrudMongo):
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
 
-    async def get_revoked_for_spaces(self, space_ids: list[str]) -> list[dict]:
+    async def get_revoked_for_ca(self, ca_id: str) -> list[dict]:
         cursor = self.coll.find(
-            {"space_id": {"$in": space_ids}, "status": "revoked"},
+            {"ca_id": {"$eq": ca_id}, "status": "revoked"},
             {"serial_number": 1, "revocation_date": 1},
         )
         revoked = []

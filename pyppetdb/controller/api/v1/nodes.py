@@ -7,7 +7,6 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 
-from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs

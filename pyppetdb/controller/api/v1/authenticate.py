@@ -9,7 +9,6 @@ import httpx
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.users import CrudUsers
 
-from pyppetdb.errors import AuthenticationError
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.authenticate import AuthenticateGetUser

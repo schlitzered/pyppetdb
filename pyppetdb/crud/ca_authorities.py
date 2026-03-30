@@ -16,8 +16,6 @@ from pyppetdb.model.ca_authorities import CACRL
 from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
 
-from pyppetdb.errors import QueryParamValidationError
-
 
 class CrudCAAuthorities(CrudMongo):
     def __init__(
@@ -36,7 +34,10 @@ class CrudCAAuthorities(CrudMongo):
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
-        self, _id: str, payload: CAAuthorityPost, fields: list
+        self,
+        _id: str,
+        payload: CAAuthorityPost,
+        fields: list,
     ) -> CAAuthorityGet:
         if payload.certificate and payload.private_key:
             internal = False
@@ -93,13 +94,15 @@ class CrudCAAuthorities(CrudMongo):
                 ca_cert_pem=cert_pem, ca_key_pem=key_pem, revoked_certs=[]
             )
             now = datetime.datetime.now(datetime.timezone.utc)
-            data["crl"] = {
-                "crl_pem": crl_pem.decode(),
-                "generation": 1,
-                "updated_at": now,
-                "next_update": next_update,
-                "locked_at": None,
-            }
+            from pyppetdb.model.ca_authorities import CACRL
+
+            data["crl"] = CACRL(
+                crl_pem=crl_pem.decode(),
+                generation=1,
+                updated_at=now,
+                next_update=next_update,
+                locked_at=None,
+            ).model_dump()
 
         result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)

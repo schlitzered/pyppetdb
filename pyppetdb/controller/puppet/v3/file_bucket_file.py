@@ -4,7 +4,6 @@ import logging
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Request
-from fastapi import Response
 import httpx
 
 from pyppetdb.authorize import AuthorizeClientCert
@@ -122,7 +121,7 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         md5: str,
     ):
         await self.authorize_client_cert.require_cn(request)
-        raise HTTPException(status_code=400, detail=f"Not Implemented")
+        raise HTTPException(status_code=400, detail="Not Implemented")
 
     async def put_with_path(
         self,
@@ -131,4 +130,4 @@ class ControllerPuppetV3FileBucketFile(ControllerPuppetV3Base):
         original_path: str,
     ):
         await self.authorize_client_cert.require_cn(request)
-        raise HTTPException(status_code=400, detail=f"Not Implemented")
+        raise HTTPException(status_code=400, detail="Not Implemented")

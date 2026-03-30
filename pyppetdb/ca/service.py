@@ -1,7 +1,6 @@
 import logging
 import asyncio
-from typing import List, Optional, Set
-from datetime import datetime, timezone
+
 
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -11,11 +10,8 @@ from pyppetdb.errors import ResourceNotFound, QueryParamValidationError
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
     CAAuthorityGet,
-    CAAuthorityGetMulti,
 )
-from pyppetdb.model.ca_spaces import CASpacePost, CASpaceGet
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
-from pyppetdb.model.common import MetaMulti
 
 
 class CAService:
@@ -40,12 +36,9 @@ class CAService:
 
         ca_key = await self._crud_authorities.get_private_key(ca_id)
 
-        # Optimized: fetch only serials and dates
         revoked_cas = await self._crud_authorities.get_revoked(parent_id=ca_id)
 
-        spaces_multi = await self._crud_spaces.search_by_ca(ca_id=ca_id)
-        space_ids = [s["id"] for s in spaces_multi]
-        revoked_certs = await self._crud_certificates.get_revoked_for_spaces(space_ids)
+        revoked_certs = await self._crud_certificates.get_revoked_for_ca(ca_id=ca_id)
 
         await self._crud_authorities.sync_crl(
             ca_id=ca_id,
@@ -68,7 +61,6 @@ class CAService:
                 except Exception as e:
                     self._log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
                     await self._crud_authorities.lock_crl_release(ca_id)
-                # Success: sync_crl already unlocks via update_crl
             else:
                 self._log.debug(
                     f"CRL refresh for CA '{ca_id}' is already locked by another process"
@@ -80,7 +72,7 @@ class CAService:
                 await self.refresh_expiring_crls()
             except Exception as e:
                 self._log.error(f"Error in CRL refresh worker: {e}")
-            await asyncio.sleep(43200)  # Run once every 12 hours
+            await asyncio.sleep(43200)
 
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost
@@ -90,7 +82,6 @@ class CAService:
         )
 
     async def delete_authority(self, ca_id: str) -> None:
-        # 1. Check if used by any space (current or history)
         spaces = await self._crud_spaces.search_by_ca(ca_id=ca_id)
         if spaces:
             space_ids = [s["id"] for s in spaces]
@@ -98,15 +89,12 @@ class CAService:
                 msg=f"CA Authority '{ca_id}' is still in use by one or more spaces: {', '.join(space_ids)}"
             )
 
-        # 2. Check if it's a parent of another CA
         count_cas = await self._crud_authorities.count({"parent_id": ca_id})
         if count_cas > 0:
             raise QueryParamValidationError(
                 msg=f"CA Authority '{ca_id}' is still a parent of one or more CA Authorities"
             )
 
-        # 3. Check if any certificates are still associated with this CA
-        # (Technically covered by space check, but safe to keep)
         count_certs = await self._crud_certificates.count(
             {"issuer": {"$regex": f"CN={ca_id}"}}
         )
@@ -120,8 +108,7 @@ class CAService:
 
     async def update_certificate_status(
         self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
-    ) -> CACertificateGet:
-        """Update certificate status by space_id and CN (common name)."""
+    ) -> CACertificateGet | None:
         if fields is None:
             fields = ["id", "status", "ca_id"]
 
@@ -139,7 +126,6 @@ class CAService:
                 fields=fields,
             )
         elif data.status == "revoked":
-            # Find the signed cert by space_id and CN, then revoke by serial
             cert_doc = await self._crud_certificates.coll.find_one(
                 {"space_id": space_id, "cn": cn, "status": "signed"}
             )
@@ -156,8 +142,7 @@ class CAService:
 
     async def update_certificate_status_by_ca(
         self, ca_id: str, serial: str, data: CACertificatePut, fields: list = None
-    ) -> CACertificateGet:
-        """Update certificate status by CA ID and serial number."""
+    ) -> CACertificateGet | None:
         if fields is None:
             fields = ["id", "status", "ca_id"]
 
@@ -178,15 +163,6 @@ class CAService:
         return revoked_ca
 
     async def get_certificate_chain(self, space_id: str) -> str:
-        """
-        Get certificate chain for a space, including current CA, historic CAs, and their parent chains.
-
-        Args:
-            space_id: The space ID to get certificates for
-
-        Returns:
-            Concatenated certificate PEM data as string
-        """
         space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
         ca_ids = [space.ca_id] + space.ca_id_history
 
@@ -199,12 +175,10 @@ class CAService:
                     ca_id, fields=["certificate", "chain"]
                 )
 
-                # Add CA certificate
                 if ca.certificate not in processed_certs:
                     full_chain_parts.append(ca.certificate)
                     processed_certs.add(ca.certificate)
 
-                # Add parent certificates from chain
                 for parent_cert in ca.chain:
                     if parent_cert not in processed_certs:
                         full_chain_parts.append(parent_cert)
@@ -218,18 +192,8 @@ class CAService:
         return "\n".join(full_chain_parts)
 
     async def get_crl_chain(self, space_id: str) -> bytes:
-        """
-        Get CRL chain for a space, including CRLs for current CA, historic CAs, and all parent CAs.
-
-        Args:
-            space_id: The space ID to get CRLs for
-
-        Returns:
-            Concatenated CRL PEM data as bytes
-        """
         space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
 
-        # Start with current CA and historic CAs for this space
         ca_ids_to_process = [space.ca_id] + space.ca_id_history
         processed_ca_ids = set()
         crl_chain_pem = b""
@@ -250,15 +214,12 @@ class CAService:
                 )
                 continue
 
-            # Always add parent CA to chain if it exists
             if ca.parent_id and ca.parent_id not in processed_ca_ids:
                 ca_ids_to_process.append(ca.parent_id)
 
-            # Skip external CAs (they don't have CRLs)
             if not ca.internal:
                 continue
 
-            # Get CRL for this CA
             if not ca.crl:
                 self._log.error(f"Internal CA '{ca_id}' is missing CRL data")
                 continue
