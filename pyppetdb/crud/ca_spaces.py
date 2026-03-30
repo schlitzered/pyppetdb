@@ -1,10 +1,8 @@
 from pyppetdb.crud.common import CrudMongo
 import typing
 import pymongo
-from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.ca_spaces import CASpaceGet
 from pyppetdb.model.ca_spaces import CASpaceGetMulti
-from pyppetdb.model.ca_spaces import CASpacePut
 from pyppetdb.model.common import sort_order_literal
 
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -27,16 +25,16 @@ class CrudCASpaces(CrudMongo):
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def create(
-        self,
-        _id: str,
-        payload: CASpacePost,
-        fields: list,
+    async def insert(self, payload: dict, fields: list) -> CASpaceGet:
+        result = await self._create(payload=payload, fields=fields)
+        return CASpaceGet(**result)
+
+    async def update(
+        self, query: dict, payload: dict, fields: list, upsert: bool = False
     ) -> CASpaceGet:
-        data = payload.model_dump()
-        data["id"] = _id
-        data["ca_id_history"] = []
-        result = await self._create(payload=data, fields=fields)
+        result = await self._update(
+            query=query, payload=payload, fields=fields, upsert=upsert
+        )
         return CASpaceGet(**result)
 
     async def get(
@@ -47,32 +45,12 @@ class CrudCASpaces(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CASpaceGet(**result)
 
-    async def delete(self, _id: str) -> None:
-        if _id == "puppet-ca":
+    async def delete(self, query: dict) -> None:
+        if query.get("id") == "puppet-ca":
             raise QueryParamValidationError(
                 msg="The 'puppet-ca' space is protected and cannot be deleted"
             )
-        await self._delete(query={"id": _id})
-
-    async def update(
-        self,
-        _id: str,
-        payload: CASpacePut,
-        fields: list,
-    ) -> CASpaceGet:
-        current = await self.get(_id, fields=["ca_id", "ca_id_history"])
-        data = payload.model_dump()
-        if data["ca_id"] != current.ca_id:
-            if current.ca_id not in current.ca_id_history:
-                current.ca_id_history.append(current.ca_id)
-            if data["ca_id"] in current.ca_id_history:
-                current.ca_id_history.remove(data["ca_id"])
-            data["ca_id_history"] = current.ca_id_history
-
-        query = {"id": _id}
-
-        result = await self._update(query=query, fields=fields, payload=data)
-        return CASpaceGet(**result)
+        await self._delete(query=query)
 
     async def remove_ca_from_history(self, ca_id: str) -> None:
         await self.coll.update_many(

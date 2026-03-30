@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Request
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
 from pyppetdb.authorize import AuthorizePyppetDB

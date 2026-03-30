@@ -1,8 +1,8 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
-from datetime import datetime, timedelta, UTC
 from pyppetdb.crud.nodes import CrudNodes, NodePutInternal
+
 
 class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -42,23 +42,24 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_search(self):
         # Mock aggregation for status counts
         mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[
-            {"_id": "changed", "count": 5},
-            {"_id": "unchanged", "count": 10}
-        ])
+        mock_cursor.to_list = AsyncMock(
+            return_value=[
+                {"_id": "changed", "count": 5},
+                {"_id": "unchanged", "count": 10},
+            ]
+        )
         self.mock_coll.aggregate.return_value = mock_cursor
-        
+
         # Mock count_documents for outdated nodes
         self.mock_coll.count_documents = AsyncMock(return_value=2)
-        
+
         # Mock _search from CrudMongo
-        self.crud._search = AsyncMock(return_value={
-            "result": [{"id": "node1"}],
-            "meta": {"result_size": 1}
-        })
-        
+        self.crud._search = AsyncMock(
+            return_value={"result": [{"id": "node1"}], "meta": {"result_size": 1}}
+        )
+
         result = await self.crud.search(_id="node1", disabled=False)
-        
+
         self.assertEqual(result.meta.result_size, 1)
         self.assertEqual(result.meta.status_changed, 5)
         self.assertEqual(result.meta.status_unchanged, 10)
@@ -70,8 +71,10 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         mock_cursor.to_list = AsyncMock(return_value=[])
         self.mock_coll.aggregate.return_value = mock_cursor
         self.mock_coll.count_documents = AsyncMock(return_value=1)
-        self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
-        
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
+
         await self.crud.search(outdated_threshold="2026-03-06T00:00:00Z")
         self.mock_coll.count_documents.assert_called_once()
 
@@ -89,26 +92,37 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_distinct_fact_values(self):
         mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[
-            {"_id": "RedHat", "count": 5},
-            {"_id": "Debian", "count": 3}
-        ])
+        mock_cursor.to_list = AsyncMock(
+            return_value=[{"_id": "RedHat", "count": 5}, {"_id": "Debian", "count": 3}]
+        )
         self.mock_coll.aggregate.return_value = mock_cursor
-        
+
         result = await self.crud.distinct_fact_values(fact_id="osfamily")
-        
+
         self.assertEqual(len(result.result), 2)
         self.assertEqual(result.result[0].value, "RedHat")
         self.assertEqual(result.result[0].count, 5)
 
     async def test_exported_resources(self):
         mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[
-            {"results": [{"type": "File", "title": "/tmp/test", "tags": [], "exported": True, "parameters": {}}]}
-        ])
+        mock_cursor.to_list = AsyncMock(
+            return_value=[
+                {
+                    "results": [
+                        {
+                            "type": "File",
+                            "title": "/tmp/test",
+                            "tags": [],
+                            "exported": True,
+                            "parameters": {},
+                        }
+                    ]
+                }
+            ]
+        )
         self.mock_coll.aggregate.return_value = mock_cursor
-        
+
         result = await self.crud.exported_resources(resource_type="File")
-        
+
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].type, "File")

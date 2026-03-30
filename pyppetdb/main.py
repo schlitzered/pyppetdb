@@ -9,6 +9,8 @@ import ssl
 import string
 import sys
 import time
+from pathlib import Path
+import datetime
 
 from authlib.integrations.starlette_client import OAuth
 import bonsai.asyncio
@@ -52,11 +54,11 @@ from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
+from pyppetdb.ca.utils import CAUtils
 
 from pyppetdb.model.ca_authorities import CAAuthorityPost
 from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.users import UserPost
-from pyppetdb.model.ca_certificates import CACertificatePut
 
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
@@ -82,19 +84,17 @@ async def dummy_sleep_background_task(log: logging.Logger):
 
 async def ensure_default_ca_setup(
     log: logging.Logger,
-    crud_ca_authorities: CrudCAAuthorities,
-    crud_ca_spaces: CrudCASpaces,
+    ca_service: CAService,
 ):
     default_id = "puppet-ca"
 
-    # 1. Ensure Authority exists
     try:
-        await crud_ca_authorities.get(default_id, fields=["id"])
+        await ca_service._crud_authorities.get(default_id, fields=["id"])
         log.info(f"Default CA Authority '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Authority '{default_id}'")
         try:
-            await crud_ca_authorities.create(
+            await ca_service.create_authority(
                 _id=default_id,
                 payload=CAAuthorityPost(
                     cn="PyppetDB Internal Root CA",
@@ -103,24 +103,21 @@ async def ensure_default_ca_setup(
                     state="Hessen",
                     validity_days=3650,
                 ),
-                fields=["id"],
             )
         except DuplicateResource:
             log.info(
                 f"Default CA Authority '{default_id}' was created by another process"
             )
 
-    # 2. Ensure Space exists
     try:
-        await crud_ca_spaces.get(default_id, fields=["id"])
+        await ca_service._crud_spaces.get(default_id, fields=["id"])
         log.info(f"Default CA Space '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Space '{default_id}'")
         try:
-            await crud_ca_spaces.create(
+            await ca_service.create_space(
                 _id=default_id,
                 payload=CASpacePost(ca_id=default_id),
-                fields=["id"],
             )
         except DuplicateResource:
             log.info(f"Default CA Space '{default_id}' was created by another process")
@@ -382,11 +379,9 @@ async def prepare_env():
     )
     env["authorize_client_cert_pdb"] = authorize_client_cert_pdb
 
-    # Ensure default CA and Space setup
     await ensure_default_ca_setup(
         log=log,
-        crud_ca_authorities=crud_ca_authorities,
-        crud_ca_spaces=crud_ca_spaces,
+        ca_service=ca_service,
     )
 
     return env
@@ -428,7 +423,6 @@ async def lifespan_dev(app: FastAPI):
     )
     app.include_router(controller.router_dev)
 
-    # Start CA background tasks
     refresh_task = None
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
@@ -620,44 +614,34 @@ async def cli_init_ca(
         crud_certificates=crud_ca_certificates,
     )
 
-    # 1. Ensure CA and Space
     await ensure_default_ca_setup(
         log=log,
-        crud_ca_authorities=crud_ca_authorities,
-        crud_ca_spaces=crud_ca_spaces,
+        ca_service=ca_service,
     )
 
-    # 2. Generate CSR and Key
     csr_pem, key_pem = pyppetdb.ca.utils.CAUtils.generate_csr(
         cn=cn,
         alt_names=alt_names,
     )
 
-    # 3. Submit CSR
     space_id = "puppet-ca"
-    space = await crud_ca_spaces.get(space_id, fields=["ca_id"])
-    await crud_ca_certificates.submit_csr(
+    await ca_service.submit_certificate_request(
         space_id=space_id,
         csr_pem=csr_pem.decode(),
-        ca_id=space.ca_id,
         fields=["id"],
+        cn=cn,
     )
 
-    # 4. Sign CSR
-
-    cert = await ca_service.update_certificate_status(
+    cert = await ca_service.sign_certificate(
         space_id=space_id,
         cn=cn,
-        data=CACertificatePut(status="signed"),
         fields=["certificate"],
     )
 
-    # 5. Get CA Cert
     ca_authority = await crud_ca_authorities.get(
         space_id, fields=["certificate", "chain"]
     )
 
-    # 6. Write Files
     if not ca_path:
         ca_path = settings.app.main.ssl.ca if settings.app.main.ssl else None
     if not cert_path:
@@ -672,6 +656,164 @@ async def cli_init_ca(
     cli_init_ca_write_file(ca_path, ca_authority.certificate.encode())
     cli_init_ca_write_file(cert_path, cert.certificate.encode())
     cli_init_ca_write_file(key_path, key_pem)
+
+
+async def cli_import_puppet_ca(ca_dir: str) -> None:
+    log = setup_logging(settings.app.loglevel)
+    mongo_db = setup_mongodb(
+        log=log,
+        database=settings.mongodb.database,
+        url=settings.mongodb.url,
+    )
+
+    nodes_data_protector = NodesDataProtector(
+        app_secret_key=settings.app.secretkey,
+        log=log,
+    )
+
+    crud_ca_authorities = CrudCAAuthorities(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_authorities"],
+        protector=nodes_data_protector,
+    )
+    await crud_ca_authorities.index_create()
+
+    crud_ca_spaces = CrudCASpaces(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_spaces"],
+    )
+    await crud_ca_spaces.index_create()
+
+    crud_ca_certificates = CrudCACertificates(
+        config=settings,
+        log=log,
+        coll=mongo_db["ca_certificates"],
+    )
+    await crud_ca_certificates.index_create()
+
+    ca_service = CAService(
+        log=log,
+        config=settings,
+        crud_authorities=crud_ca_authorities,
+        crud_spaces=crud_ca_spaces,
+        crud_certificates=crud_ca_certificates,
+    )
+
+    puppet_ca_id = "puppet-ca"
+    puppet_ca_dir = Path(ca_dir)
+
+    ca_crt_path = puppet_ca_dir / "ca_crt.pem"
+    ca_key_path = puppet_ca_dir / "ca_key.pem"
+
+    if not ca_crt_path.exists():
+        log.fatal(f"CA certificate not found at {ca_crt_path}")
+        sys.exit(1)
+    if not ca_key_path.exists():
+        log.fatal(f"CA private key not found at {ca_key_path}")
+        sys.exit(1)
+
+    ca_cert_pem = ca_crt_path.read_bytes()
+    ca_key_pem = ca_key_path.read_bytes()
+
+    try:
+        await crud_ca_authorities.get(puppet_ca_id, fields=["id"])
+        log.error(
+            f"CA Authority '{puppet_ca_id}' already exists. Please delete it first or choose a different ID."
+        )
+        sys.exit(1)
+    except ResourceNotFound:
+        pass
+
+    log.info(f"Importing CA Authority '{puppet_ca_id}' from {ca_dir}")
+
+    ca_info = CAUtils.get_cert_info(ca_cert_pem)
+    encrypted_key = nodes_data_protector.encrypt_string(ca_key_pem.decode())
+
+    crl_pem, next_update = CAUtils.generate_crl(
+        ca_cert_pem=ca_cert_pem,
+        ca_key_pem=ca_key_pem,
+        revoked_certs=[],
+    )
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    ca_authority_data = {
+        "id": puppet_ca_id,
+        "parent_id": None,
+        "certificate": ca_cert_pem.decode(),
+        "private_key_encrypted": encrypted_key,
+        "internal": True,
+        "chain": [],
+        "status": "active",
+        "crl": {
+            "crl_pem": crl_pem.decode(),
+            "generation": 1,
+            "updated_at": now,
+            "next_update": next_update,
+            "locked_at": None,
+        },
+        **ca_info,
+    }
+
+    await crud_ca_authorities.coll.insert_one(ca_authority_data)
+    log.info(f"CA Authority '{puppet_ca_id}' imported successfully.")
+
+    try:
+        await crud_ca_spaces.get(puppet_ca_id, fields=["id"])
+        log.error(
+            f"CA Space '{puppet_ca_id}' already exists. Please delete it first or choose a different ID."
+        )
+        sys.exit(1)
+    except ResourceNotFound:
+        pass
+
+    log.info(f"Creating CA Space '{puppet_ca_id}'")
+    await ca_service.create_space(
+        _id=puppet_ca_id,
+        payload=CASpacePost(ca_id=puppet_ca_id),
+    )
+    log.info(f"CA Space '{puppet_ca_id}' created successfully.")
+
+    signed_certs_dir = puppet_ca_dir / "signed"
+    if signed_certs_dir.exists() and signed_certs_dir.is_dir():
+        log.info(f"Importing signed certificates from {signed_certs_dir}")
+        for cert_file in signed_certs_dir.glob("*.pem"):
+            try:
+                cert_pem = cert_file.read_bytes()
+                cert_info = CAUtils.get_cert_info(cert_pem)
+                cn = cert_info["cn"]
+                serial_number = cert_info["serial_number"]
+
+                try:
+                    await crud_ca_certificates.get(serial_number, fields=["id"])
+                    log.warning(
+                        f"Certificate with serial {serial_number} (CN: {cn}) already exists. Skipping."
+                    )
+                    continue
+                except ResourceNotFound:
+                    pass
+
+                cert_data = {
+                    "id": serial_number,
+                    "space_id": puppet_ca_id,
+                    "ca_id": puppet_ca_id,
+                    "cn": cn,
+                    "status": "signed",
+                    "certificate": cert_pem.decode(),
+                    "created": cert_info["not_before"],
+                    **cert_info,
+                }
+                await crud_ca_certificates.coll.insert_one(cert_data)
+                log.info(f"Imported certificate {cn} (Serial: {serial_number})")
+            except Exception as e:
+                log.error(f"Failed to import certificate {cert_file.name}: {e}")
+    else:
+        log.info(
+            f"No 'signed' directory found at {signed_certs_dir}. Skipping signed certificate import."
+        )
+
+    log.info("Puppet CA import complete.")
 
 
 app_dev = FastAPI(
@@ -766,7 +908,6 @@ async def main_run():
                 asyncio.create_task(app.serve(), name=f"uvicorn-{app_name}")
             )
 
-    # Start CA background tasks
     worker_tasks = list()
     if settings.ca.enableCrlRefresh:
         worker_tasks.append(
@@ -805,32 +946,27 @@ async def main_run():
         if not stop_event.is_set():
             request_stop()
 
-        # Cancel workers and stop-event task before gathering apps
         for t in worker_tasks + [all_tasks[-1]]:
             if not t.done():
                 t.cancel()
                 with suppress(asyncio.CancelledError):
                     await t
 
-        # Give apps some time to stop gracefully
         try:
             await asyncio.wait_for(asyncio.gather(*apps_tasks), timeout=10)
         except asyncio.TimeoutError:
             log.warning("Apps did not stop in time, forcing shutdown...")
     finally:
-        # Final cleanup of any remaining tasks
         for t in all_tasks:
             if not t.done():
                 t.cancel()
                 with suppress(asyncio.CancelledError):
                     await t
 
-        # Close LDAP pool if it exists
         if "ldap_pool" in env and env["ldap_pool"]:
             log.info("Closing LDAP pool...")
             await env["ldap_pool"].close()
 
-        # Close HTTP client
         if "http" in env and env["http"]:
             log.info("Closing HTTP client...")
             await env["http"].aclose()
@@ -874,6 +1010,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Path to save the server private key (default: /etc/puppetlabs/puppet/ssl/private_keys/{fqdn}.pem)",
     )
 
+    import_puppet_ca = subparsers.add_parser(
+        "import-puppet-ca", help="Import an existing Puppet CA into pyppetdb"
+    )
+    import_puppet_ca.add_argument(
+        "--ca-dir",
+        required=True,
+        help="Path to the Puppet CA directory (e.g., /etc/puppetlabs/puppetserver/ca)",
+    )
+
     return parser
 
 
@@ -901,6 +1046,13 @@ def main():
                 ca_path=args.ca_path,
                 cert_path=args.cert_path,
                 key_path=args.key_path,
+            )
+        )
+        return
+    elif args.command == "import-puppet-ca":
+        asyncio.run(
+            cli_import_puppet_ca(
+                ca_dir=args.ca_dir,
             )
         )
         return

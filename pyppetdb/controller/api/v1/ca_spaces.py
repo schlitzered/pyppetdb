@@ -107,7 +107,7 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_perm(request=request, permission="CA:SPACES:UPDATE")
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
-        return await self.crud_ca_spaces.update(
+        return await self._ca_service.update_space(
             _id=space_id, payload=data, fields=list(fields)
         )
 
@@ -119,7 +119,7 @@ class ControllerApiV1CASpaces:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(request=request, permission="CA:SPACES:CREATE")
-        return await self.crud_ca_spaces.create(
+        return await self._ca_service.create_space(
             _id=space_id, payload=data, fields=list(fields)
         )
 
@@ -145,7 +145,7 @@ class ControllerApiV1CASpaces:
                 msg=f"CA Space '{space_id}' still contains certificates"
             )
 
-        await self.crud_ca_spaces.delete(_id=space_id)
+        await self._ca_service.delete_space(_id=space_id)
         await self._crud_teams.drop_permissions_by_pattern(f"^CA:SPACES:{space_id}:")
         return {}
 

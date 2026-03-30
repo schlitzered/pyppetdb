@@ -3,7 +3,6 @@ from typing import Set
 from fastapi import APIRouter
 from fastapi import Request
 from fastapi import Query
-from fastapi import Response
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.ca_certificates import CrudCACertificates

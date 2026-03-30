@@ -136,6 +136,7 @@ class ConfigHiera(BaseModel):
 class ConfigCA(BaseModel):
     enableCrlRefresh: bool = True
     autoSign: bool = False
+    certificateValidityDays: int = 365
 
 
 class Config(BaseSettings):

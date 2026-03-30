@@ -4,6 +4,7 @@ import logging
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.model.teams import TeamPost, TeamPut
 
+
 class TestCrudTeamsUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -12,15 +13,17 @@ class TestCrudTeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.crud = CrudTeams(self.mock_config, self.log, self.mock_coll)
 
     async def test_create(self):
-        self.crud._create = AsyncMock(return_value={
-            "id": "team1",
-            "ldap_group": "group1",
-            "users": ["user1"],
-            "permissions": []
-        })
+        self.crud._create = AsyncMock(
+            return_value={
+                "id": "team1",
+                "ldap_group": "group1",
+                "users": ["user1"],
+                "permissions": [],
+            }
+        )
         payload = TeamPost(ldap_group="group1", users=["user1"], permissions=[])
         result = await self.crud.create(_id="team1", payload=payload, fields=[])
-        
+
         self.assertEqual(result.id, "team1")
         self.crud._create.assert_called_once()
         call_args = self.crud._create.call_args[1]["payload"]
@@ -40,12 +43,14 @@ class TestCrudTeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args["update"]["$pull"]["users"], "user1")
 
     async def test_get(self):
-        self.crud._get = AsyncMock(return_value={
-            "id": "team1",
-            "ldap_group": "group1",
-            "users": [],
-            "permissions": None
-        })
+        self.crud._get = AsyncMock(
+            return_value={
+                "id": "team1",
+                "ldap_group": "group1",
+                "users": [],
+                "permissions": None,
+            }
+        )
         await self.crud.get(_id="team1", fields=[])
         self.crud._get.assert_called_once_with(query={"id": "team1"}, fields=[])
 
@@ -56,25 +61,35 @@ class TestCrudTeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._resource_exists.assert_called_once_with(query={"id": "team1"})
 
     async def test_search(self):
-        self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
         await self.crud.search(_id="team1", ldap_group="group1", users="user1")
-        
+
         call_args = self.crud._search.call_args[1]
         self.assertEqual(call_args["query"]["id"], {"$regex": "team1"})
         self.assertEqual(call_args["query"]["ldap_group"], {"$regex": "group1"})
         self.assertEqual(call_args["query"]["users"], {"$regex": "user1"})
 
     async def test_update(self):
-        self.crud._update = AsyncMock(return_value={
-            "id": "team1",
-            "ldap_group": "new_group",
-            "users": ["user2"],
-            "permissions": None
-        })
+        self.crud._update = AsyncMock(
+            return_value={
+                "id": "team1",
+                "ldap_group": "new_group",
+                "users": ["user2"],
+                "permissions": None,
+            }
+        )
         payload = TeamPut(ldap_group="new_group", users=["user2"], permissions=None)
         await self.crud.update(_id="team1", payload=payload, fields=[])
         self.crud._update.assert_called_once_with(
-            query={"id": "team1"}, fields=[], payload={"ldap_group": "new_group", "users": ["user2"], "permissions": None}
+            query={"id": "team1"},
+            fields=[],
+            payload={
+                "ldap_group": "new_group",
+                "users": ["user2"],
+                "permissions": None,
+            },
         )
 
     async def test_drop_permissions_by_pattern(self):
@@ -82,5 +97,10 @@ class TestCrudTeamsUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.drop_permissions_by_pattern(pattern="^CA:SPACES:test-space:")
         self.mock_coll.update_many.assert_called_once()
         call_args = self.mock_coll.update_many.call_args[1]
-        self.assertEqual(call_args["filter"]["permissions"]["$regex"], "^CA:SPACES:test-space:")
-        self.assertEqual(call_args["update"]["$pull"]["permissions"]["$regex"], "^CA:SPACES:test-space:")
+        self.assertEqual(
+            call_args["filter"]["permissions"]["$regex"], "^CA:SPACES:test-space:"
+        )
+        self.assertEqual(
+            call_args["update"]["$pull"]["permissions"]["$regex"],
+            "^CA:SPACES:test-space:",
+        )

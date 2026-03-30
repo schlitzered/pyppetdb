@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 
+
 class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -14,23 +15,25 @@ class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
         facts = {"os": "linux", "env": "prod"}
         normalized = self.crud._normalize_facts(facts)
         # Should be sorted by key
-        self.assertEqual(normalized, [
-            {"key": "env", "value": "prod"},
-            {"key": "os", "value": "linux"}
-        ])
+        self.assertEqual(
+            normalized,
+            [{"key": "env", "value": "prod"}, {"key": "os", "value": "linux"}],
+        )
 
     async def test_get_cached_not_found(self):
         self.mock_coll.find_one = AsyncMock(return_value=None)
-        result = await self.crud.get_cached(key_id="k1", facts={"os": "linux"}, merge=True)
+        result = await self.crud.get_cached(
+            key_id="k1", facts={"os": "linux"}, merge=True
+        )
         self.assertIsNone(result)
 
     async def test_get_cached_found(self):
-        self.mock_coll.find_one = AsyncMock(return_value={
-            "_id": "some_id",
-            "key_id": "k1",
-            "result": {"foo": "bar"}
-        })
-        result = await self.crud.get_cached(key_id="k1", facts={"os": "linux"}, merge=True)
+        self.mock_coll.find_one = AsyncMock(
+            return_value={"_id": "some_id", "key_id": "k1", "result": {"foo": "bar"}}
+        )
+        result = await self.crud.get_cached(
+            key_id="k1", facts={"os": "linux"}, merge=True
+        )
         self.assertEqual(result["result"], {"foo": "bar"})
         self.assertNotIn("_id", result)
 

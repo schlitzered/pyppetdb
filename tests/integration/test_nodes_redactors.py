@@ -1,5 +1,3 @@
-import json
-from datetime import datetime
 from tests.integration.base import IntegrationTestBase
 
 
@@ -9,12 +7,14 @@ class TestNodesRedactors(IntegrationTestBase):
 
     def _setup_node_and_secret(self, node_id, secret_value):
         # 0. Create a node directly in DB
-        self._db["nodes"].insert_one({
-            "id": node_id,
-            "environment": "production",
-            "disabled": False,
-            "node_groups": []
-        })
+        self._db["nodes"].insert_one(
+            {
+                "id": node_id,
+                "environment": "production",
+                "disabled": False,
+                "node_groups": [],
+            }
+        )
 
         # 1. Add a secret to be redacted
         response = self.client.post(
@@ -40,12 +40,12 @@ class TestNodesRedactors(IntegrationTestBase):
             "logs": [
                 {
                     "level": "info",
-                    "message": f"Applied secret {secret_value}", 
+                    "message": f"Applied secret {secret_value}",
                     "source": "Puppet",
                     "tags": ["notice"],
                     "time": "2023-01-01T00:00:00Z",
                     "file": "site.pp",
-                    "line": 1
+                    "line": 1,
                 }
             ],
             "metrics": [],
@@ -54,7 +54,7 @@ class TestNodesRedactors(IntegrationTestBase):
                     "skipped": False,
                     "timestamp": "2023-01-01T00:00:00Z",
                     "resource_type": "File",
-                    "resource_title": f"/etc/secret_{secret_value}", 
+                    "resource_title": f"/etc/secret_{secret_value}",
                     "file": "site.pp",
                     "line": 10,
                     "containment_path": ["Stage[main]", "Main", "File[/etc/secret]"],
@@ -65,19 +65,19 @@ class TestNodesRedactors(IntegrationTestBase):
                             "timestamp": "2023-01-01T00:00:00Z",
                             "name": "content_changed",
                             "property": "content",
-                            "new_value": f"new_{secret_value}", 
-                            "old_value": f"old_{secret_value}", 
+                            "new_value": f"new_{secret_value}",
+                            "old_value": f"old_{secret_value}",
                             "corrective_change": True,
-                            "message": f"changed to {secret_value}" 
+                            "message": f"changed to {secret_value}",
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         response = self.client.post(
             f"/pdb/cmd/v1?certname={node_id}&command=store_report&version=8&producer-timestamp=2023-01-01T00:00:00Z",
-            json=report_payload
+            json=report_payload,
         )
         self.assertEqual(response.status_code, 201)
 
@@ -90,7 +90,7 @@ class TestNodesRedactors(IntegrationTestBase):
         reports = response.json()["result"]
         self.assertEqual(len(reports), 1)
         report = reports[0]["report"]
-        
+
         self.assertEqual(report["logs"][0]["message"], "Applied secret XXXXX")
         event = report["resources"][0]["events"][0]
         self.assertEqual(event["new_value"], "new_XXXXX")
@@ -114,16 +114,16 @@ class TestNodesRedactors(IntegrationTestBase):
                     "tags": ["tag"],
                     "parameters": {
                         "content": f"Secret is {secret_value}",
-                        "owner": "root"
-                    }
+                        "owner": "root",
+                    },
                 }
             ],
-            "edges": []
+            "edges": [],
         }
 
         response = self.client.post(
             f"/pdb/cmd/v1?certname={node_id}&command=replace_catalog&version=9&producer-timestamp=2023-01-01T00:00:00Z",
-            json=catalog_payload
+            json=catalog_payload,
         )
         self.assertEqual(response.status_code, 201)
 
@@ -135,7 +135,7 @@ class TestNodesRedactors(IntegrationTestBase):
         self.assertEqual(response.status_code, 200)
         catalogs = response.json()["result"]
         self.assertEqual(len(catalogs), 1)
-        
+
         resource = catalogs[0]["catalog"]["resources"][0]
         self.assertEqual(resource["title"], f"file_{secret_value}")
         self.assertEqual(resource["parameters"]["content"], "Secret is XXXXX")

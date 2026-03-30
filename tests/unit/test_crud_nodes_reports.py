@@ -4,13 +4,16 @@ import logging
 from datetime import datetime
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 
+
 class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_coll = MagicMock()
         self.mock_config = MagicMock()
         self.mock_redactor = MagicMock()
-        self.crud = CrudNodesReports(self.mock_config, self.log, self.mock_coll, self.mock_redactor)
+        self.crud = CrudNodesReports(
+            self.mock_config, self.log, self.mock_coll, self.mock_redactor
+        )
 
     async def test_delete(self):
         now = datetime.now()
@@ -27,11 +30,14 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         now = datetime.now()
         self.crud._create = AsyncMock(return_value={"id": now})
         self.mock_redactor.redact.side_effect = lambda x: x
-        
+
         from pyppetdb.model.nodes_reports import NodeReportPostInternal
+
         payload = NodeReportPostInternal(report={"status": "changed"})
-        
-        result = await self.crud.create(_id=now, node_id="node1", payload=payload, fields=[])
+
+        result = await self.crud.create(
+            _id=now, node_id="node1", payload=payload, fields=[]
+        )
         self.assertEqual(result.id, now)
         self.mock_redactor.redact.assert_called_once()
 
@@ -48,6 +54,8 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._resource_exists.assert_called_once()
 
     async def test_search(self):
-        self.crud._search = AsyncMock(return_value={"result": [], "meta": {"result_size": 0}})
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
         await self.crud.search(node_id="node1")
         self.crud._search.assert_called_once()
