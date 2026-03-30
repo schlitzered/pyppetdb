@@ -200,12 +200,19 @@ class CAUtils:
                 datetime.datetime.now(datetime.timezone.utc)
                 + datetime.timedelta(days=validity_days)
             )
+            .add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                critical=True,
+            )
         )
 
+        allowed_extensions = (x509.SubjectAlternativeName,)
+
         for extension in csr.extensions:
-            builder = builder.add_extension(
-                extension.value, critical=extension.critical
-            )
+            if isinstance(extension.value, allowed_extensions):
+                builder = builder.add_extension(
+                    extension.value, critical=extension.critical
+                )
 
         cert = builder.sign(ca_key, hashes.SHA256())
 
@@ -238,12 +245,19 @@ class CAUtils:
                 datetime.datetime.now(datetime.timezone.utc)
                 + datetime.timedelta(days=validity_days)
             )
+            .add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                critical=True,
+            )
         )
 
+        allowed_extensions = (x509.SubjectAlternativeName,)
+
         for extension in old_cert.extensions:
-            builder = builder.add_extension(
-                extension.value, critical=extension.critical
-            )
+            if isinstance(extension.value, allowed_extensions):
+                builder = builder.add_extension(
+                    extension.value, critical=extension.critical
+                )
 
         new_cert = builder.sign(ca_key, hashes.SHA256())
 
