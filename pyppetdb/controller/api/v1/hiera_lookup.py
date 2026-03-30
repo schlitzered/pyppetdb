@@ -13,7 +13,6 @@ from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.hiera_lookup import HieraLookupResult
-from pydantic import constr
 from pyppetdb.hiera import PyHiera
 
 
