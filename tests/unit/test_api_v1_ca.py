@@ -72,7 +72,7 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_space_permission(self):
         self.mock_authorize.require_perm = AsyncMock()
-        self.mock_crud_ca_spaces.create = AsyncMock()
+        self.mock_ca_service.create_space = AsyncMock()
         
         mock_request = MagicMock()
         data = CASpacePost(ca_id="ca1")
@@ -82,11 +82,12 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.require_perm.assert_called_once_with(
             request=mock_request, permission="CA:SPACES:CREATE"
         )
+        self.mock_ca_service.create_space.assert_called_once()
 
     async def test_delete_space_permission(self):
         self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_ca_certificates.count = AsyncMock(return_value=0)
-        self.mock_crud_ca_spaces.delete = AsyncMock()
+        self.mock_ca_service.delete_space = AsyncMock()
         self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
         
         mock_request = MagicMock()
@@ -95,4 +96,5 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.require_perm.assert_called_once_with(
             request=mock_request, permission="CA:SPACES:DELETE"
         )
+        self.mock_ca_service.delete_space.assert_called_once_with(_id="space1")
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with("^CA:SPACES:space1:")

@@ -109,7 +109,9 @@ class ControllerApiV1CAAuthorities:
         await self._authorize.require_perm(
             request=request, permission="CA:AUTHORITIES:CREATE"
         )
-        return await self._ca_service.create_authority(_id=ca_id, payload=data)
+        return await self._ca_service.create_authority(
+            _id=ca_id, payload=data, fields=list(fields)
+        )
 
     async def get(
         self,

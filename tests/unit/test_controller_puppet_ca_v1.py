@@ -14,8 +14,14 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_spaces.get = AsyncMock()
         self.mock_crud_certificates = MagicMock()
         self.mock_crud_certificates.coll = AsyncMock()
-        self.mock_crud_certificates.submit_csr = AsyncMock()
-        self.mock_ca_service = AsyncMock()
+        self.mock_ca_service = MagicMock()
+        self.mock_ca_service.get_certificate_chain = AsyncMock()
+        self.mock_ca_service.get_crl_chain = AsyncMock()
+        self.mock_ca_service.submit_certificate_request = AsyncMock()
+        self.mock_ca_service.sign_certificate = AsyncMock()
+        self.mock_ca_service.revoke_certificate = AsyncMock()
+        self.mock_ca_service.update_certificate_status = AsyncMock()
+        
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
         
@@ -54,13 +60,11 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     async def test_submit_certificate_request(self):
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=b"CSR_PEM")
-        self.mock_crud_spaces.get.return_value = MagicMock(ca_id="ca1")
-        self.mock_crud_certificates.coll.find_one.return_value = None
         self.mock_config.ca.autoSign = False
         
         response = await self.controller.submit_certificate_request("node1", mock_request)
         self.assertEqual(response.body, b"CSR submitted")
-        self.mock_crud_certificates.submit_csr.assert_called_once()
+        self.mock_ca_service.submit_certificate_request.assert_called_once()
 
     async def test_get_certificate_status(self):
         self.mock_crud_certificates.coll.find_one.return_value = {
@@ -129,36 +133,34 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     async def test_submit_certificate_request_autosign_success(self):
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=b"CSR_PEM")
-        self.mock_crud_spaces.get.return_value = MagicMock(ca_id="ca1")
-        self.mock_crud_certificates.coll.find_one.return_value = None
         self.mock_config.ca.autoSign = True
         
         await self.controller.submit_certificate_request("node1", mock_request)
-        self.mock_ca_service.update_certificate_status.assert_called_once()
+        self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_submit_certificate_request_autosign_error(self):
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=b"CSR_PEM")
-        self.mock_crud_spaces.get.return_value = MagicMock(ca_id="ca1")
-        self.mock_crud_certificates.coll.find_one.return_value = None
         self.mock_config.ca.autoSign = True
-        self.mock_ca_service.update_certificate_status.side_effect = Exception("Autosign failed")
+        self.mock_ca_service.sign_certificate.side_effect = Exception("Autosign failed")
         
         # Should not raise HTTPException, just log error
         await self.controller.submit_certificate_request("node1", mock_request)
-        self.mock_ca_service.update_certificate_status.assert_called_once()
+        self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_update_certificate_status_signed(self):
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"desired_state": "signed"})
         response = await self.controller.update_certificate_status("node1", mock_request)
         self.assertEqual(response.status_code, 204)
+        self.mock_ca_service.update_certificate_status.assert_called_once()
 
     async def test_update_certificate_status_revoked(self):
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"desired_state": "revoked"})
         response = await self.controller.update_certificate_status("node1", mock_request)
         self.assertEqual(response.status_code, 204)
+        self.mock_ca_service.update_certificate_status.assert_called_once()
 
     async def test_update_certificate_status_invalid(self):
         mock_request = MagicMock()

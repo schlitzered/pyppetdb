@@ -107,7 +107,9 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_perm(request=request, permission="CA:SPACES:UPDATE")
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
-        return await self._ca_service.update_space(_id=space_id, payload=data)
+        return await self._ca_service.update_space(
+            _id=space_id, payload=data, fields=list(fields)
+        )
 
     async def create(
         self,
@@ -117,7 +119,9 @@ class ControllerApiV1CASpaces:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(request=request, permission="CA:SPACES:CREATE")
-        return await self._ca_service.create_space(_id=space_id, payload=data)
+        return await self._ca_service.create_space(
+            _id=space_id, payload=data, fields=list(fields)
+        )
 
     async def get(
         self,

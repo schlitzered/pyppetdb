@@ -30,19 +30,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res, 5)
         self.mock_coll.count_documents.assert_called_once_with({"some": "query"})
 
-    @patch("pyppetdb.crud.ca_authorities.CAUtils")
-    async def test_create_self_signed(self, mock_cautils):
-        mock_cautils.generate_ca.return_value = (b"CERT", b"KEY")
-        mock_cautils.generate_crl.return_value = (b"CRL", datetime.now(timezone.utc))
-        mock_cautils.get_cert_info.return_value = {
-            "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
-            "cn": "CA1",
-            "issuer": "CA1",
-            "serial_number": "1",
-            "not_before": datetime.now(timezone.utc),
-            "not_after": datetime.now(timezone.utc)
-        }
-        self.mock_protector.encrypt_string.return_value = "encrypted"
+    async def test_insert(self):
         self.crud._create = AsyncMock(return_value={
             "id": "ca1", "cn": "CA1", "issuer": "CA1", 
             "serial_number": "1", "not_before": datetime.now(timezone.utc), 
@@ -51,10 +39,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
             "internal": True, "chain": [], "status": "active"
         })
         
-        payload = CAAuthorityPost(cn="CA1")
-        await self.crud.create(_id="ca1", payload=payload, fields=[])
+        payload = {"id": "ca1", "cn": "CA1"}
+        await self.crud.insert(payload=payload, fields=["id"])
         
-        args = self.crud._create.call_args[1]
-        self.assertEqual(args["payload"]["id"], "ca1")
-        self.assertEqual(args["payload"]["internal"], True)
-        self.assertEqual(args["payload"]["status"], "active")
+        self.crud._create.assert_called_once_with(payload=payload, fields=["id"])

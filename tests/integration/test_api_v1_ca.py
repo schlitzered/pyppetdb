@@ -79,7 +79,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 422)
-        self.assertIn("still a parent of one or more CA Authorities", resp.json()["detail"])
+        self.assertIn("still a parent of", resp.json()["detail"])
 
         # 6. Delete Sub CA
         resp = self.client.delete(

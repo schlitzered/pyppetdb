@@ -79,8 +79,10 @@ class CAService:
             await asyncio.sleep(43200)
 
     async def create_authority(
-        self, _id: str, payload: CAAuthorityPost
+        self, _id: str, payload: CAAuthorityPost, fields: list = None
     ) -> CAAuthorityGet:
+        if fields is None:
+            fields = ["id"]
         if payload.certificate and payload.private_key:
             internal = False
             cert_pem = payload.certificate.encode()
@@ -148,40 +150,52 @@ class CAService:
                 locked_at=None,
             ).model_dump()
 
-        return await self._crud_authorities.insert(payload=data, fields=["id"])
+        return await self._crud_authorities.insert(payload=data, fields=fields)
 
-    async def delete_authority(self, ca_id: str) -> None:
+    async def _validate_ca_usage(self, ca_id: str, operation: str) -> None:
         spaces = await self._crud_spaces.search_by_ca(ca_id=ca_id)
         if spaces:
             space_ids = [s["id"] for s in spaces]
             raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' is still in use by one or more spaces: {', '.join(space_ids)}"
+                msg=f"CA Authority '{ca_id}' cannot be {operation} because it is still in use by one or more spaces: {', '.join(space_ids)}"
             )
 
-        count_cas = await self._crud_authorities.count({"parent_id": ca_id})
+        count_cas = await self._crud_authorities.count(
+            {"parent_id": ca_id, "status": "active"}
+        )
         if count_cas > 0:
             raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' is still a parent of one or more CA Authorities"
+                msg=f"CA Authority '{ca_id}' cannot be {operation} because it is still a parent of {count_cas} active CA Authority/ies"
             )
 
         count_certs = await self._crud_certificates.count(
-            {"issuer": {"$regex": f"CN={ca_id}"}}
+            {"ca_id": ca_id, "status": "signed"}
         )
         if count_certs > 0:
             raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' cannot be deleted because it still has {count_certs} certificates associated with it"
+                msg=f"CA Authority '{ca_id}' cannot be {operation} because it still has {count_certs} active certificate(s) associated with it"
             )
 
+    async def delete_authority(self, ca_id: str) -> None:
+        await self._validate_ca_usage(ca_id=ca_id, operation="deleted")
         await self._crud_authorities.delete(_id=ca_id)
         await self._crud_spaces.remove_ca_from_history(ca_id=ca_id)
 
-    async def create_space(self, _id: str, payload: CASpacePost) -> CASpaceGet:
+    async def create_space(
+        self, _id: str, payload: CASpacePost, fields: list = None
+    ) -> CASpaceGet:
+        if fields is None:
+            fields = ["id"]
         data = payload.model_dump()
         data["id"] = _id
         data["ca_id_history"] = []
-        return await self._crud_spaces.insert(payload=data, fields=["id"])
+        return await self._crud_spaces.insert(payload=data, fields=fields)
 
-    async def update_space(self, _id: str, payload: CASpacePut) -> CASpaceGet:
+    async def update_space(
+        self, _id: str, payload: CASpacePut, fields: list = None
+    ) -> CASpaceGet:
+        if fields is None:
+            fields = ["id"]
         current = await self._crud_spaces.get(_id, fields=["ca_id", "ca_id_history"])
         data = payload.model_dump()
         if data["ca_id"] != current.ca_id:
@@ -192,7 +206,7 @@ class CAService:
             data["ca_id_history"] = current.ca_id_history
 
         return await self._crud_spaces.update(
-            query={"id": _id}, payload=data, fields=["id"]
+            query={"id": _id}, payload=data, fields=fields
         )
 
     async def delete_space(self, _id: str) -> None:
@@ -380,6 +394,7 @@ class CAService:
             return cert
 
     async def revoke_authority(self, ca_id: str) -> CAAuthorityGet:
+        await self._validate_ca_usage(ca_id=ca_id, operation="revoked")
         ca = await self._crud_authorities.get(ca_id, fields=["parent_id"])
 
         payload = {
