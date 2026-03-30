@@ -629,6 +629,7 @@ async def cli_init_ca(
         space_id=space_id,
         csr_pem=csr_pem.decode(),
         fields=["id"],
+        cn=cn,
     )
 
     cert = await ca_service.sign_certificate(

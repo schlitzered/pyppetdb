@@ -213,17 +213,26 @@ class CAService:
         await self._crud_spaces.delete(query={"id": _id})
 
     async def submit_certificate_request(
-        self, space_id: str, csr_pem: str, fields: list = None
+        self, space_id: str, csr_pem: str, fields: list = None, cn: str = None
     ) -> CACertificateGet:
         if fields is None:
             fields = ["id", "status", "ca_id"]
 
-        csr_info = CAUtils.get_csr_info(csr_pem.encode())
-        cn = csr_info["cn"]
+        try:
+            csr_info = CAUtils.get_csr_info(csr_pem.encode())
+        except Exception as e:
+            raise QueryParamValidationError(msg=f"Invalid CSR: {e}")
+
+        csr_cn = csr_info["cn"]
+
+        if cn and cn != csr_cn:
+            raise QueryParamValidationError(
+                msg=f"CSR CN '{csr_cn}' does not match nodename '{cn}'"
+            )
 
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
 
-        query = {"space_id": space_id, "cn": cn, "status": "requested"}
+        query = {"space_id": space_id, "cn": csr_cn, "status": "requested"}
         payload = {
             "id": str(uuid.uuid4().int),
             "ca_id": space.ca_id,

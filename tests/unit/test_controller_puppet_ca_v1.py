@@ -63,15 +63,52 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_submit_certificate_request(self):
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
-        mock_request.body = AsyncMock(return_value=b"CSR_PEM")
+        mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
 
         response = await self.controller.submit_certificate_request(
             "node1", mock_request
         )
         self.assertEqual(response.body, b"CSR submitted")
-        self.mock_ca_service.submit_certificate_request.assert_called_once()
+        self.mock_ca_service.submit_certificate_request.assert_called_once_with(
+            space_id="puppet-ca",
+            csr_pem=csr_pem.decode(),
+            fields=["id"],
+            cn="node1",
+        )
+
+    async def test_submit_certificate_request_mismatch(self):
+        from pyppetdb.errors import QueryParamValidationError
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("attacker")
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=csr_pem)
+        self.mock_config.ca.autoSign = False
+        self.mock_ca_service.submit_certificate_request.side_effect = (
+            QueryParamValidationError(msg="mismatch")
+        )
+
+        with self.assertRaises(HTTPException) as cm:
+            await self.controller.submit_certificate_request("node1", mock_request)
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertEqual(cm.exception.detail, "mismatch")
+
+    async def test_submit_certificate_request_invalid_csr(self):
+        from pyppetdb.errors import QueryParamValidationError
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=b"INVALID_CSR")
+        self.mock_config.ca.autoSign = False
+        self.mock_ca_service.submit_certificate_request.side_effect = (
+            QueryParamValidationError(msg="Invalid CSR")
+        )
+
+        with self.assertRaises(HTTPException) as cm:
+            await self.controller.submit_certificate_request("node1", mock_request)
+        self.assertEqual(cm.exception.status_code, 400)
+        self.assertEqual(cm.exception.detail, "Invalid CSR")
 
     async def test_get_certificate_status(self):
         self.mock_crud_certificates.coll.find_one.return_value = {
@@ -140,16 +177,20 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_submit_certificate_request_autosign_success(self):
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
-        mock_request.body = AsyncMock(return_value=b"CSR_PEM")
+        mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
 
         await self.controller.submit_certificate_request("node1", mock_request)
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_submit_certificate_request_autosign_error(self):
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
-        mock_request.body = AsyncMock(return_value=b"CSR_PEM")
+        mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
         self.mock_ca_service.sign_certificate.side_effect = Exception("Autosign failed")
 

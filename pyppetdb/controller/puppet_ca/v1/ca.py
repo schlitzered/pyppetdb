@@ -80,7 +80,6 @@ class ControllerPuppetCaV1CA:
             except ResourceNotFound:
                 raise HTTPException(status_code=404, detail="Space not found")
 
-        # Query by CN and status to get the signed certificate
         cert_doc = await self._crud_certificates.coll.find_one(
             {"space_id": "puppet-ca", "cn": nodename, "status": "signed"}
         )
@@ -91,7 +90,6 @@ class ControllerPuppetCaV1CA:
 
     async def get_certificate_request(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
-        # Query by CN and status to get the pending CSR
         cert_doc = await self._crud_certificates.coll.find_one(
             {"space_id": "puppet-ca", "cn": nodename, "status": "requested"}
         )
@@ -101,14 +99,22 @@ class ControllerPuppetCaV1CA:
         return Response(content=cert_doc["csr"], media_type="text/plain")
 
     async def submit_certificate_request(self, nodename: str, request: Request):
+        from pyppetdb.errors import QueryParamValidationError
+
         body = await request.body()
         csr_pem = body.decode()
 
-        await self._ca_service.submit_certificate_request(
-            space_id="puppet-ca",
-            csr_pem=csr_pem,
-            fields=["id"],
-        )
+        try:
+            await self._ca_service.submit_certificate_request(
+                space_id="puppet-ca",
+                csr_pem=csr_pem,
+                fields=["id"],
+                cn=nodename,
+            )
+        except QueryParamValidationError as e:
+            raise HTTPException(status_code=400, detail=e.detail)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
         if self._config.ca.autoSign:
             self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
@@ -123,7 +129,6 @@ class ControllerPuppetCaV1CA:
 
     async def get_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
-        # Find any cert (any status) by CN
         cert_doc = await self._crud_certificates.coll.find_one(
             {"space_id": "puppet-ca", "cn": nodename}
         )
