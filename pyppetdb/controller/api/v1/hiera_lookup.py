@@ -87,7 +87,9 @@ class ControllerApiV1HieraLookup:
         request: Request,
         key_id: str,
         merge: bool = Query(default=False),
-        fact: Set[constr(pattern=r"^[^:]+:.+$")] = Query(default=None),
+        fact: Set[str] = Query(
+            default=None, description="fact filter: fact_name:fact_value"
+        ),
     ):
         await self.authorize.require_admin(request=request)
         facts = self._facts_from_query(fact)
