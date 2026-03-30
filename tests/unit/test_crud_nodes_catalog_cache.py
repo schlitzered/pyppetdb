@@ -5,13 +5,16 @@ from datetime import datetime
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.errors import ResourceNotFound
 
+
 class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_coll = MagicMock()
         self.mock_protector = MagicMock()
-        self.crud = CrudNodesCatalogCache(self.log, self.mock_config, self.mock_coll, self.mock_protector)
+        self.crud = CrudNodesCatalogCache(
+            self.log, self.mock_config, self.mock_coll, self.mock_protector
+        )
 
     async def test_get_cached(self):
         self.crud._get = AsyncMock(return_value={"id": "node1"})
@@ -28,7 +31,7 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
     async def test_get_catalog_success(self):
         self.mock_coll.find_one = AsyncMock(return_value={"catalog": "encrypted_data"})
         self.mock_protector.decrypt_obj.return_value = {"resources": []}
-        
+
         catalog = await self.crud.get_catalog("node1")
         self.assertEqual(catalog, {"resources": []})
         self.mock_protector.decrypt_obj.assert_called_once_with("encrypted_data")
@@ -43,7 +46,7 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.mongodb.placement = "p1"
         self.mock_protector.encrypt_obj.return_value = "encrypted"
         self.mock_coll.update_one = AsyncMock()
-        
+
         await self.crud.upsert("node1", {"os": "linux"}, {"res": []})
         self.mock_coll.update_one.assert_called_once()
         call_args = self.mock_coll.update_one.call_args[1]
@@ -54,7 +57,7 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
         mock_cursor = MagicMock()
         mock_cursor.__aiter__.return_value = [{"id": "n1"}, {"id": "n2"}]
         self.mock_coll.find.return_value = mock_cursor
-        
+
         ids = await self.crud.get_cached_node_ids(["n1", "n2", "n3"])
         self.assertEqual(ids, {"n1", "n2"})
 

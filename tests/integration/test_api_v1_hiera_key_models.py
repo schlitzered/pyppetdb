@@ -114,7 +114,10 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
                 "description": "Custom model",
                 "model": {
                     "type": "object",
-                    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+                    "properties": {
+                        "name": {"type": "string"},
+                        "age": {"type": "integer"},
+                    },
                     "required": ["name"],
                 },
             },

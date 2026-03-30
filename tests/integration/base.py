@@ -9,9 +9,11 @@ from pymongo import MongoClient
 
 class IntegrationTestBase(unittest.TestCase):
     _ph = PasswordHasher()
+
     @classmethod
     def setUpClass(cls):
         from pyppetdb.main import settings
+
         settings.mongodb.database = f"pyppetdb_test"
 
         cls._mongo_client = MongoClient(settings.mongodb.url)
@@ -50,6 +52,7 @@ class IntegrationTestBase(unittest.TestCase):
         from pyppetdb.main import settings
         from pyppetdb.main import version
         from starlette.middleware.sessions import SessionMiddleware
+
         settings.mongodb.database = f"pyppetdb_test"
 
         app = FastAPI(
@@ -63,6 +66,7 @@ class IntegrationTestBase(unittest.TestCase):
 
         from pyppetdb.authorize import AuthorizeClientCert
         from unittest.mock import AsyncMock
+
         AuthorizeClientCert.require_cn = AsyncMock(return_value="test-node")
         AuthorizeClientCert.require_cn_match = AsyncMock(return_value="test-node")
         AuthorizeClientCert.require_cn_trusted = AsyncMock(return_value="test-admin")
@@ -81,6 +85,7 @@ class IntegrationTestBase(unittest.TestCase):
     @classmethod
     def _cleanup(cls):
         from pyppetdb.main import settings
+
         client = MongoClient(settings.mongodb.url)
         client.drop_database(settings.mongodb.database)
         client.close()

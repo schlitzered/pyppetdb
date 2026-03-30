@@ -335,8 +335,8 @@ class TestApiV1HieraLevelData(IntegrationTestBase):
                     "type": "object",
                     "properties": {
                         "servers": {"type": "array", "items": {"type": "string"}},
-                        "config": {"type": "object"}
-                    }
+                        "config": {"type": "object"},
+                    },
                 }
             },
             headers=self._auth_headers(),

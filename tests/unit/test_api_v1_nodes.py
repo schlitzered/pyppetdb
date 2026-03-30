@@ -4,6 +4,7 @@ import logging
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.model.nodes import NodePut
 
+
 class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -23,7 +24,7 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             crud_nodes_catalogs=self.mock_crud_catalogs,
             crud_nodes_groups=self.mock_crud_groups,
             crud_nodes_reports=self.mock_crud_reports,
-            crud_teams=self.mock_crud_teams
+            crud_teams=self.mock_crud_teams,
         )
 
     async def test_get_node(self):
@@ -50,9 +51,15 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.delete(node_id="node1", request=mock_request)
 
         self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
-        self.mock_crud_groups.delete_node_from_nodes_groups.assert_called_once_with(node_id="node1")
-        self.mock_crud_catalogs.delete_all_from_node.assert_called_once_with(node_id="node1")
-        self.mock_crud_reports.delete_all_from_node.assert_called_once_with(node_id="node1")
+        self.mock_crud_groups.delete_node_from_nodes_groups.assert_called_once_with(
+            node_id="node1"
+        )
+        self.mock_crud_catalogs.delete_all_from_node.assert_called_once_with(
+            node_id="node1"
+        )
+        self.mock_crud_reports.delete_all_from_node.assert_called_once_with(
+            node_id="node1"
+        )
         self.mock_crud_nodes.delete.assert_called_once_with(_id="node1")
 
     async def test_update_node_admin_required(self):
@@ -61,7 +68,9 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
 
         data = NodePut(disabled=True)
         mock_request = MagicMock()
-        await self.controller.update(node_id="node1", request=mock_request, data=data, fields=set())
+        await self.controller.update(
+            node_id="node1", request=mock_request, data=data, fields=set()
+        )
 
         self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
         self.mock_crud_nodes.update.assert_called_once()
