@@ -1,7 +1,6 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
-from datetime import datetime, timedelta, UTC
 from pyppetdb.crud.nodes import CrudNodes, NodePutInternal
 
 

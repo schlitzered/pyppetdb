@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
 from fastapi import HTTPException, Response
 from pyppetdb.controller.puppet_ca.v1.ca import ControllerPuppetCaV1CA

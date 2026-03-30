@@ -133,9 +133,7 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
                 mock_full_path if x == "motd" else mock_path
             )
 
-            with patch(
-                "pyppetdb.controller.puppet.v3.file_content.FileResponse"
-            ) as mock_file_response:
+            with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as _:
                 result = await controller.get(mock_request, "modules", "testmod/motd")
                 self.assertIsInstance(result, MagicMock)
 
@@ -159,9 +157,7 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
                 mock_full_path if x == "init.sh" else mock_path
             )
 
-            with patch(
-                "pyppetdb.controller.puppet.v3.file_content.FileResponse"
-            ) as mock_file_response:
+            with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as _:
                 result = await controller.get(mock_request, "tasks", "testmod/init.sh")
                 self.assertIsInstance(result, MagicMock)
 
@@ -196,9 +192,7 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
                 mock_candidate if x == "my_fact.rb" else mock_module_dir
             )
 
-            with patch(
-                "pyppetdb.controller.puppet.v3.file_content.FileResponse"
-            ) as mock_file_response:
+            with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as _:
                 result = await controller.get(mock_request, "plugins", "my_fact.rb")
                 self.assertIsInstance(result, MagicMock)
 
@@ -229,9 +223,7 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
                 mock_candidate if x == "my_fact.sh" else mock_module_dir
             )
 
-            with patch(
-                "pyppetdb.controller.puppet.v3.file_content.FileResponse"
-            ) as mock_file_response:
+            with patch("pyppetdb.controller.puppet.v3.file_content.FileResponse") as _:
                 result = await controller.get(mock_request, "pluginfacts", "my_fact.sh")
                 self.assertIsInstance(result, MagicMock)
 

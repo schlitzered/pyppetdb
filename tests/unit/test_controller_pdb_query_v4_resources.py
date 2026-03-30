@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import PropertyMock
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 import httpx
@@ -50,6 +51,3 @@ class TestControllerPdbQueryV4ResourcesUnit(unittest.IsolatedAsyncioTestCase):
 
         result = await self.controller.get(mock_request)
         self.assertEqual(result, [])
-
-
-from unittest.mock import PropertyMock

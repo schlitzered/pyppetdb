@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import patch
 from tests.integration.base import IntegrationTestBase
 import httpx
 

@@ -14,7 +14,7 @@ class IntegrationTestBase(unittest.TestCase):
     def setUpClass(cls):
         from pyppetdb.main import settings
 
-        settings.mongodb.database = f"pyppetdb_test"
+        settings.mongodb.database = "pyppetdb_test"
 
         cls._mongo_client = MongoClient(settings.mongodb.url)
         cls._db = cls._mongo_client[settings.mongodb.database]
@@ -53,7 +53,7 @@ class IntegrationTestBase(unittest.TestCase):
         from pyppetdb.main import version
         from starlette.middleware.sessions import SessionMiddleware
 
-        settings.mongodb.database = f"pyppetdb_test"
+        settings.mongodb.database = "pyppetdb_test"
 
         app = FastAPI(
             title="pyppetdb all in one dev server",

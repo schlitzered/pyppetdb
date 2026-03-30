@@ -1,10 +1,9 @@
 import asyncio
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
 import json
 import gzip
-from datetime import datetime, UTC
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 
 

@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.crud.ca_certificates import CrudCACertificates
-from pyppetdb.errors import ResourceNotFound
 
 
 class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):

@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthorities
 from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
-from pyppetdb.model.ca_authorities import CAAuthorityPost, CAAuthorityPut
-from pyppetdb.model.ca_spaces import CASpacePost, CASpacePut
+from pyppetdb.model.ca_authorities import CAAuthorityPut
+from pyppetdb.model.ca_spaces import CASpacePost
 
 
 class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):

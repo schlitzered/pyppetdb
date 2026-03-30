@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.nodes_groups import ControllerApiV1NodesGroups
 from pyppetdb.model.nodes_groups import NodeGroupUpdate

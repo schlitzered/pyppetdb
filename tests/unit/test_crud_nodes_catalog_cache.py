@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
-from datetime import datetime
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.errors import ResourceNotFound
 

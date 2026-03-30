@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 import logging
 from pyppetdb.crud.hiera_keys import CrudHieraKeysAdapter
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraModelsDynamicAdapter

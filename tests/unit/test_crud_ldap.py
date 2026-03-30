@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
-import asyncio
 import bonsai.errors
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.errors import AuthenticationError, LdapInvalidDN, LdapResourceNotFound

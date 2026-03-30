@@ -1,5 +1,4 @@
 import unittest
-import logging
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.model.nodes_groups import (
     NodeGroupGet,

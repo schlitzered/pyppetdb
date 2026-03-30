@@ -102,7 +102,7 @@ class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
             mock_hiera_instance = mock_pyhiera_async_cls.return_value
             mock_hiera_instance.key_models = {}
 
-            pyhiera = PyHiera(
+            PyHiera(
                 log=self.log,
                 config=config,
                 crud_hiera_level_data=mock_crud,

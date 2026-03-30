@@ -2,8 +2,6 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.crud.ca_spaces import CrudCASpaces
-from pyppetdb.model.ca_spaces import CASpacePost
-from pyppetdb.model.ca_spaces import CASpacePut
 
 
 class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):

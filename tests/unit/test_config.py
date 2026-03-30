@@ -1,5 +1,4 @@
 import unittest
-import json
 from pyppetdb.config import ConfigAppFacts, ConfigAppPuppet
 
 

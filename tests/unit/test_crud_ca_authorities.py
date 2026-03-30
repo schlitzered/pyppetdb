@@ -1,9 +1,8 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 import logging
 from datetime import datetime, timezone
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
-from pyppetdb.model.ca_authorities import CAAuthorityPost
 
 
 class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
