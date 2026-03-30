@@ -212,6 +212,44 @@ class CAUtils:
         return cert.public_bytes(serialization.Encoding.PEM)
 
     @staticmethod
+    def renew_cert(
+        cert_pem: bytes,
+        ca_cert_pem: bytes,
+        ca_key_pem: bytes,
+        validity_days: int = 365,
+        serial_number: Optional[int] = None,
+    ) -> bytes:
+        """Renew a certificate with the CA certificate and key."""
+        old_cert = x509.load_pem_x509_certificate(cert_pem)
+        ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
+        ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+
+        if serial_number is None:
+            serial_number = uuid.uuid4().int
+
+        builder = (
+            x509.CertificateBuilder()
+            .subject_name(old_cert.subject)
+            .issuer_name(ca_cert.subject)
+            .public_key(old_cert.public_key())
+            .serial_number(serial_number)
+            .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
+            .not_valid_after(
+                datetime.datetime.now(datetime.timezone.utc)
+                + datetime.timedelta(days=validity_days)
+            )
+        )
+
+        for extension in old_cert.extensions:
+            builder = builder.add_extension(
+                extension.value, critical=extension.critical
+            )
+
+        new_cert = builder.sign(ca_key, hashes.SHA256())
+
+        return new_cert.public_bytes(serialization.Encoding.PEM)
+
+    @staticmethod
     def get_csr_info(csr_pem: bytes) -> dict:
         """Extract information from a CSR."""
         csr = x509.load_pem_x509_csr(csr_pem)

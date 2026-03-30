@@ -59,7 +59,6 @@ from pyppetdb.ca.utils import CAUtils
 from pyppetdb.model.ca_authorities import CAAuthorityPost
 from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.users import UserPost
-from pyppetdb.model.ca_certificates import CACertificatePut
 
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
@@ -85,18 +84,17 @@ async def dummy_sleep_background_task(log: logging.Logger):
 
 async def ensure_default_ca_setup(
     log: logging.Logger,
-    crud_ca_authorities: CrudCAAuthorities,
-    crud_ca_spaces: CrudCASpaces,
+    ca_service: CAService,
 ):
     default_id = "puppet-ca"
 
     try:
-        await crud_ca_authorities.get(default_id, fields=["id"])
+        await ca_service._crud_authorities.get(default_id, fields=["id"])
         log.info(f"Default CA Authority '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Authority '{default_id}'")
         try:
-            await crud_ca_authorities.create(
+            await ca_service.create_authority(
                 _id=default_id,
                 payload=CAAuthorityPost(
                     cn="PyppetDB Internal Root CA",
@@ -105,7 +103,6 @@ async def ensure_default_ca_setup(
                     state="Hessen",
                     validity_days=3650,
                 ),
-                fields=["id"],
             )
         except DuplicateResource:
             log.info(
@@ -113,15 +110,14 @@ async def ensure_default_ca_setup(
             )
 
     try:
-        await crud_ca_spaces.get(default_id, fields=["id"])
+        await ca_service._crud_spaces.get(default_id, fields=["id"])
         log.info(f"Default CA Space '{default_id}' already exists")
     except ResourceNotFound:
         log.info(f"Creating default CA Space '{default_id}'")
         try:
-            await crud_ca_spaces.create(
+            await ca_service.create_space(
                 _id=default_id,
                 payload=CASpacePost(ca_id=default_id),
-                fields=["id"],
             )
         except DuplicateResource:
             log.info(f"Default CA Space '{default_id}' was created by another process")
@@ -385,8 +381,7 @@ async def prepare_env():
 
     await ensure_default_ca_setup(
         log=log,
-        crud_ca_authorities=crud_ca_authorities,
-        crud_ca_spaces=crud_ca_spaces,
+        ca_service=ca_service,
     )
 
     return env
@@ -621,8 +616,7 @@ async def cli_init_ca(
 
     await ensure_default_ca_setup(
         log=log,
-        crud_ca_authorities=crud_ca_authorities,
-        crud_ca_spaces=crud_ca_spaces,
+        ca_service=ca_service,
     )
 
     csr_pem, key_pem = pyppetdb.ca.utils.CAUtils.generate_csr(
@@ -631,18 +625,15 @@ async def cli_init_ca(
     )
 
     space_id = "puppet-ca"
-    space = await crud_ca_spaces.get(space_id, fields=["ca_id"])
-    await crud_ca_certificates.submit_csr(
+    await ca_service.submit_certificate_request(
         space_id=space_id,
         csr_pem=csr_pem.decode(),
-        ca_id=space.ca_id,
         fields=["id"],
     )
 
-    cert = await ca_service.update_certificate_status(
+    cert = await ca_service.sign_certificate(
         space_id=space_id,
         cn=cn,
-        data=CACertificatePut(status="signed"),
         fields=["certificate"],
     )
 
@@ -700,6 +691,14 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         coll=mongo_db["ca_certificates"],
     )
     await crud_ca_certificates.index_create()
+
+    ca_service = CAService(
+        log=log,
+        config=settings,
+        crud_authorities=crud_ca_authorities,
+        crud_spaces=crud_ca_spaces,
+        crud_certificates=crud_ca_certificates,
+    )
 
     puppet_ca_id = "puppet-ca"
     puppet_ca_dir = Path(ca_dir)
@@ -769,10 +768,9 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         pass
 
     log.info(f"Creating CA Space '{puppet_ca_id}'")
-    await crud_ca_spaces.create(
+    await ca_service.create_space(
         _id=puppet_ca_id,
         payload=CASpacePost(ca_id=puppet_ca_id),
-        fields=["id"],
     )
     log.info(f"CA Space '{puppet_ca_id}' created successfully.")
 

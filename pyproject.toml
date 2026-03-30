@@ -29,3 +29,6 @@ files = ["requirements.txt"]
 [project.urls]
 Repository = "https://github.com/schlitzered/pyppetdb"
 Issues = "https://github.com/schlitzered/pyppetdb/issues"
+
+[tool.flake8]
+ignore = "E501,W503"

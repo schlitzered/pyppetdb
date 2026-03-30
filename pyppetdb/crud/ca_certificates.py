@@ -1,4 +1,3 @@
-import datetime
 import logging
 import typing
 import pymongo
@@ -6,12 +5,10 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.ca.utils import CAUtils
 from pyppetdb.model.ca_certificates import CACertificateGet
 from pyppetdb.model.ca_certificates import CACertificateGetMulti
 from pyppetdb.model.ca_certificates import CAStatus
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.errors import QueryParamValidationError
 
 
 class CrudCACertificates(CrudMongo):
@@ -29,104 +26,16 @@ class CrudCACertificates(CrudMongo):
         await self.coll.create_index([("ca_id", pymongo.ASCENDING)])
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def submit_csr(
-        self,
-        space_id: str,
-        csr_pem: str,
-        ca_id: str,
-        fields: list,
+    async def update(
+        self, query: dict, payload: dict, fields: list, upsert: bool = False
     ) -> CACertificateGet:
-        csr_info = CAUtils.get_csr_info(csr_pem.encode())
-        cn = csr_info["cn"]
-
-        existing_csr = await self.coll.find_one(
-            {"space_id": space_id, "cn": cn, "status": "requested"}
+        result = await self._update(
+            query=query, payload=payload, fields=fields, upsert=upsert
         )
-
-        if existing_csr:
-            self.log.info(
-                f"Updating existing pending CSR for CN '{cn}' in space '{space_id}'"
-            )
-            temp_id = existing_csr["id"]
-            await self.coll.update_one(
-                {"_id": existing_csr["_id"]},
-                {
-                    "$set": {
-                        "ca_id": ca_id,
-                        "csr": csr_pem,
-                        "created": datetime.datetime.now(datetime.timezone.utc),
-                    }
-                },
-            )
-        else:
-            import uuid
-
-            new_id = str(uuid.uuid4().int)
-
-            data = {
-                "id": new_id,
-                "space_id": space_id,
-                "ca_id": ca_id,
-                "cn": cn,
-                "status": "requested",
-                "csr": csr_pem,
-                "created": datetime.datetime.now(datetime.timezone.utc),
-            }
-
-            await self.coll.insert_one(data)
-            temp_id = new_id
-
-        result = await self._get(query={"id": temp_id}, fields=fields)
         return CACertificateGet(**result)
 
-    async def sign(
-        self,
-        space_id: str,
-        cn: str,
-        ca_cert_pem: bytes,
-        ca_key_pem: bytes,
-        fields: list,
-    ) -> CACertificateGet:
-        cert_data = await self.coll.find_one(
-            {"space_id": space_id, "cn": cn, "status": "requested"}
-        )
-        if not cert_data:
-            raise QueryParamValidationError(
-                msg=f"No pending CSR found for CN '{cn}' in space '{space_id}'"
-            )
-
-        serial = cert_data["id"]
-
-        cert_pem = CAUtils.sign_csr(
-            csr_pem=cert_data["csr"].encode(),
-            ca_cert_pem=ca_cert_pem,
-            ca_key_pem=ca_key_pem,
-            serial_number=int(serial),
-            validity_days=self.config.ca.certificateValidityDays,
-        )
-
-        info = CAUtils.get_cert_info(cert_pem)
-
-        updates = {"status": "signed", "certificate": cert_pem.decode(), **info}
-
-        await self.coll.update_one({"_id": cert_data["_id"]}, {"$set": updates})
-
-        result = await self._get(query={"id": serial}, fields=fields)
-        return CACertificateGet(**result)
-
-    async def revoke(self, _id: str, fields: list) -> CACertificateGet:
-        cert_data = await self._get(query={"id": _id}, fields=[])
-        if cert_data["status"] != "signed":
-            raise QueryParamValidationError(
-                msg="Only 'signed' certificates can be revoked"
-            )
-
-        updates = {
-            "status": "revoked",
-            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-        }
-        await self.coll.update_one({"id": _id}, {"$set": updates})
-        result = await self._get(query={"id": _id}, fields=fields)
+    async def insert(self, payload: dict, fields: list) -> CACertificateGet:
+        result = await self._create(payload=payload, fields=fields)
         return CACertificateGet(**result)
 
     async def get(self, _id: str, fields: list) -> CACertificateGet:

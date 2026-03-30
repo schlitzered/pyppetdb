@@ -11,9 +11,11 @@ class IntegrationTestBase(unittest.TestCase):
     _ph = PasswordHasher()
     @classmethod
     def setUpClass(cls):
+        from pyppetdb.main import settings
+        settings.mongodb.database = f"pyppetdb_test"
 
-        cls._mongo_client = MongoClient("mongodb://localhost:27017")
-        cls._db = cls._mongo_client[f"pyppetdb_test"]
+        cls._mongo_client = MongoClient(settings.mongodb.url)
+        cls._db = cls._mongo_client[settings.mongodb.database]
 
         cls._db["users"].delete_many({})
         cls._db["users_credentials"].delete_many({})
@@ -78,8 +80,9 @@ class IntegrationTestBase(unittest.TestCase):
 
     @classmethod
     def _cleanup(cls):
-        client = MongoClient("mongodb://localhost:27017")
-        client.drop_database(f"pyppetdb_test")
+        from pyppetdb.main import settings
+        client = MongoClient(settings.mongodb.url)
+        client.drop_database(settings.mongodb.database)
         client.close()
 
     def setUp(self):

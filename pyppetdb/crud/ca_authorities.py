@@ -9,7 +9,6 @@ from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.ca.utils import CAUtils
-from pyppetdb.model.ca_authorities import CAAuthorityPost
 from pyppetdb.model.ca_authorities import CAAuthorityGet
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
 from pyppetdb.model.ca_authorities import CACRL
@@ -28,83 +27,25 @@ class CrudCAAuthorities(CrudMongo):
         super().__init__(config, log, coll)
         self._protector = protector
 
+    @property
+    def protector(self):
+        return self._protector
+
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    async def create(
-        self,
-        _id: str,
-        payload: CAAuthorityPost,
-        fields: list,
+    async def insert(self, payload: dict, fields: list) -> CAAuthorityGet:
+        result = await self._create(payload=payload, fields=fields)
+        return CAAuthorityGet(**result)
+
+    async def update(
+        self, query: dict, payload: dict, fields: list, upsert: bool = False
     ) -> CAAuthorityGet:
-        if payload.certificate and payload.private_key:
-            internal = False
-            cert_pem = payload.certificate.encode()
-            key_pem = payload.private_key.encode()
-            chain = payload.external_chain or []
-        elif payload.parent_id:
-            internal = True
-            parent_ca = await self.get(
-                payload.parent_id, fields=["certificate", "chain"]
-            )
-            parent_key = await self.get_private_key(payload.parent_id)
-            cert_pem, key_pem = CAUtils.sign_ca(
-                cn=payload.cn,
-                ca_cert_pem=parent_ca.certificate.encode(),
-                ca_key_pem=parent_key,
-                organization=payload.organization,
-                organizational_unit=payload.organizational_unit,
-                country=payload.country,
-                state=payload.state,
-                locality=payload.locality,
-                validity_days=payload.validity_days,
-            )
-            chain = [parent_ca.certificate] + parent_ca.chain
-        else:
-            internal = True
-            cert_pem, key_pem = CAUtils.generate_ca(
-                cn=payload.cn,
-                organization=payload.organization,
-                organizational_unit=payload.organizational_unit,
-                country=payload.country,
-                state=payload.state,
-                locality=payload.locality,
-                validity_days=payload.validity_days,
-            )
-            chain = []
-
-        info = CAUtils.get_cert_info(cert_pem)
-        encrypted_key = self._protector.encrypt_string(key_pem.decode())
-
-        data = {
-            "id": _id,
-            "parent_id": payload.parent_id,
-            "certificate": cert_pem.decode(),
-            "private_key_encrypted": encrypted_key,
-            "internal": internal,
-            "chain": chain,
-            "status": "active",
-            **info,
-        }
-
-        if internal:
-            crl_pem, next_update = CAUtils.generate_crl(
-                ca_cert_pem=cert_pem, ca_key_pem=key_pem, revoked_certs=[]
-            )
-            now = datetime.datetime.now(datetime.timezone.utc)
-            from pyppetdb.model.ca_authorities import CACRL
-
-            data["crl"] = CACRL(
-                crl_pem=crl_pem.decode(),
-                generation=1,
-                updated_at=now,
-                next_update=next_update,
-                locked_at=None,
-            ).model_dump()
-
-        result = await self._create(payload=data, fields=fields)
+        result = await self._update(
+            query=query, payload=payload, fields=fields, upsert=upsert
+        )
         return CAAuthorityGet(**result)
 
     async def get(self, _id: str, fields: list) -> CAAuthorityGet:
@@ -121,14 +62,6 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._get(query={"id": _id}, fields=["private_key_encrypted"])
         decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
         return decrypted.encode()
-
-    async def revoke(self, _id: str) -> CAAuthorityGet:
-        updates = {
-            "status": "revoked",
-            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-        }
-        await self.coll.update_one({"id": _id}, {"$set": updates})
-        return await self.get(_id, fields=["status", "revocation_date"])
 
     async def get_revoked(self, parent_id: str) -> list[dict]:
         cursor = self.coll.find(

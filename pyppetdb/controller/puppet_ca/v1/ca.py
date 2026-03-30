@@ -56,6 +56,13 @@ class ControllerPuppetCaV1CA:
         self._router.add_api_route(
             "/certificate_revocation_list/ca", self.get_crl, methods=["GET"]
         )
+        self._router.add_api_route(
+            "/certificate_renewal", self.certificate_renewal, methods=["POST"]
+        )
+
+    @property
+    def log(self):
+        return self._log
 
     @property
     def authorize_client_cert(self):
@@ -97,31 +104,20 @@ class ControllerPuppetCaV1CA:
         body = await request.body()
         csr_pem = body.decode()
 
-        # Get CA ID for puppet-ca space
-        space = await self._crud_spaces.get("puppet-ca", fields=["ca_id"])
-
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"space_id": "puppet-ca", "cn": nodename, "status": "signed"}
-        )
-
-        if cert_doc:
-            return Response(content="CSR submitted", media_type="text/plain")
-
-        await self._crud_certificates.submit_csr(
+        await self._ca_service.submit_certificate_request(
             space_id="puppet-ca",
             csr_pem=csr_pem,
-            ca_id=space.ca_id,
             fields=["id"],
         )
 
         if self._config.ca.autoSign:
-            self._log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
+            self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
             try:
-                await self._ca_service.update_certificate_status(
-                    "puppet-ca", nodename, CACertificatePut(status="signed")
+                await self._ca_service.sign_certificate(
+                    space_id="puppet-ca", cn=nodename
                 )
             except Exception as e:
-                self._log.error(f"Failed to auto-sign CSR for {nodename}: {e}")
+                self.log.error(f"Failed to auto-sign CSR for {nodename}: {e}")
 
         return Response(content="CSR submitted", media_type="text/plain")
 
@@ -166,7 +162,7 @@ class ControllerPuppetCaV1CA:
                     status_code=400, detail=f"Invalid desired_state: {desired_state}"
                 )
         except Exception as e:
-            self._log.error(f"Failed to update certificate status: {e}")
+            self.log.error(f"Failed to update certificate status: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     async def get_crl(
@@ -178,5 +174,24 @@ class ControllerPuppetCaV1CA:
         except ResourceNotFound:
             raise HTTPException(status_code=404, detail="CRL not found for space")
         except Exception as e:
-            self._log.error(f"Failed to get CRL: {e}")
+            self.log.error(f"Failed to get CRL: {e}")
             raise HTTPException(status_code=500, detail="Failed to get CRL")
+
+    async def certificate_renewal(self, request: Request):
+        try:
+            cert_info = await self._authorize_client_cert.get_cert_info(request)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        nodename = cert_info["cn"]
+
+        try:
+            new_cert = await self._ca_service.renew_certificate(
+                space_id="puppet-ca", cn=nodename
+            )
+            return Response(content=new_cert.certificate, media_type="text/plain")
+        except ResourceNotFound:
+            raise HTTPException(status_code=404, detail="Certificate not found")
+        except Exception as e:
+            self.log.error(f"Failed to renew certificate for {nodename}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))

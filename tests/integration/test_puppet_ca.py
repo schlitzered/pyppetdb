@@ -128,3 +128,60 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
         
         # 7. Cleanup
         settings.ca.autoSign = False
+
+    def test_certificate_renewal(self):
+        settings.ca.autoSign = True
+        nodename = f"node-{uuid.uuid4().hex}"
+
+        # 1. Create a signed certificate for the node
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, nodename),
+        ])).sign(key, hashes.SHA256())
+        csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+
+        self.client.put(
+            f"/puppet-ca/v1/certificate_request/{nodename}",
+            content=csr_pem,
+            headers={"Content-Type": "text/plain"}
+        )
+
+        # Verify it exists and is signed
+        resp = self.client.get(f"/puppet-ca/v1/certificate/{nodename}")
+        self.assertEqual(resp.status_code, 200)
+        old_cert_pem = resp.text
+        old_cert = x509.load_pem_x509_certificate(old_cert_pem.encode())
+        old_serial = str(old_cert.serial_number)
+
+        # 2. Mock AuthorizeClientCert.get_cert_info to return this node's info
+        from pyppetdb.authorize import AuthorizeClientCert
+        from unittest.mock import patch, AsyncMock
+
+        with patch.object(AuthorizeClientCert, "get_cert_info", new_callable=AsyncMock) as mock_get_cert_info:
+            mock_get_cert_info.return_value = {"cn": nodename, "serial": old_serial}
+
+            # 3. Call renewal endpoint
+            resp = self.client.post(
+                "/puppet-ca/v1/certificate_renewal",
+                headers={"Accept": "text/plain", "Content-Type": "text/plain"}
+            )
+
+            self.assertEqual(resp.status_code, 200)
+            new_cert_pem = resp.text
+            self.assertNotEqual(old_cert_pem, new_cert_pem)
+
+            new_cert = x509.load_pem_x509_certificate(new_cert_pem.encode())
+            self.assertEqual(new_cert.subject, old_cert.subject)
+            self.assertNotEqual(new_cert.serial_number, old_cert.serial_number)
+
+            # 4. Verify old cert is now revoked in DB
+            old_cert_doc = self._db["ca_certificates"].find_one({"id": old_serial})
+            self.assertEqual(old_cert_doc["status"], "revoked")
+
+            # 5. Verify new cert is now the one returned by GET /certificate/{nodename}
+            resp = self.client.get(f"/puppet-ca/v1/certificate/{nodename}")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.text, new_cert_pem)
+
+        # 6. Cleanup
+        settings.ca.autoSign = False
