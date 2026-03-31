@@ -62,6 +62,10 @@ class ControllerApiV1CASpacesCerts:
         )
 
     @property
+    def log(self):
+        return self._log
+
+    @property
     def router(self):
         return self._router
 
@@ -73,7 +77,7 @@ class ControllerApiV1CASpacesCerts:
             cert.ca = ca.certificate
             cert.ca_chain = ca.chain
         except Exception as e:
-            self._log.warning(f"Failed to populate CA info for cert {cert.id}: {e}")
+            self.log.warning(f"Failed to populate CA info for cert {cert.id}: {e}")
         return cert
 
     async def search(

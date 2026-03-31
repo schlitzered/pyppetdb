@@ -251,7 +251,7 @@ class CrudNodes(CrudMongo):
             )
         else:
             # Default to now - 2 hours
-            threshold_dt = datetime.now() - timedelta(hours=2)
+            threshold_dt = datetime.now() - timedelta(hours=4)
 
         outdated_query = {**query, "disabled": {"$ne": True}}
         outdated_query["change_report"] = {"$lt": threshold_dt}
