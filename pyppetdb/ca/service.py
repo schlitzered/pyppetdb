@@ -33,6 +33,10 @@ class CAService:
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
 
+    @property
+    def log(self):
+        return self._log
+
     async def refresh_crl(self, ca_id: str) -> None:
         ca = await self._crud_authorities.get(ca_id, fields=["internal", "certificate"])
         if not ca.internal:
@@ -52,21 +56,21 @@ class CAService:
         )
 
     async def refresh_expiring_crls(self) -> None:
-        self._log.info("Checking for expiring CRLs...")
+        self.log.info("Checking for expiring CRLs...")
         ca_ids = await self._crud_authorities.find_expiring_crls(
             threshold_hours=24 * 30
         )
 
         for ca_id in ca_ids:
             if await self._crud_authorities.lock_crl_acquire(ca_id):
-                self._log.info(f"Refreshing CRL for CA '{ca_id}'")
+                self.log.info(f"Refreshing CRL for CA '{ca_id}'")
                 try:
                     await self.refresh_crl(ca_id)
                 except Exception as e:
-                    self._log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
+                    self.log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
                     await self._crud_authorities.lock_crl_release(ca_id)
             else:
-                self._log.debug(
+                self.log.debug(
                     f"CRL refresh for CA '{ca_id}' is already locked by another process"
                 )
 
@@ -75,7 +79,7 @@ class CAService:
             try:
                 await self.refresh_expiring_crls()
             except Exception as e:
-                self._log.error(f"Error in CRL refresh worker: {e}")
+                self.log.error(f"Error in CRL refresh worker: {e}")
             await asyncio.sleep(43200)
 
     async def create_authority(
@@ -253,9 +257,7 @@ class CAService:
         self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
     ) -> CACertificateGet | None:
         if data.status == "signed":
-            return await self.sign_certificate(
-                space_id=space_id, cn=cn, fields=fields
-            )
+            return await self.sign_certificate(space_id=space_id, cn=cn, fields=fields)
         elif data.status == "revoked":
             return await self.revoke_certificate(
                 space_id=space_id, cn=cn, fields=fields
@@ -443,7 +445,7 @@ class CAService:
                         full_chain_parts.append(parent_cert)
                         processed_certs.add(parent_cert)
             except ResourceNotFound:
-                self._log.warning(
+                self.log.warning(
                     f"CA Authority '{ca_id}' not found during certificate chain generation"
                 )
                 continue
@@ -468,7 +470,7 @@ class CAService:
                     ca_id, fields=["crl", "internal", "parent_id"]
                 )
             except ResourceNotFound:
-                self._log.warning(
+                self.log.warning(
                     f"CA Authority '{ca_id}' not found during CRL chain generation"
                 )
                 continue
@@ -480,7 +482,7 @@ class CAService:
                 continue
 
             if not ca.crl:
-                self._log.error(f"Internal CA '{ca_id}' is missing CRL data")
+                self.log.error(f"Internal CA '{ca_id}' is missing CRL data")
                 continue
 
             crl_chain_pem += ca.crl.crl_pem.encode()

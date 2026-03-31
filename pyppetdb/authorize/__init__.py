@@ -73,18 +73,18 @@ class AuthorizeClientCert:
                 )
 
                 if cert.cn != cn:
-                    self._log.error(
+                    self.log.error(
                         f"Access denied: CN mismatch. Cert: {cn}, DB: {cert.cn}"
                     )
                     raise ClientCertError(detail="Certificate CN mismatch")
 
                 if cert.status != "signed":
-                    self._log.warning(
+                    self.log.warning(
                         f"Access denied: certificate for {cn} (serial {serial}) has status '{cert.status}'"
                     )
                     raise ClientCertError(detail=f"Certificate is {cert.status}")
             except ResourceNotFound:
-                self._log.error(
+                self.log.error(
                     f"Access denied: certificate for {cn} (serial {serial}) not found in database (unauthorized certificate)"
                 )
                 raise ClientCertError(detail="Certificate not found in database")
