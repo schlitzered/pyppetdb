@@ -128,7 +128,7 @@ class NodeGet(BaseModel):
     change_last: Optional[datetime] = None
     change_report: Optional[datetime] = None
     disabled: Optional[bool] = None
-    environment: str = None
+    environment: Optional[str] = None
     facts: Optional[Dict] = None
     report: Optional[NodeGetReport] = None
     facts_inject: Optional[Dict[str, str]] = None
@@ -159,7 +159,7 @@ class NodePutInternal(BaseModel):
     change_last: Optional[datetime] = None
     change_report: Optional[datetime] = None
     disabled: Optional[bool] = False
-    environment: str = None
+    environment: Optional[str] = None
     facts: Optional[Dict] = None
     facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None

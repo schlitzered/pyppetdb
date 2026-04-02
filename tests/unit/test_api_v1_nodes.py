@@ -77,3 +77,19 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         args = self.mock_crud_nodes.update.call_args[1]
         self.assertEqual(args["_id"], "node1")
         self.assertEqual(args["payload"].disabled, True)
+
+    async def test_create_node_admin_required(self):
+        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_crud_nodes.create = AsyncMock()
+
+        data = NodePut(disabled=True)
+        mock_request = MagicMock()
+        await self.controller.create(
+            node_id="node2", request=mock_request, data=data, fields=set()
+        )
+
+        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_crud_nodes.create.assert_called_once()
+        args = self.mock_crud_nodes.create.call_args[1]
+        self.assertEqual(args["_id"], "node2")
+        self.assertEqual(args["payload"].disabled, True)

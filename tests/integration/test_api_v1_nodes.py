@@ -58,6 +58,24 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         resp = self.client.get(f"/api/v1/nodes/{node_id}", headers=self._auth_headers())
         self.assertEqual(resp.status_code, 404)
 
+    def test_nodes_post_create(self):
+        node_id = f"node-post-{uuid.uuid4().hex}"
+
+        # Create node using POST
+        resp = self.client.post(
+            f"/api/v1/nodes/{node_id}",
+            headers=self._auth_headers(),
+            json={"disabled": False, "facts_inject": {"env": "test"}},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["id"], node_id)
+        self.assertEqual(resp.json()["facts_inject"]["env"], "test")
+
+        # Verify with GET
+        resp = self.client.get(f"/api/v1/nodes/{node_id}", headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], node_id)
+
     def test_nodes_distinct_facts(self):
         # Setup multiple nodes with some facts
         self._db["nodes"].insert_many(

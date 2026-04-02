@@ -84,6 +84,14 @@ class ControllerApiV1Nodes:
         )
         self.router.add_api_route(
             "/{node_id}",
+            self.create,
+            response_model=NodeGet,
+            response_model_exclude_unset=True,
+            methods=["POST"],
+            status_code=201,
+        )
+        self.router.add_api_route(
+            "/{node_id}",
             self.delete,
             response_model=DataDelete,
             response_model_exclude_unset=True,
@@ -139,6 +147,20 @@ class ControllerApiV1Nodes:
     @property
     def router(self):
         return self._router
+
+    async def create(
+        self,
+        data: NodePut,
+        node_id: str,
+        request: Request,
+        fields: Set[filter_literal] = Query(default=filter_list),
+    ):
+        await self.authorize.require_admin(request=request)
+        data = NodePutInternal(**data.model_dump())
+
+        return await self.crud_nodes.create(
+            _id=node_id, payload=data, fields=list(fields)
+        )
 
     async def delete(self, request: Request, node_id: str):
         await self.authorize.require_admin(request=request)
