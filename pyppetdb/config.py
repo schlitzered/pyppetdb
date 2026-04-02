@@ -106,7 +106,14 @@ class ConfigLdap(BaseModel):
 class ConfigMongodb(BaseModel):
     url: str = "mongodb://localhost:27017"
     database: str = "pyppetdb"
-    placement: typing.Optional[str] = "default"
+    placementFacts: typing.List[str] = []
+
+    @field_validator("placementFacts", mode="before")
+    @classmethod
+    def parse_placement_facts(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
 
 class ConfigOAuthClient(BaseModel):

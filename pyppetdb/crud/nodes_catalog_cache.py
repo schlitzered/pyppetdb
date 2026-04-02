@@ -20,6 +20,8 @@ from pyppetdb.model.nodes_catalog_cache import NodeCatalogCacheGet
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCachePutInternal
 from pyppetdb.errors import ResourceNotFound
 
+from pyppetdb.helpers.placement import calculate_placement
+
 
 class NodesDataProtector:
     def __init__(self, app_secret_key: str, log: logging.Logger):
@@ -112,6 +114,7 @@ class CrudNodesCatalogCache(CrudMongo):
         node_id: str,
         facts: typing.Dict[str, str],
         catalog: typing.Any,
+        placement: typing.Optional[typing.Dict[str, str]] = None,
     ) -> None:
         ttl_seconds = self.config.app.puppet.catalogCacheTTL
         random_factor = random.uniform(0.75, 1.25)
@@ -119,11 +122,14 @@ class CrudNodesCatalogCache(CrudMongo):
 
         encrypted_catalog = self._protector.encrypt_obj(catalog)
 
+        if placement is None:
+            placement = calculate_placement(self.config, facts)
+
         payload = NodeCatalogCachePutInternal(
             id=node_id,
             facts=facts,
             catalog=encrypted_catalog,
-            placement=self.config.mongodb.placement,
+            placement=placement,
             ttl=ttl,
         )
 

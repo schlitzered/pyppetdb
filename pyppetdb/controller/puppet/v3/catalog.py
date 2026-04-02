@@ -16,6 +16,7 @@ from pyppetdb.controller.puppet.v3._base import ControllerPuppetV3Base
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.errors import ResourceNotFound
+from pyppetdb.helpers.placement import calculate_placement
 
 
 class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
@@ -95,11 +96,15 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         return filtered
 
     async def _store_to_cache_async(
-        self, node_id: str, facts: typing.Dict[str, str], catalog: typing.Any
+        self,
+        node_id: str,
+        facts: typing.Dict[str, str],
+        catalog: typing.Any,
+        placement: typing.Dict[str, str],
     ):
         try:
             await self.crud_nodes_catalog_cache.upsert(
-                node_id=node_id, facts=facts, catalog=catalog
+                node_id=node_id, facts=facts, catalog=catalog, placement=placement
             )
             self.log.debug(f"Cached catalog for node {node_id}")
         except Exception as e:
@@ -171,12 +176,13 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                     facts_dict = json.loads(urllib.parse.unquote(facts_raw)).get(
                         "values", {}
                     )
+                    placement = calculate_placement(self.config, facts_dict)
                     filtered_facts = self._filter_facts(
                         facts_dict, self.config.app.puppet.catalogCacheFacts
                     )
                     asyncio.create_task(
                         self._store_to_cache_async(
-                            nodename, filtered_facts, response.json()
+                            nodename, filtered_facts, response.json(), placement
                         )
                     )
                 except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:

@@ -9,11 +9,14 @@ from pydantic import StrictStr
 from pyppetdb.model.common import MetaMulti
 from pyppetdb.model.nodes import NodeGetCatalog
 
+from typing import Dict
+
 filter_literal = Literal[
     "id",
     "created",
     "node_id",
     "catalog",
+    "placement",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -26,6 +29,7 @@ class NodeCatalogGet(BaseModel):
     created: Optional[datetime] = None
     node_id: Optional[StrictStr] = None
     catalog: Optional[NodeGetCatalog] = None
+    placement: Optional[Dict[str, str]] = None
 
 
 class NodeCatalogGetMulti(BaseModel):
@@ -34,7 +38,7 @@ class NodeCatalogGetMulti(BaseModel):
 
 
 class NodeCatalogPostInternal(BaseModel):
-    placement: str = None
+    placement: Optional[Dict[str, str]] = None
     created: datetime = None
     created_no_report_ttl: datetime = None
     catalog: NodeGetCatalog = None
