@@ -100,7 +100,9 @@ class ControllerPdbCmdV1:
                     certfile=self.config.app.puppetdb.ssl.cert,
                     keyfile=self.config.app.puppetdb.ssl.key,
                 )
-                self._http = httpx.AsyncClient(verify=ssl_ctx, timeout=self.config.app.puppetdb.timeout)
+                self._http = httpx.AsyncClient(
+                    verify=ssl_ctx, timeout=self.config.app.puppetdb.timeout
+                )
             else:
                 self._http = httpx.AsyncClient(timeout=self.config.app.puppetdb.timeout)
         return self._http
@@ -132,7 +134,6 @@ class ControllerPdbCmdV1:
         _datetime = datetime.now(UTC)
         start_time_ns = time.perf_counter_ns()
         result = {
-            "placement": self.config.mongodb.placement,
             "change_last": _datetime,
             "disabled": False,
             "environment": data_decomp["environment"],
@@ -158,7 +159,6 @@ class ControllerPdbCmdV1:
             )
         elif command == "replace_catalog":
             result["change_catalog"] = _datetime
-            result["placement"] = self.config.mongodb.placement
             all_resources = data_decomp["resources"]
             exported_resources = [r for r in all_resources if r.get("exported")]
             result["catalog"] = {
@@ -178,13 +178,14 @@ class ControllerPdbCmdV1:
                 )
             )
             if self.config.app.main.storeHistory.catalog:
+                placement = await self.crud_nodes.get_placement(certname)
                 asyncio.create_task(
                     self.crud_nodes_catalogs.create(
                         _id=data_decomp["catalog_uuid"],
                         node_id=certname,
                         payload=NodeCatalogPostInternal(
                             **{
-                                "placement": self.config.mongodb.placement,
+                                "placement": placement,
                                 "created": _datetime,
                                 "created_no_report_ttl": _datetime,
                                 "catalog": result["catalog"],
@@ -215,13 +216,14 @@ class ControllerPdbCmdV1:
                     return_none=True,
                 )
             )
+            placement = await self.crud_nodes.get_placement(certname)
             asyncio.create_task(
                 self.crud_nodes_reports.create(
                     _id=_datetime,
                     node_id=certname,
                     payload=NodeReportPostInternal(
                         **{
-                            "placement": self.config.mongodb.placement,
+                            "placement": placement,
                             "report": result["report"],
                         },
                     ),

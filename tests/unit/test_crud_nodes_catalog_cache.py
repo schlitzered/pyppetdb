@@ -9,6 +9,8 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
+        self.mock_config.mongodb = MagicMock()
+        self.mock_config.mongodb.placementFacts = []
         self.mock_coll = MagicMock()
         self.mock_protector = MagicMock()
         self.crud = CrudNodesCatalogCache(
@@ -42,15 +44,16 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_upsert(self):
         self.mock_config.app.puppet.catalogCacheTTL = 3600
-        self.mock_config.mongodb.placement = "p1"
+        self.mock_config.mongodb.placementFacts = ["provider"]
         self.mock_protector.encrypt_obj.return_value = "encrypted"
         self.mock_coll.update_one = AsyncMock()
 
-        await self.crud.upsert("node1", {"os": "linux"}, {"res": []})
+        await self.crud.upsert("node1", {"provider": "aws"}, {"res": []})
         self.mock_coll.update_one.assert_called_once()
         call_args = self.mock_coll.update_one.call_args[1]
         self.assertEqual(call_args["filter"], {"id": "node1"})
         self.assertEqual(call_args["update"]["$set"]["catalog"], "encrypted")
+        self.assertEqual(call_args["update"]["$set"]["placement"], {"provider": "aws"})
 
     async def test_get_cached_node_ids(self):
         mock_cursor = MagicMock()

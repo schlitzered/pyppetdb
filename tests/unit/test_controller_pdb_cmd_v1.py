@@ -11,12 +11,16 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
-        self.mock_config.mongodb.placement = "p1"
+        self.mock_config.mongodb.placementFacts = ["provider"]
         self.mock_config.app.main.storeHistory.catalog = True
         self.mock_config.app.main.storeHistory.catalogUnchanged = True
         self.mock_config.app.puppetdb.serverurl = None
 
         self.mock_nodes = MagicMock()
+        self.mock_nodes.calculate_placement = MagicMock(
+            return_value={"provider": "aws"}
+        )
+        self.mock_nodes.get_placement = AsyncMock(return_value={"provider": "aws"})
         self.mock_catalogs = MagicMock()
         self.mock_groups = MagicMock()
         self.mock_reports = MagicMock()

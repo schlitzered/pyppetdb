@@ -24,6 +24,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.app.puppet.serverurl = "http://puppetmaster"
         self.mock_config.app.puppet.catalogCacheFacts = ["osfamily"]
         self.mock_config.app.puppet.timeout = 10
+        self.mock_config.mongodb.placementFacts = []
 
         self.controller = ControllerPuppetV3Catalog(
             self.log,
@@ -73,6 +74,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_cache.upsert.assert_called_once()
         call_args = self.mock_cache.upsert.call_args[1]
         self.assertEqual(call_args["facts"], {"osfamily": "RedHat"})
+        self.assertEqual(call_args["placement"], {})
 
     async def test_post_facts_injection(self):
         from pyppetdb.model.nodes import NodeGet

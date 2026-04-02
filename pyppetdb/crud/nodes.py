@@ -23,6 +23,11 @@ from pyppetdb.model.nodes import NodeGetCatalogResource
 from pyppetdb.model.nodes import NodeGetCatalogResources
 
 
+from pyppetdb.errors import BackendError
+
+from pyppetdb.helpers.placement import calculate_placement
+
+
 class CrudNodes(CrudMongo):
     def __init__(
         self,
@@ -272,6 +277,20 @@ class CrudNodes(CrudMongo):
         result["meta"]["status_unreported"] = statuses[None]
         result["meta"]["status_outdated"] = outdated_count
         return NodeGetMulti(**result)
+
+    async def get_placement(self, _id: str) -> dict[str, str]:
+        if not self.config.mongodb.placementFacts:
+            return {}
+
+        projection = {f"facts.{fact}": 1 for fact in self.config.mongodb.placementFacts}
+        try:
+            node = await self._coll.find_one({"id": _id}, projection=projection)
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+
+        facts = node.get("facts", {}) if node else {}
+        return calculate_placement(self.config, facts)
 
     async def update(
         self,
