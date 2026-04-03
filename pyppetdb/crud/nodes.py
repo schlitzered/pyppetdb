@@ -292,6 +292,18 @@ class CrudNodes(CrudMongo):
         facts = node.get("facts", {}) if node else {}
         return calculate_placement(self.config, facts)
 
+    async def create(
+        self,
+        _id: str,
+        payload: NodePutInternal,
+        fields: list,
+    ) -> NodeGet:
+        data = payload.model_dump()
+        data["id"] = _id
+
+        result = await self._create(payload=data, fields=fields)
+        return NodeGet(**result)
+
     async def update(
         self,
         _id: str,

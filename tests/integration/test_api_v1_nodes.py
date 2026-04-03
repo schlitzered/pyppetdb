@@ -9,7 +9,7 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
     def test_nodes_crud_flow(self):
         node_id = f"node-{uuid.uuid4().hex}"
 
-        # 0. Setup: Create node in DB (since there's no POST in API)
+        # 0. Setup: Create node in DB (since there's no POST in API) and a certificate
         self._db["nodes"].insert_one(
             {
                 "id": node_id,
@@ -17,6 +17,17 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
                 "disabled": False,
                 "facts": {"os": "Linux", "hostname": node_id},
                 "node_groups": [],
+            }
+        )
+        self._db["ca_certificates"].insert_one(
+            {
+                "id": "12345",
+                "space_id": "puppet-ca",
+                "ca_id": "puppet-ca",
+                "cn": node_id,
+                "status": "signed",
+                "serial_number": "12345",
+                "certificate": "CERT_CONTENT",
             }
         )
 
@@ -54,9 +65,31 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
 
+        # 5.1 Verify certificate is revoked
+        cert_doc = self._db["ca_certificates"].find_one({"cn": node_id, "space_id": "puppet-ca"})
+        self.assertEqual(cert_doc["status"], "revoked")
+
         # 6. Verify deletion
         resp = self.client.get(f"/api/v1/nodes/{node_id}", headers=self._auth_headers())
         self.assertEqual(resp.status_code, 404)
+
+    def test_nodes_post_create(self):
+        node_id = f"node-post-{uuid.uuid4().hex}"
+
+        # Create node using POST
+        resp = self.client.post(
+            f"/api/v1/nodes/{node_id}",
+            headers=self._auth_headers(),
+            json={"disabled": False, "facts_inject": {"env": "test"}},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["id"], node_id)
+        self.assertEqual(resp.json()["facts_inject"]["env"], "test")
+
+        # Verify with GET
+        resp = self.client.get(f"/api/v1/nodes/{node_id}", headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], node_id)
 
     def test_nodes_distinct_facts(self):
         # Setup multiple nodes with some facts
