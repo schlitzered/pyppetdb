@@ -52,6 +52,7 @@ class CACertificateGet(BaseModel):
     not_before: Optional[datetime] = None
     not_after: Optional[datetime] = None
     created: Optional[datetime] = None
+    cert_uniqueness: Optional[str] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
 

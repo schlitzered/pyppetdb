@@ -9,7 +9,7 @@ from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.utils import CAUtils
-from pyppetdb.errors import ResourceNotFound, QueryParamValidationError
+from pyppetdb.errors import ResourceNotFound, QueryParamValidationError, DuplicateResource
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
     CAAuthorityGet,
@@ -236,22 +236,37 @@ class CAService:
 
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
 
-        query = {"space_id": space_id, "cn": csr_cn, "status": "requested"}
-        payload = {
-            "id": str(uuid.uuid4().int),
-            "ca_id": space.ca_id,
-            "csr": csr_pem,
-            "created": datetime.datetime.now(datetime.timezone.utc),
-        }
-
-        # Check if already exists to keep ID
-        existing = await self._crud_certificates.coll.find_one(query)
-        if existing:
-            payload.pop("id")
-
-        return await self._crud_certificates.update(
-            query=query, payload=payload, fields=fields, upsert=True
+        # Check if already exists in 'requested' state to update it
+        existing_requested = await self._crud_certificates.coll.find_one(
+            {"space_id": space_id, "cn": csr_cn, "status": "requested"}
         )
+
+        if existing_requested:
+            query = {"_id": existing_requested["_id"]}
+            payload = {
+                "ca_id": space.ca_id,
+                "csr": csr_pem,
+                "created": datetime.datetime.now(datetime.timezone.utc),
+            }
+        else:
+            query = {"space_id": space_id, "cn": csr_cn, "status": "requested"}
+            payload = {
+                "id": str(uuid.uuid4().int),
+                "ca_id": space.ca_id,
+                "csr": csr_pem,
+                "cert_uniqueness": csr_cn,
+                "created": datetime.datetime.now(datetime.timezone.utc),
+            }
+
+        try:
+            return await self._crud_certificates.update(
+                query=query, payload=payload, fields=fields, upsert=True
+            )
+        except DuplicateResource:
+            raise QueryParamValidationError(
+                msg=f"A signed certificate already exists for CN '{csr_cn}' in space '{space_id}'. Revoke it first."
+            )
+
 
     async def update_certificate_status(
         self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
@@ -316,6 +331,7 @@ class CAService:
         payload = {
             "status": "revoked",
             "revocation_date": datetime.datetime.now(datetime.timezone.utc),
+            "cert_uniqueness": str(cert_doc["id"]),
         }
 
         cert = await self._crud_certificates.update(
@@ -364,21 +380,23 @@ class CAService:
             "cn": cn,
             "status": "signed",
             "certificate": new_cert_pem.decode(),
+            "cert_uniqueness": cn,
             "created": datetime.datetime.now(datetime.timezone.utc),
             **info,
         }
 
-        new_cert = await self._crud_certificates.insert(payload=payload, fields=fields)
-
-        # Mark old certificate as revoked
+        # Mark old certificate as revoked first to release cert_uniqueness
         await self._crud_certificates.update(
             query={"_id": cert_data["_id"]},
             payload={
                 "status": "revoked",
                 "revocation_date": datetime.datetime.now(datetime.timezone.utc),
+                "cert_uniqueness": str(cert_data["id"]),
             },
             fields=["id"],
         )
+
+        new_cert = await self._crud_certificates.insert(payload=payload, fields=fields)
 
         await self.refresh_crl(space.ca_id)
         return new_cert
@@ -397,6 +415,7 @@ class CAService:
             payload = {
                 "status": "revoked",
                 "revocation_date": datetime.datetime.now(datetime.timezone.utc),
+                "cert_uniqueness": serial,
             }
             cert = await self._crud_certificates.update(
                 query={"id": serial}, payload=payload, fields=fields
