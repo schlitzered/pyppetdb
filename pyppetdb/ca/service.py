@@ -9,7 +9,11 @@ from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.utils import CAUtils
-from pyppetdb.errors import ResourceNotFound, QueryParamValidationError, DuplicateResource
+from pyppetdb.errors import (
+    ResourceNotFound,
+    QueryParamValidationError,
+    DuplicateResource,
+)
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
     CAAuthorityGet,
@@ -266,7 +270,6 @@ class CAService:
             raise QueryParamValidationError(
                 msg=f"A signed certificate already exists for CN '{csr_cn}' in space '{space_id}'. Revoke it first."
             )
-
 
     async def update_certificate_status(
         self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
