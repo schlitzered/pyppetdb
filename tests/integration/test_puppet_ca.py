@@ -157,13 +157,14 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
         )
         csr2_pem = csr2.public_bytes(serialization.Encoding.PEM).decode()
 
-        # 5. Submit second CSR - should be ignored (return 200 but keep old cert)
+        # 5. Submit second CSR - should be rejected with 400 Bad Request
         resp = self.client.put(
             f"/puppet-ca/v1/certificate_request/{nodename}",
             content=csr2_pem,
             headers={"Content-Type": "text/plain"},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("A signed certificate already exists", resp.json()["detail"])
 
         # 6. Verify certificate is still the first one
         resp = self.client.get(f"/puppet-ca/v1/certificate/{nodename}")

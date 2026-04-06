@@ -21,6 +21,10 @@ class CrudCACertificates(CrudMongo):
         self.log.info(f"creating {self.resource_type} indices")
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         await self.coll.create_index(
+            [("space_id", pymongo.ASCENDING), ("cert_uniqueness", pymongo.ASCENDING)],
+            unique=True,
+        )
+        await self.coll.create_index(
             [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)]
         )
         await self.coll.create_index([("ca_id", pymongo.ASCENDING)])

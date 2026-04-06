@@ -196,6 +196,8 @@ class CrudMongo(
                 return_document=pymongo.ReturnDocument.AFTER,
                 upsert=upsert,
             )
+        except pymongo.errors.DuplicateKeyError:
+            raise DuplicateResource
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError
