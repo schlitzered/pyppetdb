@@ -2,7 +2,6 @@ import logging
 import asyncio
 import datetime
 import uuid
-import pymongo
 
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities

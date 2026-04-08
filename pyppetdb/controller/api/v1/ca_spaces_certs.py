@@ -9,6 +9,7 @@ from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.ca.service import CAService
+from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import CACertificateGet
 from pyppetdb.model.ca_certificates import CACertificateGetMulti
 from pyppetdb.model.ca_certificates import CACertificatePut
