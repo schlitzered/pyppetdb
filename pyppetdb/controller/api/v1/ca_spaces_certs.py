@@ -148,9 +148,9 @@ class ControllerApiV1CASpacesCerts:
             raise ResourceNotFound(
                 details=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
-        
+
         if cert.space_id != space_id:
-             raise ResourceNotFound(
+            raise ResourceNotFound(
                 details=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
         if "ca" in fields or "ca_chain" in fields:
