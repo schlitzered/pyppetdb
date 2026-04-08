@@ -46,6 +46,19 @@ class CrudCACertificates(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CACertificateGet(**result)
 
+    async def get_by_cn(
+        self,
+        space_id: str,
+        cn: str,
+        status: typing.Optional[CAStatus] = None,
+        fields: typing.Optional[list] = None,
+    ) -> CACertificateGet:
+        query = {"space_id": space_id, "cn": cn}
+        if status:
+            query["status"] = status
+        result = await self._get(query=query, fields=fields)
+        return CACertificateGet(**result)
+
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
 
@@ -63,6 +76,57 @@ class CrudCACertificates(CrudMongo):
                 }
             )
         return revoked
+
+    async def revoke_expired(self) -> list[dict]:
+        import datetime
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        query = {
+            "status": "signed",
+            "not_after": {"$lt": now},
+        }
+        cursor = self.coll.find(query, {"id": 1, "space_id": 1, "ca_id": 1})
+        revoked_info = []
+        async for cert in cursor:
+            await self.coll.update_one(
+                {"_id": cert["_id"]},
+                {
+                    "$set": {
+                        "status": "revoked",
+                        "revocation_date": now,
+                        "cert_uniqueness": cert["id"],
+                    }
+                },
+            )
+            revoked_info.append({"space_id": cert["space_id"], "ca_id": cert["ca_id"]})
+        return revoked_info
+
+    async def lock_acquire(self, lock_timeout_minutes: int = 5) -> bool:
+        import datetime
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
+
+        result = await self.coll.update_one(
+            {
+                "id": "expired_revocation_lock",
+                "$or": [
+                    {"locked_at": None},
+                    {"locked_at": {"$lt": timeout}},
+                ],
+            },
+            {"$set": {"locked_at": now}},
+            upsert=True,
+        )
+        # Note: if it's an upsert it might not count as modified_count > 0 in some cases
+        # but with $set and the filter, if it was newly created it should be fine.
+        # Wait, if it was upserted, it means it didn't exist, so we got the lock.
+        return result.modified_count > 0 or result.upserted_id is not None
+
+    async def lock_release(self) -> None:
+        await self.coll.update_one(
+            {"id": "expired_revocation_lock"}, {"$set": {"locked_at": None}}
+        )
 
     async def search(
         self,

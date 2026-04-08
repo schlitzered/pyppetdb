@@ -19,3 +19,35 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         res = await self.crud.count({"status": "signed"})
         self.assertEqual(res, 10)
         self.mock_coll.count_documents.assert_called_once_with({"status": "signed"})
+
+    async def test_revoke_expired(self):
+        mock_cursor = MagicMock()
+        mock_cursor.__aiter__.return_value = [
+            {"_id": "obj1", "id": "cert1", "space_id": "s1", "ca_id": "ca1"}
+        ]
+        self.mock_coll.find.return_value = mock_cursor
+        self.mock_coll.update_one = AsyncMock()
+
+        res = await self.crud.revoke_expired()
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["space_id"], "s1")
+        self.mock_coll.update_one.assert_called_once()
+
+    async def test_lock_acquire_release(self):
+        mock_result = MagicMock()
+        mock_result.modified_count = 1
+        mock_result.upserted_id = None
+        self.mock_coll.update_one = AsyncMock(return_value=mock_result)
+
+        self.assertTrue(await self.crud.lock_acquire())
+
+        mock_result.modified_count = 0
+        mock_result.upserted_id = "some_id"
+        self.assertTrue(await self.crud.lock_acquire())
+
+        mock_result.modified_count = 0
+        mock_result.upserted_id = None
+        self.assertFalse(await self.crud.lock_acquire())
+
+        await self.crud.lock_release()
+        self.mock_coll.update_one.assert_called()

@@ -14,7 +14,8 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_spaces = MagicMock()
         self.mock_crud_spaces.get = AsyncMock()
         self.mock_crud_certificates = MagicMock()
-        self.mock_crud_certificates.coll = AsyncMock()
+        self.mock_crud_certificates.search = AsyncMock()
+        self.mock_crud_certificates.get_by_cn = AsyncMock()
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.resource_exists = AsyncMock()
         self.mock_ca_service = MagicMock()
@@ -74,17 +75,17 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.body, b"CA_CHAIN")
 
     async def test_get_certificate_node(self):
-        self.mock_crud_certificates.coll.find_one.return_value = {
-            "certificate": b"NODE_CERT",
-            "status": "signed",
-        }
+        from pyppetdb.model.ca_certificates import CACertificateGet
+        cert = CACertificateGet(certificate="NODE_CERT", status="signed")
+        self.mock_crud_certificates.get_by_cn.return_value = cert
         mock_request = MagicMock()
 
         response = await self.controller.get_certificate("node1", mock_request)
         self.assertEqual(response.body, b"NODE_CERT")
 
     async def test_get_certificate_not_found(self):
-        self.mock_crud_certificates.coll.find_one.return_value = None
+        from pyppetdb.errors import ResourceNotFound
+        self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -140,11 +141,14 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.detail, "Invalid CSR")
 
     async def test_get_certificate_status(self):
-        self.mock_crud_certificates.coll.find_one.return_value = {
-            "cn": "node1",
-            "status": "signed",
-            "fingerprint": {"sha256": "f1"},
-        }
+        from pyppetdb.model.ca_certificates import CACertificateGet
+        from pyppetdb.model.common import Fingerprints
+        cert = CACertificateGet(
+            cn="node1",
+            status="signed",
+            fingerprint=Fingerprints(sha256="f1", sha1="f2", md5="f3"),
+        )
+        self.mock_crud_certificates.get_by_cn.return_value = cert
         mock_request = MagicMock()
 
         result = await self.controller.get_certificate_status("node1", mock_request)
@@ -158,7 +162,8 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.body, b"CRL_PEM")
 
     async def test_get_certificate_status_not_found(self):
-        self.mock_crud_certificates.coll.find_one.return_value = None
+        from pyppetdb.errors import ResourceNotFound
+        self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -173,7 +178,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_get_certificate_status_error(self):
-        self.mock_crud_certificates.coll.find_one.side_effect = Exception("DB error")
+        self.mock_crud_certificates.get_by_cn.side_effect = Exception("DB error")
         mock_request = MagicMock()
 
         with self.assertRaises(Exception) as cm:
@@ -190,16 +195,16 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_get_certificate_request_success(self):
-        self.mock_crud_certificates.coll.find_one.return_value = {
-            "csr": b"CSR_DATA",
-            "status": "requested",
-        }
+        from pyppetdb.model.ca_certificates import CACertificateGet
+        cert = CACertificateGet(csr="CSR_DATA", status="requested")
+        self.mock_crud_certificates.get_by_cn.return_value = cert
         mock_request = MagicMock()
         response = await self.controller.get_certificate_request("node1", mock_request)
         self.assertEqual(response.body, b"CSR_DATA")
 
     async def test_get_certificate_request_not_found(self):
-        self.mock_crud_certificates.coll.find_one.return_value = None
+        from pyppetdb.errors import ResourceNotFound
+        self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
         with self.assertRaises(HTTPException) as cm:
             await self.controller.get_certificate_request("node1", mock_request)
