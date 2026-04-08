@@ -141,12 +141,17 @@ class ControllerApiV1CASpacesCerts:
             fetch_fields.append("ca_id")
 
         try:
-            cert = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cert_id, fields=fetch_fields
+            cert = await self._crud_certificates.get(
+                _id=cert_id, fields=fetch_fields
             )
         except ResourceNotFound:
             raise ResourceNotFound(
-                msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
+                details=f"Certificate '{cert_id}' not found in space '{space_id}'"
+            )
+        
+        if cert.space_id != space_id:
+             raise ResourceNotFound(
+                details=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)
@@ -164,12 +169,17 @@ class ControllerApiV1CASpacesCerts:
             request=request, permission=f"CA:SPACES:{space_id}:CERTS:UPDATE"
         )
         try:
-            cert_doc = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cert_id
+            cert_doc = await self._crud_certificates.get(
+                _id=cert_id, fields=None
             )
         except ResourceNotFound:
             raise ResourceNotFound(
-                msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
+                details=f"Certificate '{cert_id}' not found in space '{space_id}'"
+            )
+
+        if cert_doc.space_id != space_id:
+            raise ResourceNotFound(
+                details=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
 
         fetch_fields = list(fields)
