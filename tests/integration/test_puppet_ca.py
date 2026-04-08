@@ -10,6 +10,7 @@ from cryptography.x509.oid import NameOID
 class PuppetCAIntegrationTests(IntegrationTestBase):
     def test_autosign_disabled(self):
         settings.ca.autoSign = False
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
         nodename = f"node-{uuid.uuid4().hex}"
 
         # 1. Generate CSR
@@ -43,6 +44,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
 
     def test_autosign_enabled(self):
         settings.ca.autoSign = True
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
         nodename = f"node-{uuid.uuid4().hex}"
 
         # 1. Generate CSR
@@ -79,6 +81,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
 
     def test_csr_retry_deduplication(self):
         settings.ca.autoSign = False
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
         nodename = f"node-{uuid.uuid4().hex}"
 
         # 1. Generate CSR
@@ -113,6 +116,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
 
     def test_csr_ignored_if_signed(self):
         settings.ca.autoSign = True
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
         nodename = f"node-{uuid.uuid4().hex}"
 
         # 1. Generate first CSR
@@ -175,6 +179,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
 
     def test_certificate_renewal(self):
         settings.ca.autoSign = True
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
         nodename = f"node-{uuid.uuid4().hex}"
 
         # 1. Create a signed certificate for the node
@@ -239,3 +244,90 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
 
         # 6. Cleanup
         settings.ca.autoSign = False
+
+    def test_autosign_node_if_exists_enabled_node_exists(self):
+        settings.ca.autoSign = False
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
+        settings.ca.autoSignNodeIfExists = True
+        self.addCleanup(setattr, settings.ca, "autoSignNodeIfExists", False)
+        nodename = f"node-{uuid.uuid4().hex}"
+
+        # 0. Create node in DB
+        self._db["nodes"].insert_one(
+            {
+                "id": nodename,
+                "environment": "production",
+                "disabled": False,
+                "facts": {"os": "Linux", "hostname": nodename},
+                "node_groups": [],
+            }
+        )
+
+        # 1. Generate CSR
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        csr = (
+            x509.CertificateSigningRequestBuilder()
+            .subject_name(
+                x509.Name(
+                    [
+                        x509.NameAttribute(NameOID.COMMON_NAME, nodename),
+                    ]
+                )
+            )
+            .sign(key, hashes.SHA256())
+        )
+        csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+
+        # 2. Submit CSR to puppet-ca
+        resp = self.client.put(
+            f"/puppet-ca/v1/certificate_request/{nodename}",
+            content=csr_pem,
+            headers={"Content-Type": "text/plain"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        # 3. Check status - should be 'signed'
+        resp = self.client.get(f"/puppet-ca/v1/certificate_status/{nodename}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["state"], "signed")
+
+        # 4. Cleanup/Reset
+        settings.ca.autoSignNodeIfExists = False
+
+    def test_autosign_node_if_exists_enabled_node_not_exists(self):
+        settings.ca.autoSign = False
+        self.addCleanup(setattr, settings.ca, "autoSign", False)
+        settings.ca.autoSignNodeIfExists = True
+        self.addCleanup(setattr, settings.ca, "autoSignNodeIfExists", False)
+        nodename = f"node-{uuid.uuid4().hex}"
+
+        # 1. Generate CSR
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        csr = (
+            x509.CertificateSigningRequestBuilder()
+            .subject_name(
+                x509.Name(
+                    [
+                        x509.NameAttribute(NameOID.COMMON_NAME, nodename),
+                    ]
+                )
+            )
+            .sign(key, hashes.SHA256())
+        )
+        csr_pem = csr.public_bytes(serialization.Encoding.PEM).decode()
+
+        # 2. Submit CSR to puppet-ca
+        resp = self.client.put(
+            f"/puppet-ca/v1/certificate_request/{nodename}",
+            content=csr_pem,
+            headers={"Content-Type": "text/plain"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        # 3. Check status - should be 'requested'
+        resp = self.client.get(f"/puppet-ca/v1/certificate_status/{nodename}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["state"], "requested")
+
+        # 4. Cleanup/Reset
+        settings.ca.autoSignNodeIfExists = False

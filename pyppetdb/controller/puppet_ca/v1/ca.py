@@ -5,6 +5,7 @@ from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ca.service import CAService
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import CACertificatePut
@@ -18,6 +19,7 @@ class ControllerPuppetCaV1CA:
         crud_authorities: CrudCAAuthorities,
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
+        crud_nodes: CrudNodes,
         ca_service: CAService,
         authorize_client_cert: AuthorizeClientCert,
     ):
@@ -26,6 +28,7 @@ class ControllerPuppetCaV1CA:
         self._crud_authorities = crud_authorities
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
+        self._crud_nodes = crud_nodes
         self._ca_service = ca_service
         self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(tags=["puppet-ca"])
@@ -117,6 +120,23 @@ class ControllerPuppetCaV1CA:
             raise HTTPException(status_code=500, detail=str(e))
 
         if self._config.ca.autoSign:
+            auto_sign = True
+        elif self._config.ca.autoSignNodeIfExists:
+            try:
+                await self._crud_nodes.resource_exists(_id=nodename)
+                auto_sign = True
+                self.log.info(
+                    f"Node {nodename} exists, auto-signing CSR in space puppet-ca"
+                )
+            except ResourceNotFound:
+                auto_sign = False
+                self.log.info(
+                    f"Node {nodename} does not exist, skipping auto-sign in space puppet-ca"
+                )
+        else:
+            auto_sign = False
+
+        if auto_sign:
             self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
             try:
                 await self._ca_service.sign_certificate(

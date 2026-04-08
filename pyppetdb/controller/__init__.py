@@ -133,6 +133,7 @@ class Controller:
             crud_authorities=crud_ca_authorities,
             crud_spaces=crud_ca_spaces,
             crud_certificates=crud_ca_certificates,
+            crud_nodes=crud_nodes,
             ca_service=ca_service,
             authorize_client_cert=authorize_client_cert_puppet,
         ).router

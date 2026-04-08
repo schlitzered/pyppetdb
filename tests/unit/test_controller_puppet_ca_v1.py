@@ -15,6 +15,8 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_spaces.get = AsyncMock()
         self.mock_crud_certificates = MagicMock()
         self.mock_crud_certificates.coll = AsyncMock()
+        self.mock_crud_nodes = MagicMock()
+        self.mock_crud_nodes.resource_exists = AsyncMock()
         self.mock_ca_service = MagicMock()
         self.mock_ca_service.get_certificate_chain = AsyncMock()
         self.mock_ca_service.get_crl_chain = AsyncMock()
@@ -32,9 +34,36 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             self.mock_crud_authorities,
             self.mock_crud_spaces,
             self.mock_crud_certificates,
+            self.mock_crud_nodes,
             self.mock_ca_service,
             self.mock_auth_cert,
         )
+
+    async def test_submit_certificate_request_autosign_node_if_exists_success(self):
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("node1")
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=csr_pem)
+        self.mock_config.ca.autoSign = False
+        self.mock_config.ca.autoSignNodeIfExists = True
+        self.mock_crud_nodes.resource_exists.return_value = "OBJ_ID"
+
+        await self.controller.submit_certificate_request("node1", mock_request)
+        self.mock_ca_service.sign_certificate.assert_called_once()
+        self.mock_crud_nodes.resource_exists.assert_called_once_with(_id="node1")
+
+    async def test_submit_certificate_request_autosign_node_if_exists_no_node(self):
+        from pyppetdb.ca.utils import CAUtils
+        csr_pem, _ = CAUtils.generate_csr("node1")
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=csr_pem)
+        self.mock_config.ca.autoSign = False
+        self.mock_config.ca.autoSignNodeIfExists = True
+        self.mock_crud_nodes.resource_exists.side_effect = ResourceNotFound()
+
+        await self.controller.submit_certificate_request("node1", mock_request)
+        self.mock_ca_service.sign_certificate.assert_not_called()
+        self.mock_crud_nodes.resource_exists.assert_called_once_with(_id="node1")
 
     async def test_get_certificate_ca(self):
         self.mock_ca_service.get_certificate_chain.return_value = b"CA_CHAIN"
