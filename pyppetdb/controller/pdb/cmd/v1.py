@@ -252,7 +252,7 @@ class ControllerPdbCmdV1:
         self.log.info(f"create {command} took {duration_ms:.2f} ms")
 
         if self.config.app.puppetdb.serverurl:
-            asyncio.create_task(self._proxy_to_puppetdb(request, body))
+            asyncio.create_task(self._proxy_to_puppetdb(request, body_json_bytes))
         return {}
 
     async def _proxy_to_puppetdb(self, request: Request, body: bytes):

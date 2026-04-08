@@ -143,6 +143,7 @@ class ConfigHiera(BaseModel):
 class ConfigCA(BaseModel):
     enableCrlRefresh: bool = True
     autoSign: bool = False
+    autoSignNodeIfExists: bool = False
     certificateValidityDays: int = 365
 
 
