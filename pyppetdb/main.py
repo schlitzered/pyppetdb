@@ -424,14 +424,20 @@ async def lifespan_dev(app: FastAPI):
     app.include_router(controller.router_dev)
 
     refresh_task = None
+    expired_task = None
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
+        )
+        expired_task = asyncio.create_task(
+            env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
         )
 
     yield
     if refresh_task:
         refresh_task.cancel()
+    if expired_task:
+        expired_task.cancel()
 
 
 async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
@@ -913,6 +919,11 @@ async def main_run():
         worker_tasks.append(
             asyncio.create_task(
                 env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
+            )
+        )
+        worker_tasks.append(
+            asyncio.create_task(
+                env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
             )
         )
 

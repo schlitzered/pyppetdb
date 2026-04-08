@@ -86,6 +86,36 @@ class CAService:
                 self.log.error(f"Error in CRL refresh worker: {e}")
             await asyncio.sleep(43200)
 
+    async def revoke_expired_certificates(self) -> None:
+        if await self._crud_certificates.lock_acquire():
+            try:
+                self.log.info("Checking for expired certificates...")
+                revoked_info = await self._crud_certificates.revoke_expired()
+                if revoked_info:
+                    self.log.info(f"Revoked {len(revoked_info)} expired certificates")
+                    ca_ids = {info["ca_id"] for info in revoked_info}
+                    for ca_id in ca_ids:
+                        try:
+                            await self.refresh_crl(ca_id)
+                        except Exception as e:
+                            self.log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
+                else:
+                    self.log.info("No expired certificates found")
+            finally:
+                await self._crud_certificates.lock_release()
+        else:
+            self.log.debug(
+                "Expired certificates revocation is already locked by another process"
+            )
+
+    async def expired_certificates_worker(self) -> None:
+        while True:
+            try:
+                await self.revoke_expired_certificates()
+            except Exception as e:
+                self.log.error(f"Error in expired certificates worker: {e}")
+            await asyncio.sleep(60)
+
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost, fields: list = None
     ) -> CAAuthorityGet:
@@ -241,12 +271,15 @@ class CAService:
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
 
         # Check if already exists in 'requested' state to update it
-        existing_requested = await self._crud_certificates.coll.find_one(
-            {"space_id": space_id, "cn": csr_cn, "status": "requested"}
-        )
+        try:
+            existing_requested = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=csr_cn, status="requested"
+            )
+        except ResourceNotFound:
+            existing_requested = None
 
         if existing_requested:
-            query = {"_id": existing_requested["_id"]}
+            query = {"id": existing_requested.id}
             payload = {
                 "ca_id": space.ca_id,
                 "csr": csr_pem,
@@ -267,6 +300,26 @@ class CAService:
                 query=query, payload=payload, fields=fields, upsert=True
             )
         except DuplicateResource:
+            try:
+                existing_signed = await self._crud_certificates.get_by_cn(
+                    space_id=space_id, cn=csr_cn, status="signed"
+                )
+            except ResourceNotFound:
+                existing_signed = None
+
+            if existing_signed and existing_signed.not_after:
+                not_after = existing_signed.not_after
+                if not_after.tzinfo is None:
+                    not_after = not_after.replace(tzinfo=datetime.timezone.utc)
+                if not_after < datetime.datetime.now(datetime.timezone.utc):
+                    self.log.info(
+                        f"Existing certificate for CN '{csr_cn}' in space '{space_id}' is expired, revoking it and retrying CSR submission"
+                    )
+                    await self.revoke_certificate(space_id=space_id, cn=csr_cn)
+                    return await self._crud_certificates.update(
+                        query=query, payload=payload, fields=fields, upsert=True
+                    )
+
             raise QueryParamValidationError(
                 msg=f"A signed certificate already exists for CN '{csr_cn}' in space '{space_id}'. Revoke it first."
             )
@@ -289,8 +342,8 @@ class CAService:
         if fields is None:
             fields = ["id", "status", "ca_id"]
 
-        cert_data = await self._crud_certificates.coll.find_one(
-            {"space_id": space_id, "cn": cn, "status": "requested"}
+        cert_data = await self._crud_certificates.get_by_cn(
+            space_id=space_id, cn=cn, status="requested"
         )
         if not cert_data:
             raise QueryParamValidationError(
@@ -302,10 +355,10 @@ class CAService:
         ca_key = await self._crud_authorities.get_private_key(space.ca_id)
 
         cert_pem = CAUtils.sign_csr(
-            csr_pem=cert_data["csr"].encode(),
+            csr_pem=cert_data.csr.encode(),
             ca_cert_pem=ca_cert.certificate.encode(),
             ca_key_pem=ca_key,
-            serial_number=int(cert_data["id"]),
+            serial_number=int(cert_data.id),
             validity_days=self._config.ca.certificateValidityDays,
         )
 
@@ -314,7 +367,7 @@ class CAService:
         payload = {"status": "signed", "certificate": cert_pem.decode(), **info}
 
         return await self._crud_certificates.update(
-            query={"_id": cert_data["_id"]}, payload=payload, fields=fields
+            query={"id": cert_data.id}, payload=payload, fields=fields
         )
 
     async def revoke_certificate(
@@ -323,8 +376,8 @@ class CAService:
         if fields is None:
             fields = ["id", "status", "ca_id"]
 
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"space_id": space_id, "cn": cn, "status": "signed"}
+        cert_doc = await self._crud_certificates.get_by_cn(
+            space_id=space_id, cn=cn, status="signed"
         )
         if not cert_doc:
             raise QueryParamValidationError(
@@ -334,11 +387,11 @@ class CAService:
         payload = {
             "status": "revoked",
             "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-            "cert_uniqueness": str(cert_doc["id"]),
+            "cert_uniqueness": str(cert_doc.id),
         }
 
         cert = await self._crud_certificates.update(
-            query={"id": cert_doc["id"]}, payload=payload, fields=fields
+            query={"id": cert_doc.id}, payload=payload, fields=fields
         )
 
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
@@ -351,9 +404,8 @@ class CAService:
         if fields is None:
             fields = ["id", "status", "ca_id", "certificate"]
 
-        cert_data = await self._crud_certificates.coll.find_one(
-            {"space_id": space_id, "cn": cn, "status": "signed"},
-            sort=[("not_after", pymongo.DESCENDING)],
+        cert_data = await self._crud_certificates.get_by_cn(
+            space_id=space_id, cn=cn, status="signed"
         )
         if not cert_data:
             raise QueryParamValidationError(
@@ -367,7 +419,7 @@ class CAService:
         new_serial = uuid.uuid4().int
 
         new_cert_pem = CAUtils.renew_cert(
-            cert_pem=cert_data["certificate"].encode(),
+            cert_pem=cert_data.certificate.encode(),
             ca_cert_pem=ca_cert.certificate.encode(),
             ca_key_pem=ca_key,
             serial_number=new_serial,
@@ -379,7 +431,7 @@ class CAService:
         payload = {
             "id": str(new_serial),
             "space_id": space_id,
-            "ca_id": cert_data["ca_id"],
+            "ca_id": cert_data.ca_id,
             "cn": cn,
             "status": "signed",
             "certificate": new_cert_pem.decode(),
@@ -390,11 +442,11 @@ class CAService:
 
         # Mark old certificate as revoked first to release cert_uniqueness
         await self._crud_certificates.update(
-            query={"_id": cert_data["_id"]},
+            query={"id": cert_data.id},
             payload={
                 "status": "revoked",
                 "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-                "cert_uniqueness": str(cert_data["id"]),
+                "cert_uniqueness": str(cert_data.id),
             },
             fields=["id"],
         )

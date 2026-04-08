@@ -83,23 +83,31 @@ class ControllerPuppetCaV1CA:
             except ResourceNotFound:
                 raise HTTPException(status_code=404, detail="Space not found")
 
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"space_id": "puppet-ca", "cn": nodename, "status": "signed"}
-        )
-        if not cert_doc or not cert_doc.get("certificate"):
+        try:
+            cert_doc = await self._crud_certificates.get_by_cn(
+                space_id="puppet-ca", cn=nodename, status="signed"
+            )
+        except ResourceNotFound:
+            cert_doc = None
+
+        if not cert_doc or not cert_doc.certificate:
             raise HTTPException(status_code=404, detail="Certificate not found")
 
-        return Response(content=cert_doc["certificate"], media_type="text/plain")
+        return Response(content=cert_doc.certificate, media_type="text/plain")
 
     async def get_certificate_request(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"space_id": "puppet-ca", "cn": nodename, "status": "requested"}
-        )
-        if not cert_doc or not cert_doc.get("csr"):
+        try:
+            cert_doc = await self._crud_certificates.get_by_cn(
+                space_id="puppet-ca", cn=nodename, status="requested"
+            )
+        except ResourceNotFound:
+            cert_doc = None
+
+        if not cert_doc or not cert_doc.csr:
             raise HTTPException(status_code=404, detail="CSR not found")
 
-        return Response(content=cert_doc["csr"], media_type="text/plain")
+        return Response(content=cert_doc.csr, media_type="text/plain")
 
     async def submit_certificate_request(self, nodename: str, request: Request):
         from pyppetdb.errors import QueryParamValidationError
@@ -149,20 +157,24 @@ class ControllerPuppetCaV1CA:
 
     async def get_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"space_id": "puppet-ca", "cn": nodename}
-        )
+        try:
+            cert_doc = await self._crud_certificates.get_by_cn(
+                space_id="puppet-ca", cn=nodename
+            )
+        except ResourceNotFound:
+            cert_doc = None
+
         if not cert_doc:
             raise HTTPException(status_code=404, detail="Certificate not found")
 
         return {
-            "name": cert_doc["cn"],
-            "state": cert_doc["status"],
-            "fingerprint": cert_doc.get("fingerprint", {}).get("sha256"),
+            "name": cert_doc.cn,
+            "state": cert_doc.status,
+            "fingerprint": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
             "fingerprints": {
-                "SHA1": cert_doc.get("fingerprint", {}).get("sha1"),
-                "SHA256": cert_doc.get("fingerprint", {}).get("sha256"),
-                "default": cert_doc.get("fingerprint", {}).get("sha256"),
+                "SHA1": cert_doc.fingerprint.sha1 if cert_doc.fingerprint else None,
+                "SHA256": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
+                "default": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
             },
         }
 

@@ -139,19 +139,14 @@ class ControllerApiV1CASpacesCerts:
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
             fetch_fields.append("ca_id")
 
-        multi = await self._crud_certificates.search(
-            _id=f"^{cert_id}$",
-            space_id=space_id,
-            fields=fetch_fields,
-            limit=1,
-        )
-        if not multi.result:
-            from pyppetdb.errors import ResourceNotFound
-
+        try:
+            cert = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cert_id, fields=fetch_fields
+            )
+        except ResourceNotFound:
             raise ResourceNotFound(
                 msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
-        cert = multi.result[0]
         if "ca" in fields or "ca_chain" in fields:
             await self._populate_ca_info(cert)
         return cert
@@ -167,12 +162,11 @@ class ControllerApiV1CASpacesCerts:
         await self._authorize.require_perm(
             request=request, permission=f"CA:SPACES:{space_id}:CERTS:UPDATE"
         )
-        cert_doc = await self._crud_certificates.coll.find_one(
-            {"id": cert_id, "space_id": space_id}
-        )
-        if not cert_doc:
-            from pyppetdb.errors import ResourceNotFound
-
+        try:
+            cert_doc = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cert_id
+            )
+        except ResourceNotFound:
             raise ResourceNotFound(
                 msg=f"Certificate '{cert_id}' not found in space '{space_id}'"
             )
@@ -183,11 +177,11 @@ class ControllerApiV1CASpacesCerts:
 
         if data.status == "signed":
             cert = await self._ca_service.update_certificate_status(
-                space_id, cert_doc["cn"], data, fields=fetch_fields
+                space_id, cert_doc.cn, data, fields=fetch_fields
             )
         elif data.status == "revoked":
             cert = await self._ca_service.update_certificate_status_by_ca(
-                cert_doc["ca_id"], cert_id, data, fields=fetch_fields
+                cert_doc.ca_id, cert_id, data, fields=fetch_fields
             )
 
         if "ca" in fields or "ca_chain" in fields:
