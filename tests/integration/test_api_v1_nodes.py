@@ -66,7 +66,9 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200)
 
         # 5.1 Verify certificate is revoked
-        cert_doc = self._db["ca_certificates"].find_one({"cn": node_id, "space_id": "puppet-ca"})
+        cert_doc = self._db["ca_certificates"].find_one(
+            {"cn": node_id, "space_id": "puppet-ca"}
+        )
         self.assertEqual(cert_doc["status"], "revoked")
 
         # 6. Verify deletion

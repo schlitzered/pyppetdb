@@ -15,7 +15,7 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_heartbeat_update(self):
         self.mock_coll.update_one = AsyncMock()
         await self.crud.heartbeat_update(_id="instance1")
-        
+
         self.mock_coll.update_one.assert_called_once()
         args, kwargs = self.mock_coll.update_one.call_args
         self.assertEqual(kwargs["filter"], {"id": "instance1"})
@@ -29,17 +29,21 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._delete.assert_called_once_with(query={"id": "instance1"})
 
     async def test_get(self):
-        self.crud._get = AsyncMock(return_value={"id": "instance1", "heartbeat": datetime.now()})
+        self.crud._get = AsyncMock(
+            return_value={"id": "instance1", "heartbeat": datetime.now()}
+        )
         result = await self.crud.get(_id="instance1", fields=[])
         self.assertEqual(result.id, "instance1")
         self.crud._get.assert_called_once()
 
     async def test_search(self):
-        self.crud._search = AsyncMock(return_value={
-            "result": [{"id": "instance1", "heartbeat": datetime.now()}],
-            "meta": {"result_size": 1}
-        })
-        
+        self.crud._search = AsyncMock(
+            return_value={
+                "result": [{"id": "instance1", "heartbeat": datetime.now()}],
+                "meta": {"result_size": 1},
+            }
+        )
+
         result = await self.crud.search(_id="instance1")
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].id, "instance1")
