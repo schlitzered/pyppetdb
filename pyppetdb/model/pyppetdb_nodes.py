@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import List
-from typing import Optional
 from typing import Literal
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
