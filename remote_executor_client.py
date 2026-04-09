@@ -1,11 +1,9 @@
 import asyncio
 import socket
 import ssl
-import sys
 import websockets
 import argparse
 import traceback
-from urllib.parse import urlparse
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
