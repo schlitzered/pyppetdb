@@ -170,15 +170,12 @@ class ControllerPuppetCaV1CA:
         return {
             "name": cert_doc.cn,
             "state": cert_doc.status,
-            "fingerprint": (
-                cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None
-            ),
+            "fingerprint": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
             "fingerprints": {
                 "SHA1": cert_doc.fingerprint.sha1 if cert_doc.fingerprint else None,
                 "SHA256": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
-                "default": (
-                    cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None
-                ),
+                "default": cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None,
+
             },
         }
 

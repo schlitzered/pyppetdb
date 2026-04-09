@@ -430,8 +430,8 @@ async def lifespan_dev(app: FastAPI):
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
         )
         expired_task = asyncio.create_task(
-            env["ca_service"].expired_certificates_worker(),
-            name="ca-expired-revocation",
+            env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
+
         )
 
     yield
@@ -930,8 +930,7 @@ async def main_run():
         )
         worker_tasks.append(
             asyncio.create_task(
-                env["ca_service"].expired_certificates_worker(),
-                name="ca-expired-revocation",
+                env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
             )
         )
 

@@ -142,6 +142,7 @@ class ControllerApiV1CASpacesCerts:
 
         try:
             cert = await self._crud_certificates.get(_id=cert_id, fields=fetch_fields)
+
         except ResourceNotFound:
             raise ResourceNotFound(
                 details=f"Certificate '{cert_id}' not found in space '{space_id}'"
@@ -167,7 +168,9 @@ class ControllerApiV1CASpacesCerts:
             request=request, permission=f"CA:SPACES:{space_id}:CERTS:UPDATE"
         )
         try:
+
             cert_doc = await self._crud_certificates.get(_id=cert_id, fields=None)
+
         except ResourceNotFound:
             raise ResourceNotFound(
                 details=f"Certificate '{cert_id}' not found in space '{space_id}'"
