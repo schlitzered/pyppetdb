@@ -77,6 +77,7 @@ class Controller:
         router_main = ControllerApi(
             log=log,
             authorize=authorize_pyppetdb,
+            authorize_client_cert_puppet=authorize_client_cert_puppet,
             crud_ldap=crud_ldap,
             crud_hiera_key_models_static=crud_hiera_key_models_static,
             crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,

@@ -97,7 +97,10 @@ class CAService:
                         try:
                             await self.refresh_crl(ca_id)
                         except Exception as e:
-                            self.log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
+                            self.log.error(
+                                f"Failed to refresh CRL for CA '{ca_id}': {e}"
+                            )
+
                 else:
                     self.log.info("No expired certificates found")
             finally:

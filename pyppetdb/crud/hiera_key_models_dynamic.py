@@ -142,7 +142,6 @@ class CrudHieraModelsDynamicAdapter:
                 self._validation_model = validation_model
 
             def validate(self, data: Any) -> PyHieraModelDataBase:
-                print(data)
                 if not isinstance(data, dict):
                     data = {"data": data}
                 validated = self._validation_model(**data)

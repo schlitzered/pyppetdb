@@ -24,7 +24,7 @@ import uvicorn
 import pyppetdb.controller
 import pyppetdb.controller.oauth
 import pyppetdb.ca.utils
-from pyppetdb.ca.protocol import ClientCertProtocol
+from pyppetdb.ca.protocol import ClientCertProtocol, ClientCertWebSocketsProtocol
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.authorize import AuthorizeClientCert
@@ -430,7 +430,8 @@ async def lifespan_dev(app: FastAPI):
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
         )
         expired_task = asyncio.create_task(
-            env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
+            env["ca_service"].expired_certificates_worker(),
+            name="ca-expired-revocation",
         )
 
     yield
@@ -857,15 +858,21 @@ def main_run_get_app(
     )
     app.include_router(getattr(controller, f"router_{app_name}"))
 
+    ssl_ca = _settings.ssl.ca if _settings.ssl else None
+    if not ssl_ca and _settings.ssl and app_name == "main":
+        if settings.app.puppet.ssl and settings.app.puppet.ssl.ca:
+            ssl_ca = settings.app.puppet.ssl.ca
+
     config = uvicorn.Config(
         app,
         host=_settings.host,
         port=_settings.port,
-        ssl_ca_certs=_settings.ssl.ca if _settings.ssl else None,
+        ssl_ca_certs=ssl_ca,
         ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
         ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
         ssl_cert_reqs=ssl.CERT_OPTIONAL if _settings.ssl else ssl.CERT_NONE,
         http=ClientCertProtocol if _settings.ssl else "auto",
+        ws=ClientCertWebSocketsProtocol if _settings.ssl else "auto",
     )
     config.install_signal_handlers = False
     return uvicorn.Server(config)
@@ -923,7 +930,8 @@ async def main_run():
         )
         worker_tasks.append(
             asyncio.create_task(
-                env["ca_service"].expired_certificates_worker(), name="ca-expired-revocation"
+                env["ca_service"].expired_certificates_worker(),
+                name="ca-expired-revocation",
             )
         )
 

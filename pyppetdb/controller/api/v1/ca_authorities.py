@@ -127,9 +127,7 @@ class ControllerApiV1CAAuthorities:
         request: Request,
         ca_id: str = Query(description="filter: regular_expressions", default=None),
         parent_id: str = Query(description="filter: regular_expressions", default=None),
-        cn: str = Query(
-            description="filter: regular_expressions", default=None
-        ),
+        cn: str = Query(description="filter: regular_expressions", default=None),
         fingerprint: str = Query(
             description="filter: regular_expressions", default=None
         ),
