@@ -106,10 +106,13 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
                 pass
 
         # Proxy fallback if not found locally or unsupported mount
-        self.log.info(f"File {mount_point}/{file_path} not found locally, falling back to puppet server")
+        self.log.info(
+            f"File {mount_point}/{file_path} not found locally, falling back to puppet server"
+        )
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
-                status_code=502, detail="Puppet server URL not configured and file not found locally"
+                status_code=502,
+                detail="Puppet server URL not configured and file not found locally",
             )
 
         target_url = f"{self.config.app.puppet.serverurl}/puppet/v3/file_content/{mount_point}/{file_path}"

@@ -104,7 +104,9 @@ class ControllerApiV1CASpaces:
         data: CASpacePut,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_perm(request=request, permission="CA:SPACES:UPDATE")
+        await self.authorize.require_perm(
+            request=request, permission="CA:SPACES:UPDATE"
+        )
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
         return await self._ca_service.update_space(
@@ -118,7 +120,9 @@ class ControllerApiV1CASpaces:
         data: CASpacePost,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_perm(request=request, permission="CA:SPACES:CREATE")
+        await self.authorize.require_perm(
+            request=request, permission="CA:SPACES:CREATE"
+        )
         return await self._ca_service.create_space(
             _id=space_id, payload=data, fields=list(fields)
         )
@@ -137,7 +141,9 @@ class ControllerApiV1CASpaces:
         request: Request,
         space_id: str,
     ):
-        await self.authorize.require_perm(request=request, permission="CA:SPACES:DELETE")
+        await self.authorize.require_perm(
+            request=request, permission="CA:SPACES:DELETE"
+        )
 
         count = await self.crud_ca_certificates.count({"space_id": space_id})
         if count > 0:

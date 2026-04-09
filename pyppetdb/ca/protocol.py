@@ -3,6 +3,7 @@ from typing import Any
 from uvicorn.protocols.http.h11_impl import H11Protocol
 from uvicorn.protocols.websockets.websockets_impl import WebSocketProtocol
 
+
 class ClientCertProtocol(H11Protocol):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -21,6 +22,7 @@ class ClientCertProtocol(H11Protocol):
         if self.scope and isinstance(self.scope, dict):
             if self._peer_cert_dict and "client_cert_dict" not in self.scope:
                 self.scope["client_cert_dict"] = self._peer_cert_dict
+
 
 class ClientCertWebSocketsProtocol(WebSocketProtocol):
     def __init__(self, *args: Any, **kwargs: Any) -> None:

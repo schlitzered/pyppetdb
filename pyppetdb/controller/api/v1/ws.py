@@ -38,35 +38,51 @@ html = """
 </html>
 """
 
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
+
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
+
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
 
+
 class ControllerApiV1Ws:
-    def __init__(self, log: logging.Logger, authorize: AuthorizePyppetDB, authorize_client_cert: AuthorizeClientCert):
+    def __init__(
+        self,
+        log: logging.Logger,
+        authorize: AuthorizePyppetDB,
+        authorize_client_cert: AuthorizeClientCert,
+    ):
         self._authorize = authorize
         self._authorize_client_cert = authorize_client_cert
         self._conns = ConnectionManager()
         self._log = log
         self._router = APIRouter(tags=["websocket"])
-        
+
         self.router.add_api_route("/ws/", self.get, methods=["GET"])
-        self.router.add_api_websocket_route("/ws/chat/{client_id}", self.websocket_endpoint)
-        self.router.add_api_websocket_route("/ws/remote_executor/{node_id}", self.remote_executor_endpoint)
+        self.router.add_api_websocket_route(
+            "/ws/chat/{client_id}", self.websocket_endpoint
+        )
+        self.router.add_api_websocket_route(
+            "/ws/remote_executor/{node_id}", self.remote_executor_endpoint
+        )
 
     @property
-    def router(self): return self._router
+    def router(self):
+        return self._router
 
     @staticmethod
     def get():
@@ -75,8 +91,10 @@ class ControllerApiV1Ws:
     async def remote_executor_endpoint(self, websocket: WebSocket, node_id: str):
         try:
             await websocket.accept()
-            await self._authorize_client_cert.require_cn_match(request=websocket, match=node_id)
-            
+            await self._authorize_client_cert.require_cn_match(
+                request=websocket, match=node_id
+            )
+
             while True:
                 data = await websocket.receive_text()
                 if data == "ping":

@@ -276,9 +276,7 @@ class CAUtils:
         """Extract information from a certificate."""
         cert = x509.load_pem_x509_certificate(cert_pem)
         return {
-            "cn": cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[
-                0
-            ].value,
+            "cn": cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
             "issuer": cert.issuer.rfc4514_string(),
             "serial_number": str(cert.serial_number),
             "not_before": cert.not_valid_before_utc,
