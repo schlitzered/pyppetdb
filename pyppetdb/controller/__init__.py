@@ -27,6 +27,7 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.oauth import CrudOAuth
 from pyppetdb.crud.teams import CrudTeams
@@ -57,6 +58,7 @@ class Controller:
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
+        crud_pyppetdb_nodes: CrudPyppetDBNodes,
         crud_oauth: dict[str, CrudOAuth],
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
@@ -91,6 +93,7 @@ class Controller:
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,
             crud_nodes_secrets_redactor=crud_nodes_secrets_redactor,
+            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
             crud_teams=crud_teams,
             crud_users=crud_users,
             crud_users_credentials=crud_users_credentials,

@@ -34,6 +34,8 @@ filter_literal = Literal[
     "report.logs",
     "report.metrics",
     "report.resources",
+    "remote_agent.connected",
+    "remote_agent.via",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -45,6 +47,8 @@ sort_literal = Literal[
     "change_last",
     "change_report",
     "report.status",
+    "remote_agent.connected",
+    "remote_agent.via",
 ]
 
 
@@ -119,6 +123,11 @@ class NodeGetReport(BaseModel):
     resources: Optional[List[NodeGetReportResources]] = None
 
 
+class NodeRemoteAgent(BaseModel):
+    connected: bool = False
+    via: Optional[str] = None
+
+
 class NodeGet(BaseModel):
     id: Optional[StrictStr] = None
     catalog: NodeGetCatalog = None
@@ -132,6 +141,7 @@ class NodeGet(BaseModel):
     facts: Optional[Dict] = None
     report: Optional[NodeGetReport] = None
     facts_inject: Optional[Dict[str, str]] = None
+    remote_agent: Optional[NodeRemoteAgent] = None
 
 
 class NodeGetMultiMeta(MetaMulti):
@@ -164,6 +174,7 @@ class NodePutInternal(BaseModel):
     facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None
     node_groups: Optional[List[str]] = None
+    remote_agent: Optional[NodeRemoteAgent] = None
 
 
 class NodeDistinctFactValue(BaseModel):

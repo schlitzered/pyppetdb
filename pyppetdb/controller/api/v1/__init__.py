@@ -36,6 +36,7 @@ from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.controller.api.v1.ca_spaces_certs import (
     ControllerApiV1CASpacesCerts,
 )
+from pyppetdb.controller.api.v1.pyppetdb_nodes import ControllerApiV1PyppetDBNodes
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 
@@ -53,6 +54,7 @@ from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
+from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -80,6 +82,7 @@ class ControllerApiV1:
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
+        crud_pyppetdb_nodes: CrudPyppetDBNodes,
         crud_teams: CrudTeams,
         crud_users: CrudUsers,
         crud_users_credentials: CrudCredentials,
@@ -309,10 +312,20 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
+            ControllerApiV1PyppetDBNodes(
+                log=log,
+                authorize=authorize,
+                crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
             ControllerApiV1Ws(
                 log=log,
                 authorize=authorize,
                 authorize_client_cert=authorize_client_cert_puppet,
+                crud_nodes=crud_nodes,
             ).router,
             responses={404: {"description": "Not found"}},
         )

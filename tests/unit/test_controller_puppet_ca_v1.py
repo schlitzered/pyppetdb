@@ -42,6 +42,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_node_if_exists_success(self):
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
@@ -55,6 +56,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_node_if_exists_no_node(self):
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
@@ -76,6 +78,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_certificate_node(self):
         from pyppetdb.model.ca_certificates import CACertificateGet
+
         cert = CACertificateGet(certificate="NODE_CERT", status="signed")
         self.mock_crud_certificates.get_by_cn.return_value = cert
         mock_request = MagicMock()
@@ -85,6 +88,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_certificate_not_found(self):
         from pyppetdb.errors import ResourceNotFound
+
         self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
 
@@ -94,6 +98,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request(self):
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
@@ -113,6 +118,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     async def test_submit_certificate_request_mismatch(self):
         from pyppetdb.errors import QueryParamValidationError
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("attacker")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
@@ -128,6 +134,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_invalid_csr(self):
         from pyppetdb.errors import QueryParamValidationError
+
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=b"INVALID_CSR")
         self.mock_config.ca.autoSign = False
@@ -143,6 +150,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     async def test_get_certificate_status(self):
         from pyppetdb.model.ca_certificates import CACertificateGet
         from pyppetdb.model.common import Fingerprints
+
         cert = CACertificateGet(
             cn="node1",
             status="signed",
@@ -163,6 +171,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_certificate_status_not_found(self):
         from pyppetdb.errors import ResourceNotFound
+
         self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
 
@@ -196,6 +205,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_certificate_request_success(self):
         from pyppetdb.model.ca_certificates import CACertificateGet
+
         cert = CACertificateGet(csr="CSR_DATA", status="requested")
         self.mock_crud_certificates.get_by_cn.return_value = cert
         mock_request = MagicMock()
@@ -204,6 +214,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_certificate_request_not_found(self):
         from pyppetdb.errors import ResourceNotFound
+
         self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
         with self.assertRaises(HTTPException) as cm:
@@ -212,6 +223,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_success(self):
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
@@ -222,6 +234,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_error(self):
         from pyppetdb.ca.utils import CAUtils
+
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
