@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.controller.api.v1 import ControllerApiV1
 
@@ -34,6 +35,7 @@ class ControllerApi:
         self,
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
+        authorize_client_cert_puppet: AuthorizeClientCert,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -64,6 +66,7 @@ class ControllerApi:
             ControllerApiV1(
                 log=log,
                 authorize=authorize,
+                authorize_client_cert_puppet=authorize_client_cert_puppet,
                 crud_ldap=crud_ldap,
                 crud_hiera_key_models_static=crud_hiera_key_models_static,
                 crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,

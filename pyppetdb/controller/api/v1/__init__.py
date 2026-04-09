@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.controller.api.v1.authenticate import ControllerApiV1Authenticate
 from pyppetdb.controller.api.v1.hiera_key_models_static import (
@@ -35,6 +36,7 @@ from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.controller.api.v1.ca_spaces_certs import (
     ControllerApiV1CASpacesCerts,
 )
+from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 
 from pyppetdb.crud.credentials import CrudCredentials
@@ -64,6 +66,7 @@ class ControllerApiV1:
         self,
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
+        authorize_client_cert_puppet: AuthorizeClientCert,
         crud_ldap: CrudLdap,
         crud_hiera_key_models_static: CrudHieraKeyModelsStatic,
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
@@ -305,13 +308,14 @@ class ControllerApiV1:
             responses={404: {"description": "Not found"}},
         )
 
-        # self.router.include_router(
-        #    ControllerApiV1Ws(
-        #        log=log,
-        #        authorize=authorize,
-        #    ).router,
-        #    responses={404: {"description": "Not found"}},
-        # )
+        self.router.include_router(
+            ControllerApiV1Ws(
+                log=log,
+                authorize=authorize,
+                authorize_client_cert=authorize_client_cert_puppet,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
 
     @property
     def router(self):

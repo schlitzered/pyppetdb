@@ -2,6 +2,7 @@ import logging
 import typing
 
 from fastapi import Request
+from fastapi import WebSocket
 
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.users import CrudUsers
@@ -40,7 +41,7 @@ class AuthorizeClientCert:
     def crud_ca_certificates(self):
         return self._crud_ca_certificates
 
-    async def get_cert_info(self, request: Request) -> dict | None:
+    async def get_cert_info(self, request: Request | WebSocket) -> dict | None:
         cert = request.scope.get("client_cert_dict")
         if not cert:
             raise ClientCertError(detail="No client certificate provided")
@@ -89,19 +90,19 @@ class AuthorizeClientCert:
                 )
                 raise ClientCertError(detail="Certificate not found in database")
 
-    async def require_cn(self, request: Request):
+    async def require_cn(self, request: Request | WebSocket):
         cert = await self.get_cert_info(request)
         cn = cert["cn"]
         return cn
 
-    async def require_cn_match(self, request: Request, match: str):
+    async def require_cn_match(self, request: Request | WebSocket, match: str):
         cert = await self.get_cert_info(request)
         cn = cert["cn"]
         if cn != match:
             raise ClientCertError(detail=f"CN {cn} does not match {match}")
         return cn
 
-    async def require_cn_trusted(self, request: Request) -> str:
+    async def require_cn_trusted(self, request: Request | WebSocket) -> str:
         cert = await self.get_cert_info(request)
         cn = cert["cn"]
         if cn not in self._trusted_cns:
