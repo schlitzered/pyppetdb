@@ -38,17 +38,25 @@ def get_cert_cn(cert_path):
 
 
 async def handle_websocket(websocket):
-    print("Connected! Sending ping...")
-    await websocket.send("ping")
+    print("Connected! Entering ping/pong loop...")
+    try:
+        while True:
+            print("Sending ping...")
+            await websocket.send("ping")
 
-    print("Waiting for response...")
-    response = await websocket.recv()
-    print(f"Received from server: {response}")
+            print("Waiting for response...")
+            response = await websocket.recv()
+            print(f"Received from server: {response}")
 
-    if response == "pong":
-        print("PoC Success: Ping/Pong successful with mTLS.")
-    else:
-        print(f"PoC Failed: Unexpected response: {response}")
+            if response == "pong":
+                print("Ping/Pong successful.")
+            else:
+                print(f"Unexpected response: {response}")
+
+            print("Sleeping for 10 seconds...")
+            await asyncio.sleep(10)
+    except websockets.exceptions.ConnectionClosed:
+        print("Connection closed by server.")
 
 
 async def run_client(base_url, insecure=False):
@@ -71,25 +79,29 @@ async def run_client(base_url, insecure=False):
     # Strip trailing slash and append path with node_id
     url = base_url.rstrip("/") + f"/api/v1/ws/remote_executor/{node_id}"
 
-    print(f"Connecting to {url}...")
-    try:
-        if url.startswith("wss://"):
-            if insecure:
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-            print("Using secure WebSocket connection with mTLS")
-        else:
-            print("Using insecure WebSocket connection")
-            ssl_context = None
+    while True:
+        print(f"Connecting to {url}...")
+        try:
+            current_ssl_context = None
+            if url.startswith("wss://"):
+                current_ssl_context = ssl_context
+                if insecure:
+                    current_ssl_context.check_hostname = False
+                    current_ssl_context.verify_mode = ssl.CERT_NONE
+                print("Using secure WebSocket connection with mTLS")
+            else:
+                print("Using insecure WebSocket connection")
 
-        async with websockets.connect(
-            url, ssl=ssl_context, open_timeout=10
-        ) as websocket:
-            await handle_websocket(websocket)
+            async with websockets.connect(
+                url, ssl=current_ssl_context, open_timeout=10
+            ) as websocket:
+                await handle_websocket(websocket)
 
-    except Exception as e:
-        print(f"Connection error: {e}")
-        traceback.print_exc()
+        except Exception as e:
+            print(f"Connection error: {e}")
+
+        print("Retrying in 5 seconds...")
+        await asyncio.sleep(5)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
 import logging
+import socket
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pyppetdb.authorize import AuthorizePyppetDB, AuthorizeClientCert
 from pyppetdb.errors import ClientCertError
+from pyppetdb.crud.nodes import CrudNodes
 
 html = """
 <!DOCTYPE html>
@@ -65,12 +67,15 @@ class ControllerApiV1Ws:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         authorize_client_cert: AuthorizeClientCert,
+        crud_nodes: CrudNodes,
     ):
         self._authorize = authorize
         self._authorize_client_cert = authorize_client_cert
+        self._crud_nodes = crud_nodes
         self._conns = ConnectionManager()
         self._log = log
         self._router = APIRouter(tags=["websocket"])
+        self._via = socket.getfqdn()
 
         self.router.add_api_route("/ws/", self.get, methods=["GET"])
         self.router.add_api_websocket_route(
@@ -95,6 +100,10 @@ class ControllerApiV1Ws:
                 request=websocket, match=node_id
             )
 
+            await self._crud_nodes.update_remote_agent_status(
+                node_id=node_id, connected=True, via=self._via
+            )
+
             while True:
                 data = await websocket.receive_text()
                 if data == "ping":
@@ -103,9 +112,14 @@ class ControllerApiV1Ws:
             self._log.error(f"WS remote_executor Auth failed: {e.detail}")
             await websocket.close(code=4003)
         except WebSocketDisconnect:
-            pass
+            await self._crud_nodes.update_remote_agent_status(
+                node_id=node_id, connected=False, via=None
+            )
         except Exception as e:
             self._log.error(f"WS remote_executor unexpected error: {e}")
+            await self._crud_nodes.update_remote_agent_status(
+                node_id=node_id, connected=False, via=None
+            )
             await websocket.close(code=4003)
 
     async def websocket_endpoint(self, websocket: WebSocket, client_id: str):

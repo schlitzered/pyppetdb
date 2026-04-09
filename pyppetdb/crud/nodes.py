@@ -55,6 +55,7 @@ class CrudNodes(CrudMongo):
         await self.coll.create_index([("change_last", pymongo.ASCENDING)])
         await self.coll.create_index([("change_report", pymongo.ASCENDING)])
         await self.coll.create_index([("report.status", pymongo.ASCENDING)])
+        await self.coll.create_index([("remote_agent.connected", pymongo.ASCENDING)])
         if self.config.app.main.facts.index:
             for fact in self.config.app.main.facts.index:
                 await self.coll.create_index(
@@ -209,6 +210,8 @@ class CrudNodes(CrudMongo):
         fact: typing.Optional[filter_complex_search] = None,
         report_status: typing.Optional[str] = None,
         outdated_threshold: typing.Optional[str] = None,
+        remote_agent_connected: typing.Optional[bool] = None,
+        remote_agent_via: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,
@@ -224,6 +227,8 @@ class CrudNodes(CrudMongo):
         self._filter_re(query, "environment", environment)
         self._filter_re(query, "id", _id)
         self._filter_re(query, "report.status", report_status)
+        self._filter_boolean(query, "remote_agent.connected", remote_agent_connected)
+        self._filter_re(query, "remote_agent.via", remote_agent_via)
         pipeline = [
             {"$match": query},
             {
@@ -321,6 +326,33 @@ class CrudNodes(CrudMongo):
         if return_none:
             return None
         return NodeGet(**result)
+
+    async def update_remote_agent_status(
+        self,
+        node_id: str,
+        connected: bool,
+        via: typing.Optional[str] = None,
+    ):
+        update_data = {
+            "remote_agent.connected": connected,
+            "remote_agent.via": via,
+        }
+        await self.coll.update_one(
+            filter={"id": node_id},
+            update={"$set": update_data},
+        )
+
+    async def cleanup_remote_agents(self, via: str):
+        self.log.info(f"Cleaning up remote agents for instance '{via}'")
+        await self.coll.update_many(
+            filter={"remote_agent.via": via},
+            update={
+                "$set": {
+                    "remote_agent.connected": False,
+                    "remote_agent.via": None,
+                }
+            },
+        )
 
     async def update_nodegroup(
         self,

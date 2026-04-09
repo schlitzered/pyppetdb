@@ -46,6 +46,7 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.oauth import CrudOAuthGitHub
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -264,6 +265,14 @@ async def prepare_env():
     await crud_nodes_reports.index_create()
     env["crud_nodes_reports"] = crud_nodes_reports
 
+    crud_pyppetdb_nodes = CrudPyppetDBNodes(
+        config=settings,
+        log=log,
+        coll=mongo_db["pyppetdb_nodes"],
+    )
+    await crud_pyppetdb_nodes.index_create()
+    env["crud_pyppetdb_nodes"] = crud_pyppetdb_nodes
+
     crud_teams = CrudTeams(
         config=settings,
         log=log,
@@ -409,6 +418,7 @@ async def lifespan_dev(app: FastAPI):
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
+        crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],
@@ -425,6 +435,10 @@ async def lifespan_dev(app: FastAPI):
 
     refresh_task = None
     expired_task = None
+    heartbeat_task = asyncio.create_task(
+        pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
+        name="pyppetdb-nodes-heartbeat",
+    )
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
@@ -435,10 +449,14 @@ async def lifespan_dev(app: FastAPI):
         )
 
     yield
+    if heartbeat_task:
+        heartbeat_task.cancel()
     if refresh_task:
         refresh_task.cancel()
     if expired_task:
         expired_task.cancel()
+
+    await env["crud_nodes"].cleanup_remote_agents(via=socket.getfqdn())
 
 
 async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
@@ -878,6 +896,18 @@ def main_run_get_app(
     return uvicorn.Server(config)
 
 
+async def pyppetdb_nodes_heartbeat_worker(crud: CrudPyppetDBNodes):
+    _id = socket.getfqdn()
+    while True:
+        try:
+            await crud.heartbeat_update(_id=_id)
+        except Exception as e:
+            logging.getLogger("pyppetdb").error(
+                f"Error updating heartbeat for {_id}: {e}"
+            )
+        await asyncio.sleep(10)
+
+
 async def main_run():
     env = await prepare_env()
     log = env["log"]
@@ -899,6 +929,7 @@ async def main_run():
         crud_nodes_groups=env["crud_nodes_groups"],
         crud_nodes_reports=env["crud_nodes_reports"],
         crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
+        crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
         crud_teams=env["crud_teams"],
         crud_users=env["crud_users"],
         crud_users_credentials=env["crud_users_credentials"],
@@ -922,6 +953,12 @@ async def main_run():
             )
 
     worker_tasks = list()
+    worker_tasks.append(
+        asyncio.create_task(
+            pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
+            name="pyppetdb-nodes-heartbeat",
+        )
+    )
     if settings.ca.enableCrlRefresh:
         worker_tasks.append(
             asyncio.create_task(
@@ -981,6 +1018,7 @@ async def main_run():
                 t.cancel()
                 with suppress(asyncio.CancelledError):
                     await t
+        await env["crud_nodes"].cleanup_remote_agents(via=socket.getfqdn())
 
         if "ldap_pool" in env and env["ldap_pool"]:
             log.info("Closing LDAP pool...")
