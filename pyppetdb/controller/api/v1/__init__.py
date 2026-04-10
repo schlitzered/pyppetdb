@@ -6,6 +6,8 @@ from fastapi import APIRouter
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.authorize import AuthorizeClientCert
 
+from pyppetdb.config import Config
+
 from pyppetdb.controller.api.v1.authenticate import ControllerApiV1Authenticate
 from pyppetdb.controller.api.v1.hiera_key_models_static import (
     ControllerApiV1HieraKeyModelsStatic,
@@ -36,6 +38,18 @@ from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.controller.api.v1.ca_spaces_certs import (
     ControllerApiV1CASpacesCerts,
 )
+from pyppetdb.controller.api.v1.jobs_definitions import (
+    ControllerApiV1JobsDefinitions,
+)
+from pyppetdb.controller.api.v1.jobs_jobs import (
+    ControllerApiV1JobsJobs,
+)
+from pyppetdb.controller.api.v1.jobs_nodes_jobs import (
+    ControllerApiV1JobsNodesJobs,
+)
+from pyppetdb.controller.api.v1.jobs_nodes_jobs_logs import (
+    ControllerApiV1JobsNodesJobsLogs,
+)
 from pyppetdb.controller.api.v1.pyppetdb_nodes import ControllerApiV1PyppetDBNodes
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
@@ -47,6 +61,10 @@ from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
+from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
+from pyppetdb.crud.jobs_jobs import CrudJobs
+from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
+from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -76,6 +94,10 @@ class ControllerApiV1:
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_lookup_cache: CrudHieraLookupCache,
+        crud_job_definitions: CrudJobsDefinitions,
+        crud_jobs: CrudJobs,
+        crud_node_jobs: CrudJobsNodeJobs,
+        crud_log_blobs: CrudJobsNodesLogsLogBlobs,
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
@@ -91,10 +113,12 @@ class ControllerApiV1:
         crud_ca_certificates: CrudCACertificates,
         ca_service: CAService,
         http: httpx.AsyncClient,
+        config: Config,
         pyhiera,
     ):
         self._router = APIRouter()
         self._log = log
+        self._config = config
 
         self.router.include_router(
             ControllerApiV1Authenticate(
@@ -316,6 +340,46 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1JobsDefinitions(
+                log=log,
+                authorize=authorize,
+                crud_jobs_definitions=crud_job_definitions,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1JobsJobs(
+                log=log,
+                config=self._config,
+                authorize=authorize,
+                crud_jobs_definitions=crud_job_definitions,
+                crud_jobs=crud_jobs,
+                crud_nodes=crud_nodes,
+                crud_jobs_node_jobs=crud_node_jobs,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1JobsNodesJobs(
+                log=log,
+                authorize=authorize,
+                crud_jobs_node_jobs=crud_node_jobs,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1JobsNodesJobsLogs(
+                log=log,
+                authorize=authorize,
+                crud_jobs_nodes_jobs_log_blobs=crud_log_blobs,
             ).router,
             responses={404: {"description": "Not found"}},
         )
