@@ -6,6 +6,8 @@ from fastapi import APIRouter
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.authorize import AuthorizeClientCert
 
+from pyppetdb.config import Config
+
 from pyppetdb.controller.api.v1 import ControllerApiV1
 
 from pyppetdb.crud.credentials import CrudCredentials
@@ -15,6 +17,10 @@ from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
+from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
+from pyppetdb.crud.jobs_jobs import CrudJobs
+from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
+from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -44,6 +50,10 @@ class ControllerApi:
         crud_hiera_levels: CrudHieraLevels,
         crud_hiera_level_data: CrudHieraLevelData,
         crud_hiera_lookup_cache: CrudHieraLookupCache,
+        crud_job_definitions: CrudJobsDefinitions,
+        crud_jobs: CrudJobs,
+        crud_node_jobs: CrudJobsNodeJobs,
+        crud_log_blobs: CrudJobsNodesLogsLogBlobs,
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
@@ -59,6 +69,7 @@ class ControllerApi:
         crud_ca_certificates: CrudCACertificates,
         ca_service: CAService,
         http: httpx.AsyncClient,
+        config: Config,
         pyhiera,
     ):
         self._router = APIRouter()
@@ -76,6 +87,10 @@ class ControllerApi:
                 crud_hiera_levels=crud_hiera_levels,
                 crud_hiera_level_data=crud_hiera_level_data,
                 crud_hiera_lookup_cache=crud_hiera_lookup_cache,
+                crud_job_definitions=crud_job_definitions,
+                crud_jobs=crud_jobs,
+                crud_node_jobs=crud_node_jobs,
+                crud_log_blobs=crud_log_blobs,
                 crud_nodes=crud_nodes,
                 crud_nodes_catalog_cache=crud_nodes_catalog_cache,
                 crud_nodes_catalogs=crud_nodes_catalogs,
@@ -91,6 +106,7 @@ class ControllerApi:
                 crud_ca_certificates=crud_ca_certificates,
                 ca_service=ca_service,
                 http=http,
+                config=config,
                 pyhiera=pyhiera,
             ).router,
             prefix="/v1",

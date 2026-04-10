@@ -147,10 +147,15 @@ class ConfigCA(BaseModel):
     certificateValidityDays: int = 365
 
 
+class ConfigJobs(BaseModel):
+    maxNodesPerJob: int = 1000
+
+
 class Config(BaseSettings):
     app: ConfigApp = ConfigApp()
     ca: ConfigCA = ConfigCA()
     hiera: ConfigHiera = ConfigHiera()
+    jobs: ConfigJobs = ConfigJobs()
     ldap: ConfigLdap = ConfigLdap()
     mongodb: ConfigMongodb = ConfigMongodb()
     oauth: typing.Optional[dict[str, ConfigOAuth]] = None

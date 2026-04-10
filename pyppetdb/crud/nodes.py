@@ -201,6 +201,28 @@ class CrudNodes(CrudMongo):
             **{"result": result, "meta": {"result_size": len(result)}}
         )
 
+    async def count(
+        self,
+        user_node_groups: typing.Optional[list[str]] = None,
+        disabled: typing.Optional[bool] = None,
+        environment: typing.Optional[str] = None,
+        fact: typing.Optional[filter_complex_search] = None,
+        report_status: typing.Optional[str] = None,
+        remote_agent_connected: typing.Optional[bool] = None,
+        remote_agent_via: typing.Optional[str] = None,
+        query: typing.Optional[dict] = None,
+    ) -> int:
+        if not query:
+            query = {}
+        self._filter_list(query, "node_groups", user_node_groups)
+        self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
+        self._filter_boolean(query, "disabled", disabled)
+        self._filter_re(query, "environment", environment)
+        self._filter_re(query, "report.status", report_status)
+        self._filter_boolean(query, "remote_agent.connected", remote_agent_connected)
+        self._filter_re(query, "remote_agent.via", remote_agent_via)
+        return await self.coll.count_documents(query)
+
     async def search(
         self,
         _id: typing.Optional[str] = None,
