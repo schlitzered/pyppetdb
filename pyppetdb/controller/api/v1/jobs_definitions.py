@@ -153,7 +153,7 @@ class ControllerApiV1JobsDefinitions:
             matches = re.findall(r"\{(.*?)\}", token)
             for m in matches:
                 placeholders.add(m)
-        
+
         param_names = set(params.keys())
 
         missing = placeholders - param_names

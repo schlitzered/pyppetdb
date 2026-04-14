@@ -80,23 +80,31 @@ class RemoteExecutorMessage(BaseModel):
 
 
 class RemoteExecutorClient:
-    def __init__(self, websocket, node_id, unacked_log_batches: List[List[RemoteExecutorLogEntry]]):
-        self.ws = websocket
+    def __init__(self, node_id: str, url: str, ssl_context: Optional[ssl.SSLContext], insecure: bool = False):
         self.node_id = node_id
+        self.url = url
+        self.ssl_context = ssl_context
+        self.insecure = insecure
+        
+        self.ws = None
         self.msg_id_counter = 0
-        self.pending_acks = {}
+        self.pending_acks: Dict[int, asyncio.Event] = {}
+        
+        # Persistent state
         self.busy = False
-        self.current_job_id = None
+        self.current_job_id: Optional[str] = None
+        self.log_buffer: List[RemoteExecutorLogEntry] = []
+        self.unacked_log_batches: List[List[RemoteExecutorLogEntry]] = []
+        
+        self.running = True
         self.last_activity = time.time()
         self.heartbeat_interval = 30
-        self.running = True
-        
-        # Log buffering
-        self.log_buffer: List[RemoteExecutorLogEntry] = []
-        self.unacked_log_batches = unacked_log_batches
         self.last_log_send = time.time()
 
     async def _send_message(self, msg_type: str, body: BaseModel):
+        if not self.ws:
+            raise ConnectionError("Not connected")
+        
         msg_id = self.msg_id_counter
         self.msg_id_counter += 1
         
@@ -121,6 +129,8 @@ class RemoteExecutorClient:
             self.pending_acks.pop(msg_id, None)
 
     async def _send_ack(self, acked_ids: List[int]):
+        if not self.ws:
+            return
         msg = RemoteExecutorMessage(
             msg_type="ack",
             msg_body=RemoteExecutorMsgBodyAck(acked_ids=acked_ids)
@@ -128,10 +138,37 @@ class RemoteExecutorClient:
         await self.ws.send(msg.model_dump_json())
         self.last_activity = time.time()
 
-    async def handle(self):
+    async def run(self):
+        asyncio.create_task(self._log_flusher())
+        
+        while self.running:
+            print(f"Connecting to {self.url}...")
+            try:
+                current_ssl_context = None
+                if self.url.startswith("wss://") and self.ssl_context:
+                    current_ssl_context = self.ssl_context
+                    if self.insecure:
+                        current_ssl_context.check_hostname = False
+                        current_ssl_context.verify_mode = ssl.CERT_NONE
+                
+                async with websockets.connect(self.url, ssl=current_ssl_context, open_timeout=10) as websocket:
+                    self.ws = websocket
+                    print("Connected!")
+                    await self._handle_connection()
+            except Exception as e:
+                print(f"Connection error: {e}")
+                self.ws = None
+                # Wake up any pending ACKs so they can fail
+                for event in self.pending_acks.values():
+                    event.set()
+
+            if self.running:
+                print("Retrying in 5 seconds...")
+                await asyncio.sleep(5)
+
+    async def _handle_connection(self):
         receiver_task = asyncio.create_task(self._receiver())
         heartbeat_task = asyncio.create_task(self._heartbeat())
-        log_flusher_task = asyncio.create_task(self._log_flusher())
 
         # 1. Resend unacked logs from previous sessions
         if self.unacked_log_batches:
@@ -147,24 +184,22 @@ class RemoteExecutorClient:
             ))
         except Exception as e:
             print(f"Failed to send initial status: {e}")
-            self.running = False
+            return
 
         try:
             await receiver_task
         except Exception as e:
             print(f"Receiver task error: {e}")
         finally:
-            self.running = False
             heartbeat_task.cancel()
-            log_flusher_task.cancel()
             try:
-                await asyncio.gather(heartbeat_task, log_flusher_task, return_exceptions=True)
+                await asyncio.gather(heartbeat_task, return_exceptions=True)
             except Exception:
                 pass
 
     async def _receiver(self):
         try:
-            while self.running:
+            while self.ws:
                 data = await self.ws.recv()
                 self.last_activity = time.time()
                 await self._handle_message(data)
@@ -172,8 +207,6 @@ class RemoteExecutorClient:
             print("Connection closed")
         except Exception as e:
             print(f"Receiver error: {e}")
-        finally:
-            self.running = False
 
     async def _handle_message(self, data):
         try:
@@ -200,7 +233,7 @@ class RemoteExecutorClient:
             print(f"Error handling message: {e}")
 
     async def _heartbeat(self):
-        while self.running:
+        while self.ws:
             await asyncio.sleep(self.heartbeat_interval)
             if time.time() - self.last_activity >= self.heartbeat_interval:
                 try:
@@ -213,6 +246,8 @@ class RemoteExecutorClient:
             await asyncio.sleep(0.5)
             now = time.time()
             if self.log_buffer and (len(self.log_buffer) >= 100 or (now - self.last_log_send >= 5)):
+                if not self.ws:
+                    continue
                 batch = self.log_buffer[:100]
                 self.log_buffer = self.log_buffer[100:]
                 self.last_log_send = now
@@ -222,13 +257,22 @@ class RemoteExecutorClient:
         if not is_resend:
             self.unacked_log_batches.append(batch)
         
-        try:
-            await self._send_message("log_message", RemoteExecutorMsgBodyLogMessage(logs=batch))
-            # If we reached here, it was ACKed
-            if batch in self.unacked_log_batches:
-                self.unacked_log_batches.remove(batch)
-        except Exception as e:
-            print(f"Failed to send log batch (resend={is_resend}): {e}")
+        while self.running:
+            try:
+                await self._send_message("log_message", RemoteExecutorMsgBodyLogMessage(logs=batch))
+                # If we reached here, it was ACKed
+                if batch in self.unacked_log_batches:
+                    self.unacked_log_batches.remove(batch)
+                break
+            except Exception as e:
+                print(f"Failed to send log batch (resend={is_resend}): {e}")
+                if not is_resend:
+                    # If it's a new batch, we keep it in unacked_log_batches and it will be resent
+                    # But we break the loop here and let the next flush or reconnection handle it
+                    break
+                else:
+                    # If it's a resend, we wait for a bit and try again as long as we are running
+                    await asyncio.sleep(5)
 
     async def _run_job(self, job_body: RemoteExecutorMsgBodyStartJob):
         if self.busy:
@@ -244,16 +288,11 @@ class RemoteExecutorClient:
             # Prepare command tokens safely
             args = []
             for token in job_body.params_template:
-                # Check if the token is a placeholder (e.g., {target})
                 if token.startswith("{") and token.endswith("}"):
                     key = token.strip("{}")
-                    # Insert user value as a SINGLE token
-                    # No shlex.split(), so even if the value contains spaces,
-                    # it remains one argument for the binary.
                     val = job_body.parameters.get(key, "")
                     args.append(str(val))
                 else:
-                    # Literal token
                     args.append(token)
 
             print(f"[{job_body.job_id}] Arguments: {args}")
@@ -294,20 +333,32 @@ class RemoteExecutorClient:
                 self.log_buffer = self.log_buffer[100:]
                 await self._send_log_batch(batch)
 
-            await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=exit_code))
+            # Keep trying to send finish until successful or no longer running
+            while self.running:
+                try:
+                    await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=exit_code))
+                    break
+                except Exception as e:
+                    print(f"Failed to send finish: {e}")
+                    await asyncio.sleep(5)
+
         except Exception as e:
             print(f"Error running job: {e}")
-            try:
-                await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=1))
-            except Exception:
-                pass
+            while self.running:
+                try:
+                    await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=1))
+                    break
+                except Exception:
+                    await asyncio.sleep(5)
         finally:
             self.busy = False
             self.current_job_id = None
-            try:
-                await self._send_message("status", RemoteExecutorMsgBodyStatus(busy=False))
-            except Exception:
-                pass
+            while self.running:
+                try:
+                    await self._send_message("status", RemoteExecutorMsgBodyStatus(busy=False))
+                    break
+                except Exception:
+                    await asyncio.sleep(5)
 
 
 def get_puppet_ssl_context():
@@ -353,28 +404,8 @@ async def run_client(base_url, insecure=False):
     print(f"Identified as node: {node_id}")
     url = base_url.rstrip("/") + f"/api/v1/ws/remote_executor/{node_id}"
 
-    # Persistent state across reconnections
-    unacked_log_batches: List[List[RemoteExecutorLogEntry]] = []
-
-    while True:
-        print(f"Connecting to {url}...")
-        try:
-            current_ssl_context = None
-            if url.startswith("wss://"):
-                current_ssl_context = ssl_context
-                if insecure:
-                    current_ssl_context.check_hostname = False
-                    current_ssl_context.verify_mode = ssl.CERT_NONE
-            
-            async with websockets.connect(url, ssl=current_ssl_context, open_timeout=10) as websocket:
-                client = RemoteExecutorClient(websocket, node_id, unacked_log_batches)
-                await client.handle()
-
-        except Exception as e:
-            print(f"Connection error: {e}")
-
-        print("Retrying in 5 seconds...")
-        await asyncio.sleep(5)
+    client = RemoteExecutorClient(node_id, url, ssl_context, insecure)
+    await client.run()
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{{path}}",
+            params_template=["{{path}}"],
             params={"path": {"type": "string", "regex": "^/tmp/.*"}},
             environment_variables={"RETRIES": {"type": "int", "min": 1, "max": 5}},
         )
@@ -109,7 +109,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="",
+            params_template=[],
             params={},
             environment_variables={},
         )
@@ -142,7 +142,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{path}",
+            params_template=["{path}"],
             params={"path": {"type": "string"}},
             environment_variables={},
         )
@@ -171,7 +171,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{{path}}",
+            params_template=["{{path}}"],
             params={"path": {"type": "string", "regex": "^/tmp/.*"}},
             environment_variables={},
         )
@@ -199,7 +199,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="",
+            params_template=[],
             params={},
             environment_variables={"RETRIES": {"type": "int", "min": 1, "max": 5}},
         )

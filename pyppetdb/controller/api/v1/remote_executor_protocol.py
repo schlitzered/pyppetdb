@@ -6,7 +6,7 @@ import random
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError, BaseModel
 
@@ -39,6 +39,7 @@ class RemoteExecutorProtocol:
         crud_node_jobs: CrudJobsNodeJobs,
         crud_log_blobs: CrudJobsNodesLogsLogBlobs,
         redactor: NodesSecretsRedactor,
+        manager: Any,
     ):
         self._log = log
         self._node_id = node_id
@@ -49,6 +50,7 @@ class RemoteExecutorProtocol:
         self._crud_node_jobs = crud_node_jobs
         self._crud_log_blobs = crud_log_blobs
         self._redactor = redactor
+        self._manager = manager
 
         self._msg_id_counter = 0
         self._pending_acks: Dict[int, asyncio.Event] = {}
@@ -110,7 +112,9 @@ class RemoteExecutorProtocol:
             if msg_id is not None:
                 await self._send_ack(acked_ids=[msg_id])
 
-            if msg_type == "log_message" and isinstance(body, RemoteExecutorMsgBodyLogMessage):
+            if msg_type == "log_message" and isinstance(
+                body, RemoteExecutorMsgBodyLogMessage
+            ):
                 await self._handle_log_message(body=body)
             elif msg_type == "finish" and isinstance(body, RemoteExecutorMsgBodyFinish):
                 await self._handle_finish(body=body)
@@ -139,8 +143,12 @@ class RemoteExecutorProtocol:
             await self._flush_logs()
 
     async def _publish_log(self, log_entry: Dict):
-        # Stub for future real-time log publishing
-        pass
+        if self._current_job_id:
+            await self._manager.broadcast_local_log(
+                node_id=self._node_id,
+                job_id=self._current_job_id,
+                log_entry=log_entry,
+            )
 
     async def _flush_logs(self):
         if not self._log_buffer or not self._current_job_id:
@@ -156,6 +164,7 @@ class RemoteExecutorProtocol:
             return str(x)
 
         import json
+
         json_data = json.dumps(logs_to_flush, default=datetime_handler)
         compressed = gzip.compress(json_data.encode("utf-8"))
         encoded = base64.b64encode(compressed).decode("utf-8")
@@ -184,6 +193,12 @@ class RemoteExecutorProtocol:
                 node_id=self._node_id,
                 status=status,
             )
+            await self._manager.job_finished(
+                node_id=self._node_id,
+                job_id=self._current_job_id,
+                status=status,
+                exit_code=exit_code,
+            )
 
         self._busy = False
         self._current_job_id = None
@@ -207,8 +222,7 @@ class RemoteExecutorProtocol:
             await asyncio.sleep(self._heartbeat_interval)
             if time.time() - self._last_activity >= self._heartbeat_interval:
                 await self._send_message(
-                    msg_type="heartbeat", 
-                    body=RemoteExecutorMsgBodyHeartbeat()
+                    msg_type="heartbeat", body=RemoteExecutorMsgBodyHeartbeat()
                 )
 
     async def _poll_for_jobs(self):
@@ -265,7 +279,7 @@ class RemoteExecutorProtocol:
 
         msg = RemoteExecutorMessage(
             msg_id=msg_id,
-            msg_type=msg_type, # type: ignore
+            msg_type=msg_type,  # type: ignore
             msg_body=body,
         )
 

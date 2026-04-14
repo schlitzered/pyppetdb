@@ -397,6 +397,7 @@ class ControllerApiV1:
                 crud_job_definitions=crud_job_definitions,
                 crud_node_jobs=crud_node_jobs,
                 crud_log_blobs=crud_log_blobs,
+                crud_pyppetdb_nodes=crud_pyppetdb_nodes,
                 redactor=redactor,
             ).router,
             responses={404: {"description": "Not found"}},

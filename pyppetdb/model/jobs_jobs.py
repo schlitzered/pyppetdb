@@ -5,8 +5,7 @@ from typing import List
 from typing import Literal
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, filter_complex_search, sort_order_literal
-
+from pyppetdb.model.common import MetaMulti, filter_complex_search
 
 filter_literal = Literal[
     "id",
