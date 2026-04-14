@@ -2,8 +2,27 @@ from datetime import datetime
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Literal
+from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, filter_complex_search
+from pyppetdb.model.common import MetaMulti, filter_complex_search, sort_order_literal
+
+
+filter_literal = Literal[
+    "id",
+    "definition_id",
+    "created_by",
+    "created_at",
+]
+
+filter_list = set(typing_get_args(filter_literal))
+
+sort_literal = Literal[
+    "id",
+    "definition_id",
+    "created_by",
+    "created_at",
+]
 
 
 class JobGet(BaseModel):

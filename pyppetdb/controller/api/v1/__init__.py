@@ -72,6 +72,7 @@ from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -114,6 +115,7 @@ class ControllerApiV1:
         ca_service: CAService,
         http: httpx.AsyncClient,
         config: Config,
+        redactor: NodesSecretsRedactor,
         pyhiera,
     ):
         self._router = APIRouter()
@@ -387,9 +389,15 @@ class ControllerApiV1:
         self.router.include_router(
             ControllerApiV1Ws(
                 log=log,
+                config=self._config,
                 authorize=authorize,
                 authorize_client_cert=authorize_client_cert_puppet,
                 crud_nodes=crud_nodes,
+                crud_jobs=crud_jobs,
+                crud_job_definitions=crud_job_definitions,
+                crud_node_jobs=crud_node_jobs,
+                crud_log_blobs=crud_log_blobs,
+                redactor=redactor,
             ).router,
             responses={404: {"description": "Not found"}},
         )

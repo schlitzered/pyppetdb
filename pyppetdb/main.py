@@ -470,6 +470,7 @@ async def lifespan_dev(app: FastAPI):
         http=env["http"],
         config=settings,
         pyhiera=env["pyhiera"],
+        redactor=env["nodes_secrets_redactor"],
     )
     app.include_router(controller.router_dev)
 
@@ -985,6 +986,7 @@ async def main_run():
         http=env["http"],
         config=settings,
         pyhiera=env["pyhiera"],
+        redactor=env["nodes_secrets_redactor"],
     )
     apps = list()
     apps_tasks = list()

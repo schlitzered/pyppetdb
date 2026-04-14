@@ -1,8 +1,4 @@
-from typing import Dict
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Union
+from typing import Dict, List, Literal, Optional, Union
 from pydantic import BaseModel
 from pyppetdb.model.common import MetaMulti
 
@@ -20,7 +16,7 @@ class JobDefinitionGet(BaseModel):
     executable: str
     user: str
     group: str
-    params_template: str
+    params_template: List[str]
     params: Dict[str, JobParamDefinition]
     environment_variables: Dict[str, JobParamDefinition]
 
@@ -30,7 +26,7 @@ class JobDefinitionPost(BaseModel):
     executable: str
     user: str
     group: str
-    params_template: str
+    params_template: List[str]
     params: Dict[str, JobParamDefinition] = {}
     environment_variables: Dict[str, JobParamDefinition] = {}
 
@@ -39,7 +35,7 @@ class JobDefinitionPut(BaseModel):
     executable: Optional[str] = None
     user: Optional[str] = None
     group: Optional[str] = None
-    params_template: Optional[str] = None
+    params_template: Optional[List[str]] = None
     params: Optional[Dict[str, JobParamDefinition]] = None
     environment_variables: Optional[Dict[str, JobParamDefinition]] = None
 

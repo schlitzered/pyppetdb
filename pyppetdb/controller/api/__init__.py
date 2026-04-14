@@ -29,6 +29,7 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -70,6 +71,7 @@ class ControllerApi:
         ca_service: CAService,
         http: httpx.AsyncClient,
         config: Config,
+        redactor: NodesSecretsRedactor,
         pyhiera,
     ):
         self._router = APIRouter()
@@ -107,6 +109,7 @@ class ControllerApi:
                 ca_service=ca_service,
                 http=http,
                 config=config,
+                redactor=redactor,
                 pyhiera=pyhiera,
             ).router,
             prefix="/v1",

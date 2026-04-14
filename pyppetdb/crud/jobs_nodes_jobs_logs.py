@@ -1,3 +1,6 @@
+import base64
+import gzip
+import json
 import pymongo
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.jobs_nodes_jobs_logs import LogBlobGet
@@ -10,4 +13,15 @@ class CrudJobsNodesLogsLogBlobs(CrudMongo):
     async def get(self, _id: str, fields: list) -> LogBlobGet:
         query = {"id": _id}
         result = await self._get(query=query, fields=fields)
+        if result and "data" in result and isinstance(result["data"], str):
+            compressed = base64.b64decode(result["data"])
+            decompressed = gzip.decompress(compressed)
+            result["data"] = json.loads(decompressed.decode("utf-8"))
         return LogBlobGet(**result)
+
+    async def create(self, _id: str, data: str) -> None:
+        payload = {"id": _id, "data": data}
+        await self._create(
+            payload=payload,
+            fields=["id", "data"],
+        )

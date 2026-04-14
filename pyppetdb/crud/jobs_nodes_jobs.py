@@ -41,6 +41,31 @@ class CrudJobsNodeJobs(CrudMongo):
             update={"$set": {"status": "canceled"}},
         )
 
+    async def get_oldest_scheduled(self, node_id: str) -> typing.Optional[NodeJobGet]:
+        cursor = self.coll.find(filter={"node_id": node_id, "status": "scheduled"})
+        cursor.sort([("_id", pymongo.ASCENDING)])
+        result = await cursor.to_list(length=1)
+        if result:
+            return NodeJobGet(**self._format(result[0]))
+        return None
+
+    async def update_status(
+        self,
+        job_id: str,
+        node_id: str,
+        status: str,
+    ):
+        await self.coll.update_one(
+            filter={"job_id": job_id, "node_id": node_id},
+            update={"$set": {"status": status}},
+        )
+
+    async def add_log_blob(self, job_id: str, node_id: str, blob_id: str):
+        await self.coll.update_one(
+            filter={"job_id": job_id, "node_id": node_id},
+            update={"$addToSet": {"log_blobs": blob_id}},
+        )
+
     async def get(self, _id: str, fields: list) -> NodeJobGet:
         query = {"id": _id}
         result = await self._get(

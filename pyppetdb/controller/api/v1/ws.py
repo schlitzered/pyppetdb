@@ -4,7 +4,14 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pyppetdb.authorize import AuthorizePyppetDB, AuthorizeClientCert
 from pyppetdb.errors import ClientCertError
+from pyppetdb.config import Config
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
+from pyppetdb.crud.jobs_jobs import CrudJobs
+from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
+from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
+from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
+from pyppetdb.controller.api.v1.remote_executor_protocol import RemoteExecutorProtocol
 
 html = """
 <!DOCTYPE html>
@@ -65,13 +72,25 @@ class ControllerApiV1Ws:
     def __init__(
         self,
         log: logging.Logger,
+        config: Config,
         authorize: AuthorizePyppetDB,
         authorize_client_cert: AuthorizeClientCert,
         crud_nodes: CrudNodes,
+        crud_jobs: CrudJobs,
+        crud_job_definitions: CrudJobsDefinitions,
+        crud_node_jobs: CrudJobsNodeJobs,
+        crud_log_blobs: CrudJobsNodesLogsLogBlobs,
+        redactor: NodesSecretsRedactor,
     ):
         self._authorize = authorize
         self._authorize_client_cert = authorize_client_cert
+        self._config = config
         self._crud_nodes = crud_nodes
+        self._crud_jobs = crud_jobs
+        self._crud_job_definitions = crud_job_definitions
+        self._crud_node_jobs = crud_node_jobs
+        self._crud_log_blobs = crud_log_blobs
+        self._redactor = redactor
         self._conns = ConnectionManager()
         self._log = log
         self._router = APIRouter(tags=["websocket"])
@@ -104,10 +123,19 @@ class ControllerApiV1Ws:
                 node_id=node_id, connected=True, via=self._via
             )
 
-            while True:
-                data = await websocket.receive_text()
-                if data == "ping":
-                    await websocket.send_text("pong")
+            protocol = RemoteExecutorProtocol(
+                log=self._log,
+                node_id=node_id,
+                websocket=websocket,
+                crud_nodes=self._crud_nodes,
+                crud_jobs=self._crud_jobs,
+                crud_job_definitions=self._crud_job_definitions,
+                crud_node_jobs=self._crud_node_jobs,
+                crud_log_blobs=self._crud_log_blobs,
+                redactor=self._redactor,
+            )
+            await protocol.run()
+
         except ClientCertError as e:
             self._log.error(f"WS remote_executor Auth failed: {e.detail}")
             await websocket.close(code=4003)

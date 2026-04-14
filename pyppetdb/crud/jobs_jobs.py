@@ -8,6 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.jobs_jobs import (
     JobGet,
     JobGetMulti,
@@ -27,6 +28,8 @@ class CrudJobs(CrudMongo):
     async def index_create(self) -> None:
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         await self.coll.create_index([("definition_id", pymongo.ASCENDING)])
+        await self.coll.create_index([("created_by", pymongo.ASCENDING)])
+        await self.coll.create_index([("created_at", pymongo.ASCENDING)])
 
     async def create(
         self, payload: JobPost, node_ids: list[str], created_by: str, fields: list
@@ -59,15 +62,17 @@ class CrudJobs(CrudMongo):
         self,
         _id: typing.Optional[str] = None,
         definition_id: typing.Optional[str] = None,
+        created_by: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
+        sort_order: typing.Optional[sort_order_literal] = None,
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
     ) -> JobGetMulti:
         query = {}
         self._filter_re(query, "id", _id)
         self._filter_re(query, "definition_id", definition_id)
+        self._filter_re(query, "created_by", created_by)
         result = await self._search(
             query=query,
             fields=fields,

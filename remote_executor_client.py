@@ -1,10 +1,313 @@
 import asyncio
+import base64
+import json
+import logging
+import os
+import random
+import shlex
 import socket
 import ssl
-import websockets
+import time
+from datetime import datetime
+from typing import Dict, List, Optional, Any, Union, Literal
 import argparse
+import websockets
+from pydantic import ValidationError
+
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+
+# We can't easily import from pyppetdb if it's not installed, 
+# so we redefine the necessary parts of the protocol models here for the client.
+from pydantic import BaseModel, model_validator
+
+class RemoteExecutorLogEntry(BaseModel):
+    line_nr: int
+    timestamp: datetime
+    msg: str
+
+class RemoteExecutorMsgBodyLogMessage(BaseModel):
+    logs: List[RemoteExecutorLogEntry]
+
+class RemoteExecutorMsgBodyAck(BaseModel):
+    acked_ids: List[int]
+
+class RemoteExecutorMsgBodyFinish(BaseModel):
+    exit_code: int
+
+class RemoteExecutorMsgBodyStatus(BaseModel):
+    busy: bool
+    current_job_id: Optional[str] = None
+
+class RemoteExecutorMsgBodyHeartbeat(BaseModel):
+    pass
+
+class RemoteExecutorMsgBodyStartJob(BaseModel):
+    job_id: str
+    executable: str
+    user: str
+    group: str
+    params_template: List[str]
+    parameters: Dict[str, Any]
+    env_vars: Dict[str, str]
+
+class RemoteExecutorMessage(BaseModel):
+    msg_id: Optional[int] = None
+    msg_type: Literal["log_message", "ack", "finish", "status", "heartbeat", "start_job"]
+    msg_body: Union[
+        RemoteExecutorMsgBodyLogMessage,
+        RemoteExecutorMsgBodyAck,
+        RemoteExecutorMsgBodyFinish,
+        RemoteExecutorMsgBodyStatus,
+        RemoteExecutorMsgBodyHeartbeat,
+        RemoteExecutorMsgBodyStartJob,
+    ]
+
+    @model_validator(mode="after")
+    def check_body_type(self) -> "RemoteExecutorMessage":
+        type_mapping = {
+            "log_message": RemoteExecutorMsgBodyLogMessage,
+            "ack": RemoteExecutorMsgBodyAck,
+            "finish": RemoteExecutorMsgBodyFinish,
+            "status": RemoteExecutorMsgBodyStatus,
+            "heartbeat": RemoteExecutorMsgBodyHeartbeat,
+            "start_job": RemoteExecutorMsgBodyStartJob,
+        }
+        expected_type = type_mapping.get(self.msg_type)
+        if expected_type and not isinstance(self.msg_body, expected_type):
+            raise ValueError(f"msg_body for '{self.msg_type}' must be {expected_type.__name__}")
+        return self
+
+
+class RemoteExecutorClient:
+    def __init__(self, websocket, node_id, unacked_log_batches: List[List[RemoteExecutorLogEntry]]):
+        self.ws = websocket
+        self.node_id = node_id
+        self.msg_id_counter = 0
+        self.pending_acks = {}
+        self.busy = False
+        self.current_job_id = None
+        self.last_activity = time.time()
+        self.heartbeat_interval = 30
+        self.running = True
+        
+        # Log buffering
+        self.log_buffer: List[RemoteExecutorLogEntry] = []
+        self.unacked_log_batches = unacked_log_batches
+        self.last_log_send = time.time()
+
+    async def _send_message(self, msg_type: str, body: BaseModel):
+        msg_id = self.msg_id_counter
+        self.msg_id_counter += 1
+        
+        msg = RemoteExecutorMessage(
+            msg_id=msg_id,
+            msg_type=msg_type,
+            msg_body=body
+        )
+        
+        ack_event = asyncio.Event()
+        self.pending_acks[msg_id] = ack_event
+        
+        await self.ws.send(msg.model_dump_json())
+        self.last_activity = time.time()
+        
+        try:
+            await asyncio.wait_for(ack_event.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            print(f"Timeout waiting for ACK for msg_id {msg_id}")
+            raise
+        finally:
+            self.pending_acks.pop(msg_id, None)
+
+    async def _send_ack(self, acked_ids: List[int]):
+        msg = RemoteExecutorMessage(
+            msg_type="ack",
+            msg_body=RemoteExecutorMsgBodyAck(acked_ids=acked_ids)
+        )
+        await self.ws.send(msg.model_dump_json())
+        self.last_activity = time.time()
+
+    async def handle(self):
+        receiver_task = asyncio.create_task(self._receiver())
+        heartbeat_task = asyncio.create_task(self._heartbeat())
+        log_flusher_task = asyncio.create_task(self._log_flusher())
+
+        # 1. Resend unacked logs from previous sessions
+        if self.unacked_log_batches:
+            print(f"Resending {len(self.unacked_log_batches)} unacked log batches...")
+            for batch in list(self.unacked_log_batches):
+                asyncio.create_task(self._send_log_batch(batch, is_resend=True))
+
+        # 2. Initial status
+        try:
+            await self._send_message("status", RemoteExecutorMsgBodyStatus(
+                busy=self.busy,
+                current_job_id=self.current_job_id
+            ))
+        except Exception as e:
+            print(f"Failed to send initial status: {e}")
+            self.running = False
+
+        try:
+            await receiver_task
+        except Exception as e:
+            print(f"Receiver task error: {e}")
+        finally:
+            self.running = False
+            heartbeat_task.cancel()
+            log_flusher_task.cancel()
+            try:
+                await asyncio.gather(heartbeat_task, log_flusher_task, return_exceptions=True)
+            except Exception:
+                pass
+
+    async def _receiver(self):
+        try:
+            while self.running:
+                data = await self.ws.recv()
+                self.last_activity = time.time()
+                await self._handle_message(data)
+        except websockets.exceptions.ConnectionClosed:
+            print("Connection closed")
+        except Exception as e:
+            print(f"Receiver error: {e}")
+        finally:
+            self.running = False
+
+    async def _handle_message(self, data):
+        try:
+            msg = RemoteExecutorMessage.model_validate_json(data)
+            
+            if msg.msg_type == "ack":
+                if isinstance(msg.msg_body, RemoteExecutorMsgBodyAck):
+                    for aid in msg.msg_body.acked_ids:
+                        if aid in self.pending_acks:
+                            self.pending_acks[aid].set()
+                return
+
+            if msg.msg_id is not None:
+                await self._send_ack([msg.msg_id])
+
+            if msg.msg_type == "start_job" and isinstance(msg.msg_body, RemoteExecutorMsgBodyStartJob):
+                asyncio.create_task(self._run_job(msg.msg_body))
+            elif msg.msg_type == "heartbeat":
+                pass
+            
+        except ValidationError as e:
+            print(f"Validation error: {e}")
+        except Exception as e:
+            print(f"Error handling message: {e}")
+
+    async def _heartbeat(self):
+        while self.running:
+            await asyncio.sleep(self.heartbeat_interval)
+            if time.time() - self.last_activity >= self.heartbeat_interval:
+                try:
+                    await self._send_message("heartbeat", RemoteExecutorMsgBodyHeartbeat())
+                except Exception:
+                    pass
+
+    async def _log_flusher(self):
+        while self.running:
+            await asyncio.sleep(0.5)
+            now = time.time()
+            if self.log_buffer and (len(self.log_buffer) >= 100 or (now - self.last_log_send >= 5)):
+                batch = self.log_buffer[:100]
+                self.log_buffer = self.log_buffer[100:]
+                self.last_log_send = now
+                asyncio.create_task(self._send_log_batch(batch))
+
+    async def _send_log_batch(self, batch: List[RemoteExecutorLogEntry], is_resend: bool = False):
+        if not is_resend:
+            self.unacked_log_batches.append(batch)
+        
+        try:
+            await self._send_message("log_message", RemoteExecutorMsgBodyLogMessage(logs=batch))
+            # If we reached here, it was ACKed
+            if batch in self.unacked_log_batches:
+                self.unacked_log_batches.remove(batch)
+        except Exception as e:
+            print(f"Failed to send log batch (resend={is_resend}): {e}")
+
+    async def _run_job(self, job_body: RemoteExecutorMsgBodyStartJob):
+        if self.busy:
+            print(f"Already busy, ignoring job {job_body.job_id}")
+            return
+
+        print(f"Starting job {job_body.job_id}: {job_body.executable}")
+        print(f"[{job_body.job_id}] Parameters: {job_body.parameters}")
+        self.busy = True
+        self.current_job_id = job_body.job_id
+        
+        try:
+            # Prepare command tokens safely
+            args = []
+            for token in job_body.params_template:
+                # Check if the token is a placeholder (e.g., {target})
+                if token.startswith("{") and token.endswith("}"):
+                    key = token.strip("{}")
+                    # Insert user value as a SINGLE token
+                    # No shlex.split(), so even if the value contains spaces,
+                    # it remains one argument for the binary.
+                    val = job_body.parameters.get(key, "")
+                    args.append(str(val))
+                else:
+                    # Literal token
+                    args.append(token)
+
+            print(f"[{job_body.job_id}] Arguments: {args}")
+
+            env = os.environ.copy()
+            env.update(job_body.env_vars)
+            
+            process = await asyncio.create_subprocess_exec(
+                job_body.executable,
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env,
+            )
+
+            line_nr = 1
+            while True:
+                line_bytes = await process.stdout.readline()
+                if not line_bytes:
+                    break
+
+                line = line_bytes.decode().strip()
+                print(f"[{job_body.job_id}] {line}")
+
+                log_entry = RemoteExecutorLogEntry(
+                    line_nr=line_nr,
+                    timestamp=datetime.now(),
+                    msg=line
+                )
+                self.log_buffer.append(log_entry)
+                line_nr += 1
+
+            exit_code = await process.wait()
+            
+            # Flush remaining logs before sending finish
+            while self.log_buffer:
+                batch = self.log_buffer[:100]
+                self.log_buffer = self.log_buffer[100:]
+                await self._send_log_batch(batch)
+
+            await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=exit_code))
+        except Exception as e:
+            print(f"Error running job: {e}")
+            try:
+                await self._send_message("finish", RemoteExecutorMsgBodyFinish(exit_code=1))
+            except Exception:
+                pass
+        finally:
+            self.busy = False
+            self.current_job_id = None
+            try:
+                await self._send_message("status", RemoteExecutorMsgBodyStatus(busy=False))
+            except Exception:
+                pass
 
 
 def get_puppet_ssl_context():
@@ -36,30 +339,7 @@ def get_cert_cn(cert_path):
     return None
 
 
-async def handle_websocket(websocket):
-    print("Connected! Entering ping/pong loop...")
-    try:
-        while True:
-            print("Sending ping...")
-            await websocket.send("ping")
-
-            print("Waiting for response...")
-            response = await websocket.recv()
-            print(f"Received from server: {response}")
-
-            if response == "pong":
-                print("Ping/Pong successful.")
-            else:
-                print(f"Unexpected response: {response}")
-
-            print("Sleeping for 10 seconds...")
-            await asyncio.sleep(10)
-    except websockets.exceptions.ConnectionClosed:
-        print("Connection closed by server.")
-
-
 async def run_client(base_url, insecure=False):
-    # Ensure scheme is present
     if not base_url.startswith(("ws://", "wss://")):
         base_url = f"wss://{base_url}"
 
@@ -68,15 +348,13 @@ async def run_client(base_url, insecure=False):
 
     node_id = get_cert_cn(cert_path)
     if not node_id:
-        print(
-            "Failed to determine node_id from certificate CN. Using FQDN as fallback."
-        )
         node_id = socket.getfqdn()
 
     print(f"Identified as node: {node_id}")
-
-    # Strip trailing slash and append path with node_id
     url = base_url.rstrip("/") + f"/api/v1/ws/remote_executor/{node_id}"
+
+    # Persistent state across reconnections
+    unacked_log_batches: List[List[RemoteExecutorLogEntry]] = []
 
     while True:
         print(f"Connecting to {url}...")
@@ -87,14 +365,10 @@ async def run_client(base_url, insecure=False):
                 if insecure:
                     current_ssl_context.check_hostname = False
                     current_ssl_context.verify_mode = ssl.CERT_NONE
-                print("Using secure WebSocket connection with mTLS")
-            else:
-                print("Using insecure WebSocket connection")
-
-            async with websockets.connect(
-                url, ssl=current_ssl_context, open_timeout=10
-            ) as websocket:
-                await handle_websocket(websocket)
+            
+            async with websockets.connect(url, ssl=current_ssl_context, open_timeout=10) as websocket:
+                client = RemoteExecutorClient(websocket, node_id, unacked_log_batches)
+                await client.handle()
 
         except Exception as e:
             print(f"Connection error: {e}")
@@ -104,12 +378,8 @@ async def run_client(base_url, insecure=False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Remote Executor PoC Client")
+    parser = argparse.ArgumentParser(description="Remote Executor Client")
     parser.add_argument("url", help="Base URL or Host (e.g. puppetsrv-1:8000)")
-    parser.add_argument(
-        "--insecure", action="store_true", help="Skip certificate verification"
-    )
-
+    parser.add_argument("--insecure", action="store_true", help="Skip certificate verification")
     args = parser.parse_args()
-
     asyncio.run(run_client(args.url, args.insecure))

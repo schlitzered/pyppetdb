@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi import Query
@@ -8,7 +8,7 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.config import Config
-from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import DataDelete, sort_order_literal
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.nodes import CrudNodes
@@ -17,6 +17,7 @@ from pyppetdb.model.jobs_jobs import (
     JobGet,
     JobGetMulti,
     JobPost,
+    sort_literal,
 )
 
 
@@ -93,8 +94,11 @@ class ControllerApiV1JobsJobs:
     async def search(
         self,
         request: Request,
-        _id: str = Query(default=None),
-        definition_id: str = Query(default=None),
+        _id: Optional[str] = Query(default=None),
+        definition_id: Optional[str] = Query(default=None),
+        created_by: Optional[str] = Query(default=None),
+        sort: Optional[sort_literal] = Query(default=None),
+        sort_order: Optional[sort_order_literal] = Query(default=None),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
@@ -102,7 +106,10 @@ class ControllerApiV1JobsJobs:
         return await self.crud_jobs.search(
             _id=_id,
             definition_id=definition_id,
+            created_by=created_by,
             fields=[],
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )
