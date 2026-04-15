@@ -223,7 +223,12 @@ class RemoteExecutorClient:
                 await self._send_ack([msg.msg_id])
 
             if msg.msg_type == "start_job" and isinstance(msg.msg_body, RemoteExecutorMsgBodyStartJob):
-                asyncio.create_task(self._run_job(msg.msg_body))
+                if self.busy:
+                    print(f"Already busy, ignoring job {msg.msg_body.job_id}")
+                else:
+                    self.busy = True
+                    self.current_job_id = msg.msg_body.job_id
+                    asyncio.create_task(self._run_job(msg.msg_body))
             elif msg.msg_type == "heartbeat":
                 pass
             
@@ -275,14 +280,8 @@ class RemoteExecutorClient:
                     await asyncio.sleep(5)
 
     async def _run_job(self, job_body: RemoteExecutorMsgBodyStartJob):
-        if self.busy:
-            print(f"Already busy, ignoring job {job_body.job_id}")
-            return
-
         print(f"Starting job {job_body.job_id}: {job_body.executable}")
         print(f"[{job_body.job_id}] Parameters: {job_body.parameters}")
-        self.busy = True
-        self.current_job_id = job_body.job_id
         
         try:
             # Prepare command tokens safely

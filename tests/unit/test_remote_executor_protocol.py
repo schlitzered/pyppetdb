@@ -24,6 +24,8 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_node_jobs = MagicMock()
         self.mock_crud_node_jobs.update_status = AsyncMock()
         self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock()
+        self.mock_crud_node_jobs.search = AsyncMock()
+        self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
         self.mock_crud_node_jobs.add_log_blob = AsyncMock()
 
         self.mock_crud_log_blobs = MagicMock()

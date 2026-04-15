@@ -48,6 +48,10 @@ class LogSubscriptionManager:
         self._job_run_id_to_via: Dict[str, str] = {}
 
     def register_protocol(self, node_id: str, protocol: Any):
+        old_protocol = self._local_protocols.get(node_id)
+        if old_protocol:
+            self._log.info(f"Stopping existing protocol for node {node_id}")
+            old_protocol.stop()
         self._local_protocols[node_id] = protocol
 
     def unregister_protocol(self, node_id: str):

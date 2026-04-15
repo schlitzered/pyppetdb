@@ -61,7 +61,11 @@ class RemoteExecutorProtocol:
         self._last_activity = time.time()
         self._heartbeat_interval = 30
 
+    def stop(self):
+        self._running = False
+
     async def run(self):
+        # 1. Fetch node state
         node = await self._crud_nodes.get(
             _id=self._node_id,
             fields=["remote_agent"],
@@ -69,6 +73,20 @@ class RemoteExecutorProtocol:
         if node.remote_agent:
             self._busy = node.remote_agent.busy
             self._current_job_id = node.remote_agent.current_job_id
+
+        # 2. Cleanup ANY jobs that are 'running' in the database but are NOT self._current_job_id
+        #    This handles the case where the API server crashed or some inconsistency occurred.
+        try:
+            running_jobs = await self._crud_node_jobs.search(
+                node_id=self._node_id,
+                status="running"
+            )
+            for job in running_jobs.result:
+                if job.job_id != self._current_job_id:
+                    self._log.warning(f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed.")
+                    await self._mark_job_failed(job_id=job.job_id, reason="Stale job found during protocol startup")
+        except Exception as e:
+            self._log.error(f"Error checking for stale jobs during startup for {self._node_id}: {e}")
 
         polling_task = asyncio.create_task(self._poll_for_jobs())
         heartbeat_task = asyncio.create_task(self._heartbeat())
@@ -200,21 +218,54 @@ class RemoteExecutorProtocol:
                 exit_code=exit_code,
             )
 
-        self._busy = False
-        self._current_job_id = None
-        await self._crud_nodes.update_remote_agent_busy(
-            node_id=self._node_id,
-            busy=False,
-            current_job_id=None,
-        )
+        await self._mark_node_not_busy()
 
     async def _handle_status(self, body: RemoteExecutorMsgBodyStatus):
+        if not body.busy and self._current_job_id:
+            self._log.warning(f"Agent {self._node_id} reported NOT busy, but we thought it was running {self._current_job_id}. Marking job as failed.")
+            await self._mark_current_job_failed(reason="Agent reported not busy")
+
         self._busy = body.busy
         self._current_job_id = body.current_job_id
         await self._crud_nodes.update_remote_agent_busy(
             node_id=self._node_id,
             busy=self._busy,
             current_job_id=self._current_job_id,
+        )
+
+    async def _mark_current_job_failed(self, reason: str):
+        if not self._current_job_id:
+            return
+        await self._mark_job_failed(job_id=self._current_job_id, reason=reason)
+        await self._mark_node_not_busy()
+
+    async def _mark_job_failed(self, job_id: str, reason: str):
+        self._log.warning(f"Marking job {job_id} for node {self._node_id} as failed: {reason}")
+        
+        # Flush any pending logs for this job if possible
+        if self._current_job_id == job_id:
+            while self._log_buffer:
+                await self._flush_logs()
+
+        await self._crud_node_jobs.update_status(
+            job_id=job_id,
+            node_id=self._node_id,
+            status="failed",
+        )
+        await self._manager.job_finished(
+            node_id=self._node_id,
+            job_id=job_id,
+            status="failed",
+            exit_code=1,
+        )
+
+    async def _mark_node_not_busy(self):
+        self._busy = False
+        self._current_job_id = None
+        await self._crud_nodes.update_remote_agent_busy(
+            node_id=self._node_id,
+            busy=False,
+            current_job_id=None,
         )
 
     async def _heartbeat(self):

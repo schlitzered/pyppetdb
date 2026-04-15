@@ -20,6 +20,8 @@ class TestApiV1WsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_jobs = MagicMock()
         self.mock_crud_job_definitions = MagicMock()
         self.mock_crud_node_jobs = MagicMock()
+        self.mock_crud_node_jobs.search = AsyncMock()
+        self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
         self.mock_crud_log_blobs = MagicMock()
         self.mock_crud_pyppetdb_nodes = MagicMock()
         self.mock_redactor = MagicMock()
