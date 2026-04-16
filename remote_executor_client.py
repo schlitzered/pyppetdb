@@ -329,40 +329,6 @@ class RemoteExecutorClient:
         self._log_subscribers.add(body.job_id)
         print(f"Added subscriber for job {body.job_id}. Total: {len(self._log_subscribers)}")
 
-        # 1. Send all existing chunks for this job
-        chunks_dir = os.path.join(self.log_dir, body.job_id, "chunks")
-        if os.path.exists(path=chunks_dir):
-            chunks = sorted(
-                [f for f in os.listdir(path=chunks_dir) if f.endswith(".json")]
-            )
-            for chunk_file in chunks:
-                chunk_path = os.path.join(chunks_dir, chunk_file)
-                try:
-                    with open(file=chunk_path, mode="r") as f:
-                        chunk_data = json.load(fp=f)
-                        logs = [RemoteExecutorLogEntry(**entry) for entry in chunk_data]
-                        await self._send_message(
-                            msg_type="log_message",
-                            body=RemoteExecutorMsgBodyLogMessage(logs=logs),
-                        )
-                except Exception as e:
-                    print(f"Error reading chunk {chunk_path} for catch-up: {e}")
-
-        # 2. If this is the current active job, also send what's currently in the buffers
-        if self.current_job_id == body.job_id:
-            # Send current disk buffer
-            if self._disk_buffer:
-                await self._send_message(
-                    msg_type="log_message",
-                    body=RemoteExecutorMsgBodyLogMessage(logs=list(self._disk_buffer)),
-                )
-            # Send current log_buffer (real-time pending)
-            if self.log_buffer:
-                await self._send_message(
-                    msg_type="log_message",
-                    body=RemoteExecutorMsgBodyLogMessage(logs=list(self.log_buffer)),
-                )
-
     async def _handle_unsubscribe_logs(self, body: RemoteExecutorMsgBodyUnsubscribeLogs):
         self._log_subscribers.discard(body.job_id)
         print(f"Removed subscriber for job {body.job_id}. Total: {len(self._log_subscribers)}")
@@ -383,7 +349,9 @@ class RemoteExecutorClient:
     async def _handle_get_log_chunk(self, body: RemoteExecutorMsgBodyGetLogChunk):
         chunk_path = os.path.join(self.log_dir, body.job_id, "chunks", body.chunk_id)
         data = []
-        if os.path.exists(path=chunk_path):
+        if body.chunk_id == "active_buffer":
+            data = list(self._disk_buffer)
+        elif os.path.exists(path=chunk_path):
             try:
                 with open(file=chunk_path, mode="r") as f:
                     chunk_data = json.load(fp=f)

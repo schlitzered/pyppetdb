@@ -121,9 +121,15 @@ class LogSubscriptionManager:
         websocket: WebSocket,
         job_run_id: str,
     ):
+        is_first = False
         if job_run_id not in self._subscriptions:
             self._subscriptions[job_run_id] = set()
+            is_first = True
+        
         self._subscriptions[job_run_id].add(websocket)
+
+        if not is_first:
+            return
 
         try:
             job_id, node_id = job_run_id.split(
@@ -141,16 +147,6 @@ class LogSubscriptionManager:
                         job_run_id=job_run_id,
                         via=node.remote_agent.via,
                     )
-                    # Also send catch-up request for remote agent
-                    ws = self._remote_conns.get(node.remote_agent.via)
-                    if ws:
-                        # Re-use the existing model but it's agent-level
-                        # We don't have a specific Inter-API 'subscribe_logs' but the agent expects 'subscribe_logs'
-                        # which is wrapped in a WsMessage 'log_message'? No, inter-api just forwards.
-                        # Wait, the inter-api needs to know it's a catch-up request.
-                        # I'll just send a regular subscribe_job_logs which already triggers remote subscription.
-                        # The agent handled its own catch-up? No, I need to tell the agent.
-                        pass
                 else:
                     protocol = self._local_protocols.get(node_id)
                     if protocol:

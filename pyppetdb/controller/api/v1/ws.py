@@ -364,19 +364,6 @@ class ControllerApiV1Ws:
                         job_run_id=job_run_id,
                     )
                     subscriptions.add(job_run_id)
-
-                    # Also trigger catch-up from the local agent
-                    try:
-                        job_id, node_id = job_run_id.split(":", 1)
-                        protocol = self._ws_manager._local_protocols.get(node_id)
-                        if protocol:
-                            from pyppetdb.model.remote_executor import RemoteExecutorMsgBodySubscribeLogs
-                            await protocol._send_message(
-                                msg_type="subscribe_logs",
-                                body=RemoteExecutorMsgBodySubscribeLogs(job_id=job_id)
-                            )
-                    except Exception as e:
-                        self._log.error(msg=f"Error triggering inter-API catch-up for {job_run_id}: {e}")
                 elif msg.msg_type == "unsubscribe_job_logs":
                     job_run_id = msg.msg_body.id
                     self._log.info(
