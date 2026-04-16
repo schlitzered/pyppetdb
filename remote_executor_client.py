@@ -5,7 +5,7 @@ import socket
 import ssl
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Union, Literal
+from typing import Dict, Set, List, Optional, Any, Union, Literal
 import argparse
 import websockets
 from pydantic import ValidationError
@@ -89,9 +89,13 @@ class RemoteExecutorMsgBodyLogChunkData(BaseModel):
     data: List[RemoteExecutorLogEntry]
 
 
-class RemoteExecutorMsgBodySubscribeLogs(BaseModel):
+class RemoteExecutorMsgBodyJobId(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
+
+
+RemoteExecutorMsgBodySubscribeLogs = RemoteExecutorMsgBodyJobId
+RemoteExecutorMsgBodyUnsubscribeLogs = RemoteExecutorMsgBodyJobId
 
 
 class RemoteExecutorMessage(BaseModel):
@@ -108,6 +112,7 @@ class RemoteExecutorMessage(BaseModel):
         "get_log_chunk",
         "log_chunk_data",
         "subscribe_logs",
+        "unsubscribe_logs",
     ]
     msg_body: Union[
         RemoteExecutorMsgBodyLogMessage,
@@ -120,7 +125,7 @@ class RemoteExecutorMessage(BaseModel):
         RemoteExecutorMsgBodyLogChunks,
         RemoteExecutorMsgBodyGetLogChunk,
         RemoteExecutorMsgBodyLogChunkData,
-        RemoteExecutorMsgBodySubscribeLogs,
+        RemoteExecutorMsgBodyJobId,
     ]
 
     @model_validator(mode="after")
@@ -137,6 +142,7 @@ class RemoteExecutorMessage(BaseModel):
             "get_log_chunk": RemoteExecutorMsgBodyGetLogChunk,
             "log_chunk_data": RemoteExecutorMsgBodyLogChunkData,
             "subscribe_logs": RemoteExecutorMsgBodySubscribeLogs,
+            "unsubscribe_logs": RemoteExecutorMsgBodyUnsubscribeLogs,
         }
         expected_type = type_mapping.get(self.msg_type)
         if expected_type and not isinstance(self.msg_body, expected_type):
@@ -176,6 +182,8 @@ class RemoteExecutorClient:
         self.heartbeat_interval = 30
         self.last_log_send = time.time()
         self._log_chunk_counter: Dict[str, int] = {}
+        self._log_subscribers: Set[str] = set()
+        self._disk_buffer: List[RemoteExecutorLogEntry] = []
 
     async def _send_message(self, msg_type: str, body: BaseModel):
         if not self.ws:
@@ -184,7 +192,11 @@ class RemoteExecutorClient:
         msg_id = self.msg_id_counter
         self.msg_id_counter += 1
 
-        msg = RemoteExecutorMessage(msg_id=msg_id, msg_type=msg_type, msg_body=body)
+        msg = RemoteExecutorMessage(
+            msg_id=msg_id,
+            msg_type=msg_type,
+            msg_body=body
+        )
 
         ack_event = asyncio.Event()
         self.pending_acks[msg_id] = ack_event
@@ -204,7 +216,8 @@ class RemoteExecutorClient:
         if not self.ws:
             return
         msg = RemoteExecutorMessage(
-            msg_type="ack", msg_body=RemoteExecutorMsgBodyAck(acked_ids=acked_ids)
+            msg_type="ack",
+            msg_body=RemoteExecutorMsgBodyAck(acked_ids=acked_ids)
         )
         await self.ws.send(msg.model_dump_json())
         self.last_activity = time.time()
@@ -216,9 +229,7 @@ class RemoteExecutorClient:
         while self.running:
             print(f"Connecting to {self.url}...")
             try:
-                async with websockets.connect(
-                    uri=self.url, ssl=self.ssl_context, open_timeout=10
-                ) as websocket:
+                async with websockets.connect(uri=self.url, ssl=self.ssl_context, open_timeout=10) as websocket:
                     self.ws = websocket
                     print("Connected!")
                     await self._handle_connection()
@@ -241,9 +252,7 @@ class RemoteExecutorClient:
         if self.unacked_log_batches:
             print(f"Resending {len(self.unacked_log_batches)} unacked log batches...")
             for batch in list(self.unacked_log_batches):
-                asyncio.create_task(
-                    coro=self._send_log_batch(batch=batch, is_resend=True)
-                )
+                asyncio.create_task(coro=self._send_log_batch(batch=batch, is_resend=True))
 
         # 2. Initial status
         try:
@@ -293,27 +302,21 @@ class RemoteExecutorClient:
             if msg.msg_id is not None:
                 await self._send_ack(acked_ids=[msg.msg_id])
 
-            if msg.msg_type == "start_job" and isinstance(
-                msg.msg_body, RemoteExecutorMsgBodyStartJob
-            ):
+            if msg.msg_type == "start_job" and isinstance(msg.msg_body, RemoteExecutorMsgBodyStartJob):
                 if self.busy:
                     print(f"Already busy, ignoring job {msg.msg_body.job_id}")
                 else:
                     self.busy = True
                     self.current_job_id = msg.msg_body.job_id
                     asyncio.create_task(coro=self._run_job(job_body=msg.msg_body))
-            elif msg.msg_type == "get_log_chunks" and isinstance(
-                msg.msg_body, RemoteExecutorMsgBodyGetLogChunks
-            ):
+            elif msg.msg_type == "get_log_chunks" and isinstance(msg.msg_body, RemoteExecutorMsgBodyGetLogChunks):
                 asyncio.create_task(coro=self._handle_get_log_chunks(body=msg.msg_body))
-            elif msg.msg_type == "get_log_chunk" and isinstance(
-                msg.msg_body, RemoteExecutorMsgBodyGetLogChunk
-            ):
+            elif msg.msg_type == "get_log_chunk" and isinstance(msg.msg_body, RemoteExecutorMsgBodyGetLogChunk):
                 asyncio.create_task(coro=self._handle_get_log_chunk(body=msg.msg_body))
-            elif msg.msg_type == "subscribe_logs" and isinstance(
-                msg.msg_body, RemoteExecutorMsgBodySubscribeLogs
-            ):
+            elif msg.msg_type == "subscribe_logs" and isinstance(msg.msg_body, RemoteExecutorMsgBodySubscribeLogs):
                 asyncio.create_task(coro=self._handle_subscribe_logs(body=msg.msg_body))
+            elif msg.msg_type == "unsubscribe_logs" and isinstance(msg.msg_body, RemoteExecutorMsgBodyUnsubscribeLogs):
+                asyncio.create_task(coro=self._handle_unsubscribe_logs(body=msg.msg_body))
             elif msg.msg_type == "heartbeat":
                 pass
 
@@ -323,6 +326,9 @@ class RemoteExecutorClient:
             print(f"Error handling message: {e}")
 
     async def _handle_subscribe_logs(self, body: RemoteExecutorMsgBodySubscribeLogs):
+        self._log_subscribers.add(body.job_id)
+        print(f"Added subscriber for job {body.job_id}. Total: {len(self._log_subscribers)}")
+
         # 1. Send all existing chunks for this job
         chunks_dir = os.path.join(self.log_dir, body.job_id, "chunks")
         if os.path.exists(path=chunks_dir):
@@ -342,13 +348,24 @@ class RemoteExecutorClient:
                 except Exception as e:
                     print(f"Error reading chunk {chunk_path} for catch-up: {e}")
 
-        # 2. If this is the current active job, also send what's currently in the buffer
-        #    Note: Real-time updates will continue via the log_flusher.
-        if self.current_job_id == body.job_id and self.log_buffer:
-            # We copy and clear carefully to avoid duplication or loss
-            # but since log_flusher is also running, we just send what we have now.
-            # Real catch-up is complex with concurrency, but this covers the basic "start from beginning"
-            pass
+        # 2. If this is the current active job, also send what's currently in the buffers
+        if self.current_job_id == body.job_id:
+            # Send current disk buffer
+            if self._disk_buffer:
+                await self._send_message(
+                    msg_type="log_message",
+                    body=RemoteExecutorMsgBodyLogMessage(logs=list(self._disk_buffer)),
+                )
+            # Send current log_buffer (real-time pending)
+            if self.log_buffer:
+                await self._send_message(
+                    msg_type="log_message",
+                    body=RemoteExecutorMsgBodyLogMessage(logs=list(self.log_buffer)),
+                )
+
+    async def _handle_unsubscribe_logs(self, body: RemoteExecutorMsgBodyUnsubscribeLogs):
+        self._log_subscribers.discard(body.job_id)
+        print(f"Removed subscriber for job {body.job_id}. Total: {len(self._log_subscribers)}")
 
     async def _handle_get_log_chunks(self, body: RemoteExecutorMsgBodyGetLogChunks):
         chunks_dir = os.path.join(self.log_dir, body.job_id, "chunks")
@@ -401,7 +418,6 @@ class RemoteExecutorClient:
                     if now - st.st_mtime > retention_secs:
                         print(f"Cleaning up old logs for job {job_id}")
                         import shutil
-
                         shutil.rmtree(path=job_path)
             except Exception as e:
                 print(f"Error during log cleanup: {e}")
@@ -413,28 +429,31 @@ class RemoteExecutorClient:
             await asyncio.sleep(delay=self.heartbeat_interval)
             if time.time() - self.last_activity >= self.heartbeat_interval:
                 try:
-                    await self._send_message(
-                        msg_type="heartbeat", body=RemoteExecutorMsgBodyHeartbeat()
-                    )
+                    await self._send_message(msg_type="heartbeat", body=RemoteExecutorMsgBodyHeartbeat())
                 except Exception:
                     pass
 
     async def _log_flusher(self):
         while self.running:
-            await asyncio.sleep(delay=0.5)
-            now = time.time()
-            if self.log_buffer and (
-                len(self.log_buffer) >= 100 or (now - self.last_log_send >= 5)
-            ):
+            # 1. Real-time streaming (fast as possible)
+            if self.log_buffer and self.ws and self.current_job_id in self._log_subscribers:
+                # We send in batches of up to 100 to avoid massive messages
                 batch = self.log_buffer[:100]
                 self.log_buffer = self.log_buffer[100:]
-                self.last_log_send = now
+                asyncio.create_task(coro=self._send_log_batch(batch=batch))
+            elif self.log_buffer and self.current_job_id not in self._log_subscribers:
+                # If no one is listening, we just empty the buffer
+                # because logs are already in _disk_buffer
+                self.log_buffer.clear()
 
+            # 2. Disk chunking (1000 lines)
+            if len(self._disk_buffer) >= 1000:
+                batch = self._disk_buffer[:1000]
+                self._disk_buffer = self._disk_buffer[1000:]
                 if self.current_job_id:
                     self._save_log_chunk(job_id=self.current_job_id, batch=batch)
 
-                if self.ws:
-                    asyncio.create_task(coro=self._send_log_batch(batch=batch))
+            await asyncio.sleep(delay=0.1)
 
     def _save_log_chunk(self, job_id: str, batch: List[RemoteExecutorLogEntry]):
         chunks_dir = os.path.join(self.log_dir, job_id, "chunks")
@@ -450,18 +469,13 @@ class RemoteExecutorClient:
         except Exception as e:
             print(f"Error saving log chunk {chunk_path}: {e}")
 
-    async def _send_log_batch(
-        self, batch: List[RemoteExecutorLogEntry], is_resend: bool = False
-    ):
+    async def _send_log_batch(self, batch: List[RemoteExecutorLogEntry], is_resend: bool = False):
         if not is_resend:
             self.unacked_log_batches.append(batch)
 
         while self.running:
             try:
-                await self._send_message(
-                    msg_type="log_message",
-                    body=RemoteExecutorMsgBodyLogMessage(logs=batch),
-                )
+                await self._send_message(msg_type="log_message", body=RemoteExecutorMsgBodyLogMessage(logs=batch))
                 # If we reached here, it was ACKed
                 if batch in self.unacked_log_batches:
                     self.unacked_log_batches.remove(batch)
@@ -469,16 +483,16 @@ class RemoteExecutorClient:
             except Exception as e:
                 print(f"Failed to send log batch (resend={is_resend}): {e}")
                 if not is_resend:
-                    # If it's a new batch, we keep it in unacked_log_batches and it will be resent
-                    # But we break the loop here and let the next flush or reconnection handle it
                     break
                 else:
-                    # If it's a resend, we wait for a bit and try again as long as we are running
                     await asyncio.sleep(delay=5)
 
     async def _run_job(self, job_body: RemoteExecutorMsgBodyStartJob):
         print(f"Starting job {job_body.job_id}: {job_body.executable}")
         print(f"[{job_body.job_id}] Parameters: {job_body.parameters}")
+
+        # Reset chunk counter for new job
+        self._log_chunk_counter[job_body.job_id] = 0
 
         try:
             # Prepare command tokens safely
@@ -511,31 +525,34 @@ class RemoteExecutorClient:
                     break
 
                 line = line_bytes.decode().strip()
-                print(f"[{job_body.job_id}] {line}")
+                # print(f"[{job_body.job_id}] {line}")
 
                 log_entry = RemoteExecutorLogEntry(
                     line_nr=line_nr, timestamp=datetime.now(), msg=line
                 )
                 self.log_buffer.append(log_entry)
+                self._disk_buffer.append(log_entry)
                 line_nr += 1
 
             exit_code = await process.wait()
 
-            # Flush remaining logs before sending finish
-            while self.log_buffer:
-                batch = self.log_buffer[:100]
-                self.log_buffer = self.log_buffer[100:]
+            # 1. Flush remaining disk buffer as a final chunk (regardless of size)
+            if self._disk_buffer:
+                self._save_log_chunk(
+                    job_id=job_body.job_id, batch=list(self._disk_buffer)
+                )
+                self._disk_buffer.clear()
 
-                if self.current_job_id:
-                    self._save_log_chunk(job_id=self.current_job_id, batch=batch)
+            # 2. Wait for real-time log_buffer to be emptied by log_flusher if subscribers exist
+            while self.log_buffer and job_body.job_id in self._log_subscribers:
+                await asyncio.sleep(delay=0.5)
 
-                await self._send_log_batch(batch)
-
-            # Keep trying to send finish until successful or no longer running
+            # 3. Keep trying to send finish until successful or no longer running
             while self.running:
                 try:
                     await self._send_message(
-                        "finish", RemoteExecutorMsgBodyFinish(exit_code=exit_code)
+                        msg_type="finish",
+                        body=RemoteExecutorMsgBodyFinish(exit_code=exit_code),
                     )
                     break
                 except Exception as e:
@@ -546,9 +563,7 @@ class RemoteExecutorClient:
             print(f"Error running job: {e}")
             while self.running:
                 try:
-                    await self._send_message(
-                        "finish", RemoteExecutorMsgBodyFinish(exit_code=1)
-                    )
+                    await self._send_message(msg_type="finish", body=RemoteExecutorMsgBodyFinish(exit_code=1))
                     break
                 except Exception:
                     await asyncio.sleep(delay=5)
@@ -557,9 +572,7 @@ class RemoteExecutorClient:
             self.current_job_id = None
             while self.running:
                 try:
-                    await self._send_message(
-                        "status", RemoteExecutorMsgBodyStatus(busy=False)
-                    )
+                    await self._send_message(msg_type="status", body=RemoteExecutorMsgBodyStatus(busy=False))
                     break
                 except Exception:
                     await asyncio.sleep(delay=5)
@@ -586,9 +599,7 @@ def get_puppet_ssl_context():
         print(f"Fatal: Client key not found at {client_key}")
         sys.exit(1)
 
-    context = ssl.create_default_context(
-        purpose=ssl.Purpose.SERVER_AUTH, cafile=ca_cert
-    )
+    context = ssl.create_default_context(purpose=ssl.Purpose.SERVER_AUTH, cafile=ca_cert)
     try:
         context.load_cert_chain(certfile=client_cert, keyfile=client_key)
     except Exception as e:
@@ -615,9 +626,7 @@ def get_cert_cn(cert_path):
 async def run_client(base_url):
     if not base_url.startswith("wss://"):
         if "://" in base_url:
-            print(
-                f"Fatal: Invalid protocol in URL {base_url}. Only wss:// is supported."
-            )
+            print(f"Fatal: Invalid protocol in URL {base_url}. Only wss:// is supported.")
             sys.exit(1)
         base_url = f"wss://{base_url}"
 

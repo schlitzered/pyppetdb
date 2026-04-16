@@ -73,9 +73,13 @@ class RemoteExecutorMsgBodyLogChunkData(BaseModel):
     data: List[RemoteExecutorLogEntry]
 
 
-class RemoteExecutorMsgBodySubscribeLogs(BaseModel):
+class RemoteExecutorMsgBodyJobId(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
+
+
+RemoteExecutorMsgBodySubscribeLogs = RemoteExecutorMsgBodyJobId
+RemoteExecutorMsgBodyUnsubscribeLogs = RemoteExecutorMsgBodyJobId
 
 
 class RemoteExecutorMessage(BaseModel):
@@ -92,6 +96,7 @@ class RemoteExecutorMessage(BaseModel):
         "get_log_chunk",
         "log_chunk_data",
         "subscribe_logs",
+        "unsubscribe_logs",
     ]
     msg_body: Union[
         RemoteExecutorMsgBodyLogMessage,
@@ -104,7 +109,7 @@ class RemoteExecutorMessage(BaseModel):
         RemoteExecutorMsgBodyLogChunks,
         RemoteExecutorMsgBodyGetLogChunk,
         RemoteExecutorMsgBodyLogChunkData,
-        RemoteExecutorMsgBodySubscribeLogs,
+        RemoteExecutorMsgBodyJobId,
     ]
 
     @model_validator(mode="after")
@@ -121,6 +126,7 @@ class RemoteExecutorMessage(BaseModel):
             "get_log_chunk": RemoteExecutorMsgBodyGetLogChunk,
             "log_chunk_data": RemoteExecutorMsgBodyLogChunkData,
             "subscribe_logs": RemoteExecutorMsgBodySubscribeLogs,
+            "unsubscribe_logs": RemoteExecutorMsgBodyUnsubscribeLogs,
         }
         expected_type = type_mapping.get(self.msg_type)
         if expected_type and not isinstance(self.msg_body, expected_type):

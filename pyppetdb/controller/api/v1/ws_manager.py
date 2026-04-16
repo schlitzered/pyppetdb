@@ -180,6 +180,18 @@ class LogSubscriptionManager:
                         job_run_id=job_run_id,
                         via=via,
                     )
+                else:
+                    try:
+                        job_id, node_id = job_run_id.split(":", 1)
+                        protocol = self._local_protocols.get(node_id)
+                        if protocol:
+                            from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyUnsubscribeLogs
+                            await protocol._send_message(
+                                msg_type="unsubscribe_logs",
+                                body=RemoteExecutorMsgBodyUnsubscribeLogs(job_id=job_id)
+                            )
+                    except Exception as e:
+                        self._log.error(msg=f"Error sending unsubscribe_logs to local agent: {e}")
 
     async def _remote_unsubscribe(
         self,
