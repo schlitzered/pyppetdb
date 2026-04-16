@@ -14,7 +14,9 @@ class TestApiV1WsUnit(unittest.IsolatedAsyncioTestCase):
 
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.update_remote_agent_status = AsyncMock()
+        self.mock_crud_nodes.update_remote_agent_busy = AsyncMock()
         self.mock_crud_nodes.get = AsyncMock()
+        self.mock_crud_nodes.get.return_value = MagicMock(remote_agent=None)
 
         self.mock_config = MagicMock()
         self.mock_crud_jobs = MagicMock()
@@ -22,7 +24,6 @@ class TestApiV1WsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_node_jobs = MagicMock()
         self.mock_crud_node_jobs.search = AsyncMock()
         self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
-        self.mock_crud_log_blobs = MagicMock()
         self.mock_crud_pyppetdb_nodes = MagicMock()
         self.mock_redactor = MagicMock()
 
@@ -35,7 +36,6 @@ class TestApiV1WsUnit(unittest.IsolatedAsyncioTestCase):
             crud_jobs=self.mock_crud_jobs,
             crud_job_definitions=self.mock_crud_job_definitions,
             crud_node_jobs=self.mock_crud_node_jobs,
-            crud_log_blobs=self.mock_crud_log_blobs,
             crud_pyppetdb_nodes=self.mock_crud_pyppetdb_nodes,
             redactor=self.mock_redactor,
         )

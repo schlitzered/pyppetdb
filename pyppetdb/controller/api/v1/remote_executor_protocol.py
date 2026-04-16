@@ -1,11 +1,7 @@
 import asyncio
-import base64
-import gzip
 import logging
 import random
 import time
-import uuid
-from datetime import datetime
 from typing import Dict, List, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError, BaseModel
@@ -14,7 +10,6 @@ from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.model.remote_executor import (
     RemoteExecutorMessage,
@@ -24,6 +19,10 @@ from pyppetdb.model.remote_executor import (
     RemoteExecutorMsgBodyStatus,
     RemoteExecutorMsgBodyStartJob,
     RemoteExecutorMsgBodyHeartbeat,
+    RemoteExecutorMsgBodyGetLogChunks,
+    RemoteExecutorMsgBodyLogChunks,
+    RemoteExecutorMsgBodyGetLogChunk,
+    RemoteExecutorMsgBodyLogChunkData,
 )
 
 
@@ -37,7 +36,6 @@ class RemoteExecutorProtocol:
         crud_jobs: CrudJobs,
         crud_job_definitions: CrudJobsDefinitions,
         crud_node_jobs: CrudJobsNodeJobs,
-        crud_log_blobs: CrudJobsNodesLogsLogBlobs,
         redactor: NodesSecretsRedactor,
         manager: Any,
     ):
@@ -48,18 +46,19 @@ class RemoteExecutorProtocol:
         self._crud_jobs = crud_jobs
         self._crud_job_definitions = crud_job_definitions
         self._crud_node_jobs = crud_node_jobs
-        self._crud_log_blobs = crud_log_blobs
         self._redactor = redactor
         self._manager = manager
 
         self._msg_id_counter = 0
         self._pending_acks: Dict[int, asyncio.Event] = {}
-        self._log_buffer: List[Dict] = []
         self._busy = False
         self._current_job_id: Optional[str] = None
         self._running = True
         self._last_activity = time.time()
         self._heartbeat_interval = 30
+
+        # request_id -> asyncio.Future (or event) for agent responses
+        self._pending_agent_requests: Dict[str, asyncio.Future] = {}
 
     def stop(self):
         self._running = False
@@ -79,17 +78,24 @@ class RemoteExecutorProtocol:
         try:
             running_jobs = await self._crud_node_jobs.search(
                 node_id=self._node_id,
-                status="running"
+                status="running",
             )
             for job in running_jobs.result:
                 if job.job_id != self._current_job_id:
-                    self._log.warning(f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed.")
-                    await self._mark_job_failed(job_id=job.job_id, reason="Stale job found during protocol startup")
+                    self._log.warning(
+                        msg=f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed."
+                    )
+                    await self._mark_job_failed(
+                        job_id=job.job_id,
+                        reason="Stale job found during protocol startup",
+                    )
         except Exception as e:
-            self._log.error(f"Error checking for stale jobs during startup for {self._node_id}: {e}")
+            self._log.error(
+                msg=f"Error checking for stale jobs during startup for {self._node_id}: {e}"
+            )
 
-        polling_task = asyncio.create_task(self._poll_for_jobs())
-        heartbeat_task = asyncio.create_task(self._heartbeat())
+        polling_task = asyncio.create_task(coro=self._poll_for_jobs())
+        heartbeat_task = asyncio.create_task(coro=self._heartbeat())
 
         try:
             while self._running:
@@ -97,10 +103,10 @@ class RemoteExecutorProtocol:
                 self._last_activity = time.time()
                 await self._handle_message(data=data)
         except WebSocketDisconnect:
-            self._log.info(f"Agent {self._node_id} disconnected")
+            self._log.info(msg=f"Agent {self._node_id} disconnected")
             raise
         except Exception as e:
-            self._log.error(f"Error in protocol for {self._node_id}: {e}")
+            self._log.error(msg=f"Error in protocol for {self._node_id}: {e}")
             raise
         finally:
             self._running = False
@@ -108,14 +114,19 @@ class RemoteExecutorProtocol:
             heartbeat_task.cancel()
             try:
                 await asyncio.gather(
-                    polling_task, heartbeat_task, return_exceptions=True
+                    polling_task,
+                    heartbeat_task,
+                    return_exceptions=True,
                 )
             except Exception:
                 pass
 
-    async def _handle_message(self, data: str):
+    async def _handle_message(
+        self,
+        data: str,
+    ):
         try:
-            msg = RemoteExecutorMessage.model_validate_json(data)
+            msg = RemoteExecutorMessage.model_validate_json(json_data=data)
             msg_type = msg.msg_type
             msg_id = msg.msg_id
             body = msg.msg_body
@@ -138,29 +149,39 @@ class RemoteExecutorProtocol:
                 await self._handle_finish(body=body)
             elif msg_type == "status" and isinstance(body, RemoteExecutorMsgBodyStatus):
                 await self._handle_status(body=body)
+            elif msg_type == "log_chunks" and isinstance(
+                body, RemoteExecutorMsgBodyLogChunks
+            ):
+                await self._handle_log_chunks(body=body)
+            elif msg_type == "log_chunk_data" and isinstance(
+                body, RemoteExecutorMsgBodyLogChunkData
+            ):
+                await self._handle_log_chunk_data(body=body)
             elif msg_type == "heartbeat":
                 pass
             else:
                 self._log.warning(
-                    f"Unknown or malformed message type from {self._node_id}: {msg_type}"
+                    msg=f"Unknown or malformed message type from {self._node_id}: {msg_type}"
                 )
 
         except ValidationError as e:
-            self._log.error(f"Validation error from {self._node_id}: {e}")
+            self._log.error(msg=f"Validation error from {self._node_id}: {e}")
         except Exception as e:
-            self._log.error(f"Error handling message from {self._node_id}: {e}")
+            self._log.error(msg=f"Error handling message from {self._node_id}: {e}")
 
-    async def _handle_log_message(self, body: RemoteExecutorMsgBodyLogMessage):
+    async def _handle_log_message(
+        self,
+        body: RemoteExecutorMsgBodyLogMessage,
+    ):
         for log_entry in body.logs:
             entry_dict = log_entry.model_dump()
             entry_dict["msg"] = self._redactor.redact(entry_dict["msg"])
-            self._log_buffer.append(entry_dict)
             await self._publish_log(log_entry=entry_dict)
 
-        if len(self._log_buffer) >= 1000:
-            await self._flush_logs()
-
-    async def _publish_log(self, log_entry: Dict):
+    async def _publish_log(
+        self,
+        log_entry: Dict,
+    ):
         if self._current_job_id:
             await self._manager.broadcast_local_log(
                 node_id=self._node_id,
@@ -168,44 +189,60 @@ class RemoteExecutorProtocol:
                 log_entry=log_entry,
             )
 
-    async def _flush_logs(self):
-        if not self._log_buffer or not self._current_job_id:
-            return
+    async def _handle_log_chunks(
+        self,
+        body: RemoteExecutorMsgBodyLogChunks,
+    ):
+        if body.request_id in self._pending_agent_requests:
+            self._pending_agent_requests[body.request_id].set_result(body.chunks)
 
-        logs_to_flush = self._log_buffer[:1000]
-        self._log_buffer = self._log_buffer[1000:]
+    async def _handle_log_chunk_data(
+        self,
+        body: RemoteExecutorMsgBodyLogChunkData,
+    ):
+        if body.request_id in self._pending_agent_requests:
+            self._pending_agent_requests[body.request_id].set_result(
+                [log.model_dump() for log in body.data]
+            )
 
-        # Use pydantic friendly datetime serialization (json.dumps with custom or default)
-        def datetime_handler(x):
-            if isinstance(x, (time.struct_time, datetime)):
-                return x.isoformat()
-            return str(x)
-
-        import json
-
-        json_data = json.dumps(logs_to_flush, default=datetime_handler)
-        compressed = gzip.compress(json_data.encode("utf-8"))
-        encoded = base64.b64encode(compressed).decode("utf-8")
-
-        blob_id = str(uuid.uuid4())
-        await self._crud_log_blobs.create(
-            _id=blob_id,
-            data=encoded,
+    async def request_log_chunks(
+        self,
+        job_id: str,
+        request_id: str,
+    ):
+        body = RemoteExecutorMsgBodyGetLogChunks(
+            job_id=job_id,
+            request_id=request_id,
         )
-        await self._crud_node_jobs.add_log_blob(
-            job_id=self._current_job_id,
-            node_id=self._node_id,
-            blob_id=blob_id,
+        await self._send_message(
+            msg_type="get_log_chunks",
+            body=body,
         )
 
-    async def _handle_finish(self, body: RemoteExecutorMsgBodyFinish):
+    async def request_log_chunk(
+        self,
+        job_id: str,
+        chunk_id: str,
+        request_id: str,
+    ):
+        body = RemoteExecutorMsgBodyGetLogChunk(
+            job_id=job_id,
+            chunk_id=chunk_id,
+            request_id=request_id,
+        )
+        await self._send_message(
+            msg_type="get_log_chunk",
+            body=body,
+        )
+
+    async def _handle_finish(
+        self,
+        body: RemoteExecutorMsgBodyFinish,
+    ):
         exit_code = body.exit_code
         status = "success" if exit_code == 0 else "failed"
 
         if self._current_job_id:
-            while self._log_buffer:
-                await self._flush_logs()
-
             await self._crud_node_jobs.update_status(
                 job_id=self._current_job_id,
                 node_id=self._node_id,
@@ -220,9 +257,14 @@ class RemoteExecutorProtocol:
 
         await self._mark_node_not_busy()
 
-    async def _handle_status(self, body: RemoteExecutorMsgBodyStatus):
+    async def _handle_status(
+        self,
+        body: RemoteExecutorMsgBodyStatus,
+    ):
         if not body.busy and self._current_job_id:
-            self._log.warning(f"Agent {self._node_id} reported NOT busy, but we thought it was running {self._current_job_id}. Marking job as failed.")
+            self._log.warning(
+                msg=f"Agent {self._node_id} reported NOT busy, but we thought it was running {self._current_job_id}. Marking job as failed."
+            )
             await self._mark_current_job_failed(reason="Agent reported not busy")
 
         self._busy = body.busy
@@ -233,19 +275,26 @@ class RemoteExecutorProtocol:
             current_job_id=self._current_job_id,
         )
 
-    async def _mark_current_job_failed(self, reason: str):
+    async def _mark_current_job_failed(
+        self,
+        reason: str,
+    ):
         if not self._current_job_id:
             return
-        await self._mark_job_failed(job_id=self._current_job_id, reason=reason)
+        await self._mark_job_failed(
+            job_id=self._current_job_id,
+            reason=reason,
+        )
         await self._mark_node_not_busy()
 
-    async def _mark_job_failed(self, job_id: str, reason: str):
-        self._log.warning(f"Marking job {job_id} for node {self._node_id} as failed: {reason}")
-        
-        # Flush any pending logs for this job if possible
-        if self._current_job_id == job_id:
-            while self._log_buffer:
-                await self._flush_logs()
+    async def _mark_job_failed(
+        self,
+        job_id: str,
+        reason: str,
+    ):
+        self._log.warning(
+            msg=f"Marking job {job_id} for node {self._node_id} as failed: {reason}"
+        )
 
         await self._crud_node_jobs.update_status(
             job_id=job_id,
@@ -270,10 +319,11 @@ class RemoteExecutorProtocol:
 
     async def _heartbeat(self):
         while self._running:
-            await asyncio.sleep(self._heartbeat_interval)
+            await asyncio.sleep(delay=self._heartbeat_interval)
             if time.time() - self._last_activity >= self._heartbeat_interval:
                 await self._send_message(
-                    msg_type="heartbeat", body=RemoteExecutorMsgBodyHeartbeat()
+                    msg_type="heartbeat",
+                    body=RemoteExecutorMsgBodyHeartbeat(),
                 )
 
     async def _poll_for_jobs(self):
@@ -285,9 +335,12 @@ class RemoteExecutorProtocol:
                 if node_job:
                     await self._start_job(node_job=node_job)
 
-            await asyncio.sleep(random.randint(30, 60))
+            await asyncio.sleep(delay=random.randint(a=30, b=60))
 
-    async def _start_job(self, node_job):
+    async def _start_job(
+        self,
+        node_job,
+    ):
         job = await self._crud_jobs.get(
             _id=node_job.job_id,
             fields=[],
@@ -324,7 +377,11 @@ class RemoteExecutorProtocol:
             body=msg_body,
         )
 
-    async def _send_message(self, msg_type: str, body: BaseModel):
+    async def _send_message(
+        self,
+        msg_type: str,
+        body: BaseModel,
+    ):
         msg_id = self._msg_id_counter
         self._msg_id_counter += 1
 
@@ -337,26 +394,32 @@ class RemoteExecutorProtocol:
         ack_event = asyncio.Event()
         self._pending_acks[msg_id] = ack_event
 
-        await self._websocket.send_text(msg.model_dump_json())
+        await self._websocket.send_text(data=msg.model_dump_json())
         self._last_activity = time.time()
 
         try:
             await asyncio.wait_for(
-                ack_event.wait(),
+                fut=ack_event.wait(),
                 timeout=10,
             )
         except asyncio.TimeoutError:
             self._log.warning(
-                f"Timeout waiting for ACK for msg_id {msg_id} from {self._node_id}"
+                msg=f"Timeout waiting for ACK for msg_id {msg_id} from {self._node_id}"
             )
         finally:
-            self._pending_acks.pop(msg_id, None)
+            self._pending_acks.pop(
+                msg_id,
+                None,
+            )
 
-    async def _send_ack(self, acked_ids: List[int]):
+    async def _send_ack(
+        self,
+        acked_ids: List[int],
+    ):
         msg_body = RemoteExecutorMsgBodyAck(acked_ids=acked_ids)
         msg = RemoteExecutorMessage(
             msg_type="ack",
             msg_body=msg_body,
         )
-        await self._websocket.send_text(msg.model_dump_json())
+        await self._websocket.send_text(data=msg.model_dump_json())
         self._last_activity = time.time()

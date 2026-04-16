@@ -29,7 +29,6 @@ class CrudJobsNodeJobs(CrudMongo):
                 "job_id": job_id,
                 "node_id": node_id,
                 "status": "scheduled",
-                "log_blobs": [],
             }
             for node_id in node_ids
         ]
@@ -58,12 +57,6 @@ class CrudJobsNodeJobs(CrudMongo):
         await self.coll.update_one(
             filter={"job_id": job_id, "node_id": node_id},
             update={"$set": {"status": status}},
-        )
-
-    async def add_log_blob(self, job_id: str, node_id: str, blob_id: str):
-        await self.coll.update_one(
-            filter={"job_id": job_id, "node_id": node_id},
-            update={"$addToSet": {"log_blobs": blob_id}},
         )
 
     async def get(self, _id: str, fields: list) -> NodeJobGet:

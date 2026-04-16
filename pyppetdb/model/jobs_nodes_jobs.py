@@ -9,7 +9,7 @@ class NodeJobGet(BaseModel):
     job_id: str
     node_id: str
     status: Literal["scheduled", "running", "success", "failed", "canceled"]
-    log_blobs: List[str]
+    log_blobs: List[str] = []
 
 
 class JobsNodeJobGetMulti(BaseModel):

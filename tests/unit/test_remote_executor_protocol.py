@@ -26,10 +26,6 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock()
         self.mock_crud_node_jobs.search = AsyncMock()
         self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
-        self.mock_crud_node_jobs.add_log_blob = AsyncMock()
-
-        self.mock_crud_log_blobs = MagicMock()
-        self.mock_crud_log_blobs.create = AsyncMock()
 
         self.mock_redactor = MagicMock()
         self.mock_manager = MagicMock()
@@ -44,7 +40,6 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
             crud_jobs=self.mock_crud_jobs,
             crud_job_definitions=self.mock_crud_job_definitions,
             crud_node_jobs=self.mock_crud_node_jobs,
-            crud_log_blobs=self.mock_crud_log_blobs,
             redactor=self.mock_redactor,
             manager=self.mock_manager,
         )
@@ -54,7 +49,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         event = asyncio.Event()
         self.protocol._pending_acks[123] = event
 
-        msg_dict = {"msg_type": "ack", "msg_body": {"acked_ids": [123]}}
+        msg_dict = {"msg_id": 1, "msg_type": "ack", "msg_body": {"acked_ids": [123]}}
         await self.protocol._handle_message(json.dumps(msg_dict))
 
         self.assertTrue(event.is_set())
@@ -62,7 +57,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_handle_log_message(self):
         self.protocol._current_job_id = "job1"
-        self.mock_redactor.redact.side_effect = lambda x: x
+        self.mock_redactor.redact.side_effect = lambda text: text
 
         mock_log_entry = MagicMock()
         mock_log_entry.model_dump.return_value = {"line_nr": 1, "msg": "test log"}
@@ -74,8 +69,6 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
             self.protocol._handle_log_message(mock_body), timeout=1.0
         )
 
-        self.assertEqual(len(self.protocol._log_buffer), 1)
-        self.assertEqual(self.protocol._log_buffer[0]["msg"], "test log")
         self.mock_manager.broadcast_local_log.assert_called_once()
 
     async def test_handle_finish(self):

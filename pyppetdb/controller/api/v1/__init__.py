@@ -64,7 +64,6 @@ from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -98,7 +97,6 @@ class ControllerApiV1:
         crud_job_definitions: CrudJobsDefinitions,
         crud_jobs: CrudJobs,
         crud_node_jobs: CrudJobsNodeJobs,
-        crud_log_blobs: CrudJobsNodesLogsLogBlobs,
         crud_nodes: CrudNodes,
         crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
@@ -368,11 +366,25 @@ class ControllerApiV1:
             responses={404: {"description": "Not found"}},
         )
 
+        ws_controller = ControllerApiV1Ws(
+            log=log,
+            config=self._config,
+            authorize=authorize,
+            authorize_client_cert=authorize_client_cert_puppet,
+            crud_nodes=crud_nodes,
+            crud_jobs=crud_jobs,
+            crud_job_definitions=crud_job_definitions,
+            crud_node_jobs=crud_node_jobs,
+            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            redactor=redactor,
+        )
+
         self.router.include_router(
             ControllerApiV1JobsNodesJobs(
                 log=log,
                 authorize=authorize,
                 crud_jobs_node_jobs=crud_node_jobs,
+                manager=ws_controller._ws_manager,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -381,25 +393,13 @@ class ControllerApiV1:
             ControllerApiV1JobsNodesJobsLogs(
                 log=log,
                 authorize=authorize,
-                crud_jobs_nodes_jobs_log_blobs=crud_log_blobs,
+                manager=ws_controller._ws_manager,
             ).router,
             responses={404: {"description": "Not found"}},
         )
 
         self.router.include_router(
-            ControllerApiV1Ws(
-                log=log,
-                config=self._config,
-                authorize=authorize,
-                authorize_client_cert=authorize_client_cert_puppet,
-                crud_nodes=crud_nodes,
-                crud_jobs=crud_jobs,
-                crud_job_definitions=crud_job_definitions,
-                crud_node_jobs=crud_node_jobs,
-                crud_log_blobs=crud_log_blobs,
-                crud_pyppetdb_nodes=crud_pyppetdb_nodes,
-                redactor=redactor,
-            ).router,
+            ws_controller.router,
             responses={404: {"description": "Not found"}},
         )
 

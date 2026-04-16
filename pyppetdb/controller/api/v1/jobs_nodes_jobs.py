@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
@@ -17,9 +18,11 @@ class ControllerApiV1JobsNodesJobs:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         crud_jobs_node_jobs: CrudJobsNodeJobs,
+        manager: Any,
     ):
         self._authorize = authorize
         self._crud_jobs_node_jobs = crud_jobs_node_jobs
+        self._manager = manager
         self._log = log
         self._router = APIRouter(
             prefix="/jobs/nodes_jobs",
@@ -63,7 +66,7 @@ class ControllerApiV1JobsNodesJobs:
         limit: int = Query(default=10, ge=10, le=1000),
     ):
         await self.authorize.require_user(request=request)
-        return await self.crud_jobs_nodes_jobs.search(
+        result = await self.crud_jobs_nodes_jobs.search(
             job_id=job_id,
             node_id=node_id,
             status=status,
@@ -72,9 +75,28 @@ class ControllerApiV1JobsNodesJobs:
             limit=limit,
         )
 
-    async def get(self, request: Request, node_job_id: str):
+        for job in result.result:
+            chunks = await self._manager.get_log_chunks(
+                job_run_id=job.id,
+            )
+            job.log_blobs = [f"{job.id}:{chunk}" for chunk in chunks]
+
+        return result
+
+    async def get(
+        self,
+        request: Request,
+        node_job_id: str,
+    ):
         await self.authorize.require_user(request=request)
-        return await self.crud_jobs_nodes_jobs.get(
+        job = await self.crud_jobs_nodes_jobs.get(
             _id=node_job_id,
             fields=[],
         )
+
+        chunks = await self._manager.get_log_chunks(
+            job_run_id=node_job_id,
+        )
+        job.log_blobs = [f"{node_job_id}:{chunk}" for chunk in chunks]
+
+        return job
