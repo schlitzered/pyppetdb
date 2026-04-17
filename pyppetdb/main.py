@@ -219,7 +219,7 @@ async def prepare_env():
     crud_job_definitions = CrudJobsDefinitions(
         config=settings,
         log=log,
-        coll=mongo_db["job_definitions"],
+        coll=mongo_db["jobs_definitions"],
     )
     await crud_job_definitions.index_create()
     env["crud_job_definitions"] = crud_job_definitions
@@ -227,7 +227,7 @@ async def prepare_env():
     crud_node_jobs = CrudJobsNodeJobs(
         config=settings,
         log=log,
-        coll=mongo_db["nodes_jobs"],
+        coll=mongo_db["jobs_node_jobs"],
     )
     await crud_node_jobs.index_create()
     env["crud_node_jobs"] = crud_node_jobs
