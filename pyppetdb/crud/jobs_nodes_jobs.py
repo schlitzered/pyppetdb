@@ -1,10 +1,9 @@
 import typing
 import pymongo
+
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.model.jobs_nodes_jobs import (
-    NodeJobGet,
-    JobsNodeJobGetMulti,
-)
+from pyppetdb.model.jobs_nodes_jobs import NodeJobGet
+from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 
 
 class CrudJobsNodeJobs(CrudMongo):

@@ -1,53 +1,45 @@
 from typing import List, Optional, Union, Literal
-from pydantic import BaseModel, model_validator, ConfigDict
+from pydantic import BaseModel, model_validator
 from pyppetdb.model.remote_executor import RemoteExecutorLogEntry
 
 
 class WsMsgBodyAuthenticate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     token: str
 
 
 class WsMsgBodyJobLogs(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str  # job_id:node_id
+    id: str
 
 
 class WsMsgBodyLogMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     logs: List[RemoteExecutorLogEntry]
 
 
 class WsMsgBodyJobFinished(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     status: str
     exit_code: Optional[int] = None
 
 
 class WsMsgBodyApiGetLogChunks(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     request_id: str
 
 
 class WsMsgBodyApiLogChunksResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     request_id: str
     chunks: List[str]
 
 
 class WsMsgBodyApiGetLogChunk(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     chunk_id: str
     request_id: str
 
 
 class WsMsgBodyApiLogChunkResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
     job_run_id: str
     request_id: str
     chunk_id: str
@@ -72,10 +64,10 @@ class WsMessage(BaseModel):
         WsMsgBodyJobLogs,
         WsMsgBodyLogMessage,
         WsMsgBodyJobFinished,
-        WsMsgBodyApiGetLogChunks,
-        WsMsgBodyApiLogChunksResponse,
         WsMsgBodyApiGetLogChunk,
+        WsMsgBodyApiGetLogChunks,
         WsMsgBodyApiLogChunkResponse,
+        WsMsgBodyApiLogChunksResponse,
     ]
 
     @model_validator(mode="after")

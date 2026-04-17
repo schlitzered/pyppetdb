@@ -9,11 +9,9 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.model.jobs_jobs import (
-    JobGet,
-    JobGetMulti,
-    JobPost,
-)
+from pyppetdb.model.jobs_jobs import JobGet
+from pyppetdb.model.jobs_jobs import JobGetMulti
+from pyppetdb.model.jobs_jobs import JobPost
 
 
 class CrudJobs(CrudMongo):

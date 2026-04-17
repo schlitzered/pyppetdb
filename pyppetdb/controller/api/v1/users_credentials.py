@@ -6,10 +6,8 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
-
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.users import CrudUsers
-
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.credentials import filter_list

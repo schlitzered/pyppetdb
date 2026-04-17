@@ -386,7 +386,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_jobs_node_jobs=crud_node_jobs,
-                manager=ws_controller._ws_manager,
+                manager=ws_controller.ws_api,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -395,7 +395,7 @@ class ControllerApiV1:
             ControllerApiV1JobsNodesJobsLogs(
                 log=log,
                 authorize=authorize,
-                manager=ws_controller._ws_manager,
+                manager=ws_controller.ws_api,
             ).router,
             responses={404: {"description": "Not found"}},
         )

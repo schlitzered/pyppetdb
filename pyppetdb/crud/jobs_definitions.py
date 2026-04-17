@@ -1,12 +1,11 @@
 import typing
 import pymongo
+
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.model.jobs_definitions import (
-    JobDefinitionGet,
-    JobDefinitionGetMulti,
-    JobDefinitionPost,
-    JobDefinitionPut,
-)
+from pyppetdb.model.jobs_definitions import JobDefinitionGet
+from pyppetdb.model.jobs_definitions import JobDefinitionGetMulti
+from pyppetdb.model.jobs_definitions import JobDefinitionPost
+from pyppetdb.model.jobs_definitions import JobDefinitionPut
 from pyppetdb.model.common import DataDelete
 
 

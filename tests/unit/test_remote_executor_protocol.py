@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 from fastapi import WebSocketDisconnect
-from pyppetdb.controller.api.v1.remote_executor_protocol import RemoteExecutorProtocol
+from pyppetdb.ws.remote_executor import RemoteExecutorProtocol
 
 
 class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
@@ -49,14 +49,18 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         event = asyncio.Event()
         self.protocol._pending_acks[123] = event
 
-        msg_dict = {"msg_id": 1, "msg_type": "ack", "msg_body": {"acked_ids": [123]}}
+        msg_dict = {
+            "msg_id": 1,
+            "msg_type": "ack",
+            "msg_body": {"acked_ids": [123]},
+        }
         await self.protocol._handle_message(json.dumps(msg_dict))
 
         self.assertTrue(event.is_set())
         self.assertIn(123, self.protocol._pending_acks)
 
     async def test_handle_log_message(self):
-        self.protocol._current_job_id = "job1"
+        self.protocol._job_manager.current_job_id = "job1"
         self.mock_redactor.redact.side_effect = lambda text: text
 
         mock_log_entry = MagicMock()
@@ -66,18 +70,25 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         mock_body.logs = [mock_log_entry]
 
         await asyncio.wait_for(
-            self.protocol._handle_log_message(mock_body), timeout=1.0
+            self.protocol._log_handler.handle_log_message(
+                body=mock_body,
+                current_job_id="job1",
+            ),
+            timeout=1.0,
         )
 
         self.mock_manager.broadcast_local_log.assert_called_once()
 
     async def test_handle_finish(self):
-        self.protocol._current_job_id = "job1"
-        self.protocol._busy = True
+        self.protocol._job_manager.current_job_id = "job1"
+        self.protocol._job_manager.busy = True
 
         body = MagicMock()
         body.exit_code = 0
-        await asyncio.wait_for(self.protocol._handle_finish(body), timeout=1.0)
+        await asyncio.wait_for(
+            self.protocol._job_manager.handle_finish(body),
+            timeout=1.0,
+        )
 
         self.mock_crud_node_jobs.update_status.assert_called_once_with(
             job_id="job1",
@@ -90,11 +101,11 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
             current_job_id=None,
         )
         self.mock_manager.job_finished.assert_called_once()
-        self.assertFalse(self.protocol._busy)
-        self.assertIsNone(self.protocol._current_job_id)
+        self.assertFalse(self.protocol._job_manager.busy)
+        self.assertIsNone(self.protocol._job_manager.current_job_id)
 
     @patch(
-        "pyppetdb.controller.api.v1.remote_executor_protocol.asyncio.sleep",
+        "pyppetdb.ws.remote_executor.asyncio.sleep",
         return_value=None,
     )
     async def test_poll_and_start_job(self, mock_sleep):
@@ -133,7 +144,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args["body"].job_id, "job1")
 
     @patch(
-        "pyppetdb.controller.api.v1.remote_executor_protocol.asyncio.sleep",
+        "pyppetdb.ws.remote_executor.asyncio.sleep",
         return_value=None,
     )
     async def test_run_disconnect(self, mock_sleep):

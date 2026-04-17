@@ -8,7 +8,8 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.common import DataDelete
-from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGet, PyppetDBNodeGetMulti
+from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGet
+from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGetMulti
 
 
 class CrudPyppetDBNodes(CrudMongo):

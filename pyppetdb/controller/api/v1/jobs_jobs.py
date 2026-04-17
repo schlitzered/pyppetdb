@@ -1,28 +1,29 @@
 import logging
 import re
-from typing import Any, Dict, Optional
+from typing import Any
+from typing import Dict
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.config import Config
-from pyppetdb.model.common import DataDelete, sort_order_literal
+from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import sort_order_literal
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.model.jobs_jobs import (
-    JobGet,
-    JobGetMulti,
-    JobPost,
-    sort_literal,
-)
+from pyppetdb.model.jobs_jobs import JobGet
+from pyppetdb.model.jobs_jobs import JobGetMulti
+from pyppetdb.model.jobs_jobs import JobPost
+from pyppetdb.model.jobs_jobs import sort_literal
 
 
 class ControllerApiV1JobsJobs:
-
     def __init__(
         self,
         log: logging.Logger,
@@ -157,7 +158,6 @@ class ControllerApiV1JobsJobs:
         )
         node_ids = [node.id for node in nodes_result.result if node.id]
 
-        # Filter out nodes already running/scheduled for this definition
         if node_ids:
             busy_node_ids = (
                 await self._crud_jobs_node_jobs.get_busy_nodes_for_definition(
@@ -174,7 +174,6 @@ class ControllerApiV1JobsJobs:
             fields=[],
         )
 
-        # Create NodeJob entries for each node
         await self._crud_jobs_node_jobs.create_node_jobs(
             job_id=job.id,
             definition_id=data.definition_id,

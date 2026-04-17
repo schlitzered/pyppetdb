@@ -7,7 +7,6 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
-
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import filter_list
 from pyppetdb.model.hiera_key_models_static import filter_literal

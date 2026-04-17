@@ -6,11 +6,9 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
-
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.teams import CrudTeams
-
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_groups import filter_list

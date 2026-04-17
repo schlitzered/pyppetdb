@@ -6,10 +6,9 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.model.jobs_nodes_jobs import (
-    NodeJobGet,
-    JobsNodeJobGetMulti,
-)
+
+from pyppetdb.model.jobs_nodes_jobs import NodeJobGet
+from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 
 
 class ControllerApiV1JobsNodesJobs:
