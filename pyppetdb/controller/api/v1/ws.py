@@ -1,5 +1,4 @@
 import logging
-import socket
 
 from fastapi import APIRouter, WebSocket, Request
 from itsdangerous import URLSafeTimedSerializer
