@@ -123,7 +123,6 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
     async def post(self, request: Request, nodename: str):
         await self.authorize_client_cert.require_cn_match(request, nodename)
 
-        # Check cache
         if self.config.app.puppet.catalogCache:
             if cached_catalog := await self.crud_nodes_catalog_cache.get_catalog(
                 node_id=nodename
@@ -131,7 +130,6 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                 self.log.debug(f"Serving cached catalog for node {nodename}")
                 return cached_catalog
 
-        # Validate puppet server config
         if not self.config.app.puppet.serverurl:
             raise HTTPException(
                 status_code=502, detail="Puppet server URL not configured"
@@ -141,7 +139,6 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             f"Catalog for {nodename} not found in cache, falling back to puppet server"
         )
 
-        # Inject custom facts if needed
         body = await request.form()
         if facts_raw := body.get("facts"):
             try:

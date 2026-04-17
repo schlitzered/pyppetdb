@@ -1,15 +1,15 @@
 import logging
 
-from fastapi import APIRouter, Request, Query
+from fastapi import APIRouter
+from fastapi import Request
+from fastapi import Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.model.common import DataDelete
-from pyppetdb.model.nodes_secrets_redactor import (
-    NodesSecretsRedactorGet,
-    NodesSecretsRedactorGetMulti,
-    NodesSecretsRedactorPost,
-)
+from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGet
+from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGetMulti
+from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorPost
 
 
 class ControllerApiV1NodesSecretsRedactor:

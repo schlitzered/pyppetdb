@@ -8,11 +8,10 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.model.jobs_jobs import (
-    JobGet,
-    JobGetMulti,
-    JobPost,
-)
+from pyppetdb.model.common import sort_order_literal
+from pyppetdb.model.jobs_jobs import JobGet
+from pyppetdb.model.jobs_jobs import JobGetMulti
+from pyppetdb.model.jobs_jobs import JobPost
 
 
 class CrudJobs(CrudMongo):
@@ -27,6 +26,8 @@ class CrudJobs(CrudMongo):
     async def index_create(self) -> None:
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         await self.coll.create_index([("definition_id", pymongo.ASCENDING)])
+        await self.coll.create_index([("created_by", pymongo.ASCENDING)])
+        await self.coll.create_index([("created_at", pymongo.ASCENDING)])
 
     async def create(
         self, payload: JobPost, node_ids: list[str], created_by: str, fields: list
@@ -47,6 +48,12 @@ class CrudJobs(CrudMongo):
 
         return JobGet(**result)
 
+    async def remove_node_from_jobs(self, node_id: str):
+        await self.coll.update_many(
+            filter={"nodes": node_id},
+            update={"$pull": {"nodes": node_id}},
+        )
+
     async def get(self, _id: str, fields: list) -> JobGet:
         query = {"id": _id}
         result = await self._get(
@@ -59,15 +66,17 @@ class CrudJobs(CrudMongo):
         self,
         _id: typing.Optional[str] = None,
         definition_id: typing.Optional[str] = None,
+        created_by: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
+        sort_order: typing.Optional[sort_order_literal] = None,
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
     ) -> JobGetMulti:
         query = {}
         self._filter_re(query, "id", _id)
         self._filter_re(query, "definition_id", definition_id)
+        self._filter_re(query, "created_by", created_by)
         result = await self._search(
             query=query,
             fields=fields,

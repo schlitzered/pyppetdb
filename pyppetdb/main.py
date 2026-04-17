@@ -49,7 +49,6 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.crud.jobs_nodes_jobs_logs import CrudJobsNodesLogsLogBlobs
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.oauth import CrudOAuthGitHub
 from pyppetdb.crud.teams import CrudTeams
@@ -220,7 +219,7 @@ async def prepare_env():
     crud_job_definitions = CrudJobsDefinitions(
         config=settings,
         log=log,
-        coll=mongo_db["job_definitions"],
+        coll=mongo_db["jobs_definitions"],
     )
     await crud_job_definitions.index_create()
     env["crud_job_definitions"] = crud_job_definitions
@@ -228,18 +227,10 @@ async def prepare_env():
     crud_node_jobs = CrudJobsNodeJobs(
         config=settings,
         log=log,
-        coll=mongo_db["nodes_jobs"],
+        coll=mongo_db["jobs_node_jobs"],
     )
     await crud_node_jobs.index_create()
     env["crud_node_jobs"] = crud_node_jobs
-
-    crud_log_blobs = CrudJobsNodesLogsLogBlobs(
-        config=settings,
-        log=log,
-        coll=mongo_db["log_blobs"],
-    )
-    await crud_log_blobs.index_create()
-    env["crud_log_blobs"] = crud_log_blobs
 
     crud_jobs = CrudJobs(
         config=settings,
@@ -451,7 +442,6 @@ async def lifespan_dev(app: FastAPI):
         crud_job_definitions=env["crud_job_definitions"],
         crud_jobs=env["crud_jobs"],
         crud_node_jobs=env["crud_node_jobs"],
-        crud_log_blobs=env["crud_log_blobs"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalog_cache=env["crud_nodes_catalog_cache"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
@@ -470,6 +460,7 @@ async def lifespan_dev(app: FastAPI):
         http=env["http"],
         config=settings,
         pyhiera=env["pyhiera"],
+        redactor=env["nodes_secrets_redactor"],
     )
     app.include_router(controller.router_dev)
 
@@ -966,7 +957,6 @@ async def main_run():
         crud_job_definitions=env["crud_job_definitions"],
         crud_jobs=env["crud_jobs"],
         crud_node_jobs=env["crud_node_jobs"],
-        crud_log_blobs=env["crud_log_blobs"],
         crud_nodes=env["crud_nodes"],
         crud_nodes_catalog_cache=env["crud_nodes_catalog_cache"],
         crud_nodes_catalogs=env["crud_nodes_catalogs"],
@@ -985,6 +975,7 @@ async def main_run():
         http=env["http"],
         config=settings,
         pyhiera=env["pyhiera"],
+        redactor=env["nodes_secrets_redactor"],
     )
     apps = list()
     apps_tasks = list()

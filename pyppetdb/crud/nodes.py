@@ -364,6 +364,21 @@ class CrudNodes(CrudMongo):
             update={"$set": update_data},
         )
 
+    async def update_remote_agent_busy(
+        self,
+        node_id: str,
+        busy: bool,
+        current_job_id: typing.Optional[str] = None,
+    ):
+        update_data = {
+            "remote_agent.busy": busy,
+            "remote_agent.current_job_id": current_job_id,
+        }
+        await self.coll.update_one(
+            filter={"id": node_id},
+            update={"$set": update_data},
+        )
+
     async def cleanup_remote_agents(self, via: str):
         self.log.info(f"Cleaning up remote agents for instance '{via}'")
         await self.coll.update_many(

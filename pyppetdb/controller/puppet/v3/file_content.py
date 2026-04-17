@@ -58,23 +58,18 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
         base_path = None
 
         if mount_point == "modules":
-            # URL: /puppet/v3/file_content/modules/apache/httpd.conf
-            # mount_point: modules, file_path: apache/httpd.conf
             if "/" in file_path:
                 module_name, rel_path = file_path.split("/", 1)
                 full_path = env_modules / module_name / "files" / rel_path
                 base_path = env_modules / module_name / "files"
 
         elif mount_point == "tasks":
-            # URL: /puppet/v3/file_content/tasks/apache/init.sh
-            # mount_point: tasks, file_path: apache/init.sh
             if "/" in file_path:
                 module_name, rel_path = file_path.split("/", 1)
                 full_path = env_modules / module_name / "tasks" / rel_path
                 base_path = env_modules / module_name / "tasks"
 
         elif mount_point == "plugins":
-            # ... (rest of plugins logic remains similar but optimized)
             for module_dir in env_modules.iterdir():
                 if module_dir.is_dir():
                     candidate = module_dir / "lib" / file_path
@@ -93,7 +88,6 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
                         break
 
         if full_path and base_path:
-            # Security: ensure the resolved path is within the base directory
             try:
                 full_path_resolved = full_path.resolve()
                 full_path_resolved.relative_to(base_path.resolve())
@@ -105,7 +99,6 @@ class ControllerPuppetV3FileContent(ControllerPuppetV3Base):
             except (ValueError, FileNotFoundError):
                 pass
 
-        # Proxy fallback if not found locally or unsupported mount
         self.log.info(
             f"File {mount_point}/{file_path} not found locally, falling back to puppet server"
         )

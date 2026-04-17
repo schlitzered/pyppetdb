@@ -7,14 +7,13 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
-from pyppetdb.model.pyppetdb_nodes import (
-    PyppetDBNodeGet,
-    filter_list,
-    filter_literal,
-    sort_literal,
-    PyppetDBNodeGetMulti,
-)
-from pyppetdb.model.common import sort_order_literal, DataDelete
+from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGet
+from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGetMulti
+from pyppetdb.model.pyppetdb_nodes import filter_list
+from pyppetdb.model.pyppetdb_nodes import filter_literal
+from pyppetdb.model.pyppetdb_nodes import sort_literal
+from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import sort_order_literal
 
 
 class ControllerApiV1PyppetDBNodes:

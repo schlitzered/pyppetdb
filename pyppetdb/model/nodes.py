@@ -126,6 +126,8 @@ class NodeGetReport(BaseModel):
 class NodeRemoteAgent(BaseModel):
     connected: bool = False
     via: Optional[str] = None
+    busy: bool = False
+    current_job_id: Optional[str] = None
 
 
 class NodeGet(BaseModel):

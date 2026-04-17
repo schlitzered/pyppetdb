@@ -7,9 +7,11 @@ from pyppetdb.model.common import MetaMulti
 class NodeJobGet(BaseModel):
     id: str
     job_id: str
+    definition_id: str = ""
     node_id: str
     status: Literal["scheduled", "running", "success", "failed", "canceled"]
-    log_blobs: List[str]
+    created_by: str = ""
+    log_blobs: List[str] = []
 
 
 class JobsNodeJobGetMulti(BaseModel):

@@ -1,18 +1,18 @@
 import logging
 import re
+from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
-from pyppetdb.model.jobs_definitions import (
-    JobDefinitionGet,
-    JobDefinitionGetMulti,
-    JobDefinitionPost,
-    JobDefinitionPut,
-)
+from pyppetdb.model.jobs_definitions import JobDefinitionGet
+from pyppetdb.model.jobs_definitions import JobDefinitionGetMulti
+from pyppetdb.model.jobs_definitions import JobDefinitionPost
+from pyppetdb.model.jobs_definitions import JobDefinitionPut
 from pyppetdb.model.common import DataDelete
 
 
@@ -146,8 +146,13 @@ class ControllerApiV1JobsDefinitions:
         await self.authorize.require_admin(request=request)
         return await self.crud_jobs_definitions.delete(_id=definition_id)
 
-    def _validate_params_template(self, params_template: str, params: dict):
-        placeholders = set(re.findall(r"\{(.*?)\}", params_template))
+    def _validate_params_template(self, params_template: List[str], params: dict):
+        placeholders = set()
+        for token in params_template:
+            matches = re.findall(r"\{(.*?)\}", token)
+            for m in matches:
+                placeholders.add(m)
+
         param_names = set(params.keys())
 
         missing = placeholders - param_names

@@ -93,6 +93,7 @@ class ConfigApp(BaseModel):
     puppetdb: ConfigAppPuppetdb = ConfigAppPuppetdb()
     loglevel: log_levels = "INFO"
     secretkey: str = "secret"
+    wssalt: str = "ws-auth"
 
 
 class ConfigLdap(BaseModel):

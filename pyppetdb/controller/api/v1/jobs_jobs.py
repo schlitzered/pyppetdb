@@ -1,27 +1,29 @@
 import logging
 import re
-from typing import Any, Dict
+from typing import Any
+from typing import Dict
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.config import Config
 from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import sort_order_literal
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.model.jobs_jobs import (
-    JobGet,
-    JobGetMulti,
-    JobPost,
-)
+from pyppetdb.model.jobs_jobs import JobGet
+from pyppetdb.model.jobs_jobs import JobGetMulti
+from pyppetdb.model.jobs_jobs import JobPost
+from pyppetdb.model.jobs_jobs import sort_literal
 
 
 class ControllerApiV1JobsJobs:
-
     def __init__(
         self,
         log: logging.Logger,
@@ -93,8 +95,11 @@ class ControllerApiV1JobsJobs:
     async def search(
         self,
         request: Request,
-        _id: str = Query(default=None),
-        definition_id: str = Query(default=None),
+        _id: Optional[str] = Query(default=None),
+        definition_id: Optional[str] = Query(default=None),
+        created_by: Optional[str] = Query(default=None),
+        sort: Optional[sort_literal] = Query(default=None),
+        sort_order: Optional[sort_order_literal] = Query(default=None),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
@@ -102,7 +107,10 @@ class ControllerApiV1JobsJobs:
         return await self.crud_jobs.search(
             _id=_id,
             definition_id=definition_id,
+            created_by=created_by,
             fields=[],
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )
@@ -150,6 +158,15 @@ class ControllerApiV1JobsJobs:
         )
         node_ids = [node.id for node in nodes_result.result if node.id]
 
+        if node_ids:
+            busy_node_ids = (
+                await self._crud_jobs_node_jobs.get_busy_nodes_for_definition(
+                    definition_id=data.definition_id,
+                    node_ids=node_ids,
+                )
+            )
+            node_ids = [nid for nid in node_ids if nid not in busy_node_ids]
+
         job = await self._crud_jobs.create(
             payload=data,
             node_ids=node_ids,
@@ -157,10 +174,11 @@ class ControllerApiV1JobsJobs:
             fields=[],
         )
 
-        # Create NodeJob entries for each node
         await self._crud_jobs_node_jobs.create_node_jobs(
             job_id=job.id,
+            definition_id=data.definition_id,
             node_ids=node_ids,
+            created_by=user.id,
         )
 
         return job

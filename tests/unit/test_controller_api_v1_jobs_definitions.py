@@ -30,7 +30,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{path} {options}",
+            params_template=["{path}", "{options}"],
             params={
                 "path": JobParamDefinition(type="string"),
                 "options": JobParamDefinition(type="string"),
@@ -50,7 +50,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{path} {options}",
+            params_template=["{path}", "{options}"],
             params={"path": JobParamDefinition(type="string")},
         )
 
@@ -68,7 +68,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             executable="/bin/ls",
             user="root",
             group="root",
-            params_template="{path}",
+            params_template=["{path}"],
             params={
                 "path": JobParamDefinition(type="string"),
                 "extra": JobParamDefinition(type="string"),
@@ -92,7 +92,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud.update = AsyncMock()
 
         # Update only template, should match existing params
-        payload = JobDefinitionPut(params_template="{path}")
+        payload = JobDefinitionPut(params_template=["{path}"])
 
         await self.controller.update(
             request=mock_request, definition_id="def1", data=payload
@@ -110,7 +110,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud.get = AsyncMock(return_value=mock_existing)
 
         # Update template to something that needs more params than existing
-        payload = JobDefinitionPut(params_template="{path} {new_one}")
+        payload = JobDefinitionPut(params_template=["{path}", "{new_one}"])
 
         with self.assertRaises(HTTPException) as cm:
             await self.controller.update(

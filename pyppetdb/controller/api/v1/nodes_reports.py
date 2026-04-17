@@ -7,10 +7,8 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
-
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_reports import CrudNodesReports
-
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_reports import filter_list
 from pyppetdb.model.nodes_reports import filter_literal

@@ -13,6 +13,8 @@ from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.teams import CrudTeams
+from pyppetdb.crud.jobs_jobs import CrudJobs
+from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
 from pyppetdb.ca.service import CAService
 
 from pyppetdb.model.common import DataDelete
@@ -42,6 +44,8 @@ class ControllerApiV1Nodes:
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         crud_teams: CrudTeams,
+        crud_jobs: CrudJobs,
+        crud_node_jobs: CrudJobsNodeJobs,
         ca_service: CAService,
     ):
         self._authorize = authorize
@@ -51,6 +55,8 @@ class ControllerApiV1Nodes:
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
         self._crud_teams = crud_teams
+        self._crud_jobs = crud_jobs
+        self._crud_node_jobs = crud_node_jobs
         self._ca_service = ca_service
         self._log = log
         self._router = APIRouter(
@@ -145,6 +151,14 @@ class ControllerApiV1Nodes:
         return self._crud_teams
 
     @property
+    def crud_jobs(self):
+        return self._crud_jobs
+
+    @property
+    def crud_node_jobs(self):
+        return self._crud_node_jobs
+
+    @property
     def ca_service(self):
         return self._ca_service
 
@@ -173,20 +187,18 @@ class ControllerApiV1Nodes:
     async def delete(self, request: Request, node_id: str):
         await self.authorize.require_admin(request=request)
 
-        try:
-            await self.ca_service.update_certificate_status(
-                space_id="puppet-ca",
-                cn=node_id,
-                data=CACertificatePut(status="revoked"),
-            )
-        except Exception as e:
-            self.log.warning(
-                f"Failed to revoke certificate for node {node_id} during deletion: {e}"
-            )
+        await self.ca_service.update_certificate_status(
+            space_id="puppet-ca",
+            cn=node_id,
+            data=CACertificatePut(status="revoked"),
+        )
 
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
         await self.crud_nodes_catalogs.delete_all_from_node(node_id=node_id)
         await self.crud_nodes_reports.delete_all_from_node(node_id=node_id)
+        await self.crud_jobs.remove_node_from_jobs(node_id=node_id)
+        await self.crud_node_jobs.delete_by_node(node_id=node_id)
+
         return await self.crud_nodes.delete(_id=node_id)
 
     async def get(
