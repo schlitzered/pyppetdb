@@ -251,7 +251,6 @@ class WsInterAPI:
                 async with websockets.connect(uri=url, ssl=ssl_context) as ws:
                     self._remote_conns[via] = ws
 
-                    # Re-subscribe to all jobs for this via
                     for jrid, jvia in self._hub.job_run_id_to_via.items():
                         if jvia == via:
                             sub_msg = WsMessage(

@@ -33,7 +33,6 @@ class ControllerPuppetV3:
         self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter()
 
-        # Include specific endpoints first (they take precedence)
         self.router.include_router(
             ControllerPuppetV3Catalog(
                 log=log,
