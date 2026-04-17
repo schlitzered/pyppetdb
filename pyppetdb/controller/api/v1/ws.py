@@ -13,9 +13,7 @@ from pyppetdb.crud.jobs_jobs import CrudJobs
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
-from pyppetdb.ws.api import WsAPI
-from pyppetdb.ws.inter_api import WsInterAPIServer, WsInterAPIClient
-from pyppetdb.ws.remote_executor import WsRemoteExecutor
+from pyppetdb.ws.hub import WsHub
 
 
 class ControllerApiV1Ws:
@@ -35,48 +33,20 @@ class ControllerApiV1Ws:
         self._authorize = authorize
         self._authorize_client_cert = authorize_client_cert
         self._config = config
-        self._crud_nodes = crud_nodes
-        self._crud_jobs = crud_jobs
-        self._crud_job_definitions = crud_job_definitions
-        self._crud_node_jobs = crud_node_jobs
-        self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
-        self._redactor = redactor
         self._log = log
         self._router = APIRouter(tags=["websocket"])
-        self._via = socket.getfqdn()
 
-        self._ws_api = WsAPI(
+        self._ws_hub = WsHub(
             log=log,
             config=config,
-            crud_nodes=crud_nodes,
-        )
-
-        self._ws_inter_api_client = WsInterAPIClient(
-            log=log,
-            config=config,
-            api=self._ws_api,
-        )
-        self._ws_api.set_inter_api_client(self._ws_inter_api_client)
-
-        self._ws_inter_api_server = WsInterAPIServer(
-            log=log,
-            authorize_client_cert=authorize_client_cert,
-            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
-            api=self._ws_api,
-        )
-
-        self._ws_remote_executor = WsRemoteExecutor(
-            log=log,
-            authorize_client_cert=authorize_client_cert,
             crud_nodes=crud_nodes,
             crud_jobs=crud_jobs,
             crud_job_definitions=crud_job_definitions,
             crud_node_jobs=crud_node_jobs,
+            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
             redactor=redactor,
-            api=self._ws_api,
-            via=self._via,
+            authorize_client_cert=authorize_client_cert,
         )
-        self._ws_api.set_remote_executor(self._ws_remote_executor)
 
         self.router.add_api_route(
             "/ws/token",
@@ -101,8 +71,8 @@ class ControllerApiV1Ws:
         return self._router
 
     @property
-    def ws_api(self):
-        return self._ws_api
+    def ws_hub(self):
+        return self._ws_hub
 
     async def get_ws_token(
         self,
@@ -121,7 +91,7 @@ class ControllerApiV1Ws:
         websocket: WebSocket,
         node_id: str,
     ):
-        await self._ws_remote_executor.endpoint(
+        await self.ws_hub.remote_executor.endpoint(
             websocket=websocket,
             node_id=node_id,
         )
@@ -130,10 +100,10 @@ class ControllerApiV1Ws:
         self,
         websocket: WebSocket,
     ):
-        await self._ws_api.endpoint(websocket=websocket)
+        await self.ws_hub.api.endpoint(websocket=websocket)
 
     async def inter_api_endpoint(
         self,
         websocket: WebSocket,
     ):
-        await self._ws_inter_api_server.endpoint(websocket=websocket)
+        await self.ws_hub.inter_api.endpoint(websocket=websocket)

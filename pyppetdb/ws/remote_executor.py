@@ -486,7 +486,7 @@ class WsRemoteExecutor:
         crud_job_definitions: CrudJobsDefinitions,
         crud_node_jobs: CrudJobsNodeJobs,
         redactor: NodesSecretsRedactor,
-        api: Any,
+        hub: Any,
         via: str,
     ):
         self._log = log
@@ -496,7 +496,7 @@ class WsRemoteExecutor:
         self._crud_job_definitions = crud_job_definitions
         self._crud_node_jobs = crud_node_jobs
         self._redactor = redactor
-        self._api = api
+        self._hub = hub
         self._via = via
 
         self._local_protocols: Dict[str, RemoteExecutorProtocol] = {}
@@ -579,7 +579,7 @@ class WsRemoteExecutor:
                 crud_job_definitions=self._crud_job_definitions,
                 crud_node_jobs=self._crud_node_jobs,
                 redactor=self._redactor,
-                manager=self._api,
+                manager=self._hub,
             )
 
             self.register_protocol(node_id=node_id, protocol=protocol)

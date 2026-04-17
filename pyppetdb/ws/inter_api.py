@@ -20,20 +20,127 @@ from pyppetdb.model.ws import WsMsgBodyApiLogChunksResponse
 from pyppetdb.model.ws import WsMsgBodyApiLogChunkResponse
 
 
-class WsInterAPIClient:
+class WsInterAPI:
     def __init__(
         self,
         log: logging.Logger,
         config: Config,
-        api: Any,
+        hub: Any,
+        authorize_client_cert: AuthorizeClientCert,
+        crud_pyppetdb_nodes: CrudPyppetDBNodes,
     ):
         self._log = log
         self._config = config
-        self._api = api
+        self._hub = hub
+        self._authorize_client_cert = authorize_client_cert
+        self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
 
         self._remote_conns: Dict[str, Any] = {}
         self._remote_locks: Dict[str, asyncio.Lock] = {}
         self._pending_requests: Dict[str, asyncio.Future] = {}
+
+    async def endpoint(self, websocket: WebSocket):
+        cn = "unknown"
+        try:
+            await websocket.accept()
+            try:
+                cn = await self._authorize_client_cert.require_cn(request=websocket)
+            except Exception as e:
+                self._log.error(msg=f"WS inter_api: auth failed: {e}")
+                await websocket.close(code=4003)
+                return
+
+            if not await self._authenticate(cn):
+                await websocket.close(code=4003)
+                return
+
+            subscriptions = set()
+            try:
+                while True:
+                    data = await websocket.receive_text()
+                    await self._handle_server_message(
+                        websocket=websocket,
+                        data=data,
+                        subscriptions=subscriptions,
+                    )
+            except WebSocketDisconnect:
+                pass
+            finally:
+                for job_run_id in list(subscriptions):
+                    await self._hub.unsubscribe(
+                        websocket=websocket,
+                        job_run_id=job_run_id,
+                    )
+
+        except Exception as e:
+            self._log.error(msg=f"WS inter_api error: {e}")
+            await websocket.close(code=4003)
+
+    async def _authenticate(self, cn: str) -> bool:
+        try:
+            node = await self._crud_pyppetdb_nodes.get(
+                _id=cn,
+                fields=["id", "heartbeat"],
+            )
+            now = datetime.now()
+            return (now - node.heartbeat).total_seconds() <= 60
+        except Exception:
+            return False
+
+    async def _handle_server_message(
+        self,
+        websocket: WebSocket,
+        data: str,
+        subscriptions: set,
+    ):
+        msg = WsMessage.model_validate_json(json_data=data)
+
+        if msg.msg_type == "subscribe_job_logs":
+            job_run_id = msg.msg_body.id
+            await self._hub.subscribe(websocket, job_run_id)
+            subscriptions.add(job_run_id)
+        elif msg.msg_type == "unsubscribe_job_logs":
+            job_run_id = msg.msg_body.id
+            await self._hub.unsubscribe(websocket, job_run_id)
+            subscriptions.discard(job_run_id)
+        elif msg.msg_type == "api_get_log_chunks":
+            await self._handle_get_log_chunks(websocket, msg.msg_body)
+        elif msg.msg_type == "api_get_log_chunk":
+            await self._handle_get_log_chunk(websocket, msg.msg_body)
+
+    async def _handle_get_log_chunks(self, websocket, msg_body):
+        job_run_id = msg_body.job_run_id
+        request_id = msg_body.request_id
+        chunks = await self._hub.get_log_chunks(job_run_id=job_run_id)
+        resp = WsMessage(
+            msg_type="api_log_chunks_response",
+            msg_body=WsMsgBodyApiLogChunksResponse(
+                job_run_id=job_run_id,
+                request_id=request_id,
+                chunks=chunks,
+            ),
+        )
+        await websocket.send_text(data=resp.model_dump_json())
+
+    async def _handle_get_log_chunk(self, websocket, msg_body):
+        job_run_id = msg_body.job_run_id
+        request_id = msg_body.request_id
+        chunk_id = msg_body.chunk_id
+        data = await self._hub.get_log_chunk(
+            job_run_id=job_run_id,
+            chunk_id=chunk_id,
+        )
+        resp = WsMessage(
+            msg_type="api_log_chunk_response",
+            msg_body=WsMsgBodyApiLogChunkResponse(
+                job_run_id=job_run_id,
+                request_id=request_id,
+                chunk_id=chunk_id,
+                data=data if data is not None else [],
+                status=200 if data is not None else 404,
+            ),
+        )
+        await websocket.send_text(data=resp.model_dump_json())
 
     async def get_log_chunks(
         self,
@@ -42,11 +149,9 @@ class WsInterAPIClient:
         request_id: str,
         future: asyncio.Future,
     ):
-        self._log.info(msg=f"Forwarding log chunks request for {job_run_id} to {via}")
         await self._ensure_remote_connection(via=via)
         ws = self._remote_conns.get(via)
         if not ws:
-            self._log.error(msg=f"Failed to get inter-API connection to {via}")
             future.set_result([])
             return
 
@@ -147,7 +252,7 @@ class WsInterAPIClient:
                     self._remote_conns[via] = ws
 
                     # Re-subscribe to all jobs for this via
-                    for jrid, jvia in self._api.job_run_id_to_via.items():
+                    for jrid, jvia in self._hub.job_run_id_to_via.items():
                         if jvia == via:
                             sub_msg = WsMessage(
                                 msg_type="subscribe_job_logs",
@@ -167,7 +272,7 @@ class WsInterAPIClient:
                 self._remote_conns.pop(via, None)
 
             has_subscriptions = any(
-                v == via for v in self._api.job_run_id_to_via.values()
+                v == via for v in self._hub.job_run_id_to_via.values()
             )
             if not has_subscriptions and (
                 asyncio.get_event_loop().time() - last_activity > 300.0
@@ -191,8 +296,8 @@ class WsInterAPIClient:
         if not job_run_id:
             return asyncio.get_event_loop().time()
 
-        if job_run_id in self._api.subscriptions:
-            await self._api.broadcast_remote_message(job_run_id, message)
+        if job_run_id in self._hub.subscriptions:
+            await self._hub.broadcast_remote_message(job_run_id, message)
 
         return asyncio.get_event_loop().time()
 
@@ -202,120 +307,3 @@ class WsInterAPIClient:
         elif msg_type == "api_log_chunk_response":
             self._pending_requests[request_id].set_result(msg_body.get("data"))
         self._pending_requests.pop(request_id, None)
-
-
-class WsInterAPIServer:
-    def __init__(
-        self,
-        log: logging.Logger,
-        authorize_client_cert: AuthorizeClientCert,
-        crud_pyppetdb_nodes: CrudPyppetDBNodes,
-        api: Any,
-    ):
-        self._log = log
-        self._authorize_client_cert = authorize_client_cert
-        self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
-        self._api = api
-
-    async def endpoint(self, websocket: WebSocket):
-        cn = "unknown"
-        try:
-            await websocket.accept()
-            try:
-                cn = await self._authorize_client_cert.require_cn(request=websocket)
-            except Exception as e:
-                self._log.error(msg=f"WS inter_api: auth failed: {e}")
-                await websocket.close(code=4003)
-                return
-
-            if not await self._authenticate(cn):
-                await websocket.close(code=4003)
-                return
-
-            subscriptions = set()
-            try:
-                while True:
-                    data = await websocket.receive_text()
-                    await self._handle_message(
-                        websocket=websocket,
-                        data=data,
-                        subscriptions=subscriptions,
-                    )
-            except WebSocketDisconnect:
-                pass
-            finally:
-                for job_run_id in list(subscriptions):
-                    await self._api.unsubscribe(
-                        websocket=websocket,
-                        job_run_id=job_run_id,
-                    )
-
-        except Exception as e:
-            self._log.error(msg=f"WS inter_api error: {e}")
-            await websocket.close(code=4003)
-
-    async def _authenticate(self, cn: str) -> bool:
-        try:
-            node = await self._crud_pyppetdb_nodes.get(
-                _id=cn,
-                fields=["id", "heartbeat"],
-            )
-            now = datetime.now()
-            return (now - node.heartbeat).total_seconds() <= 60
-        except Exception:
-            return False
-
-    async def _handle_message(
-        self,
-        websocket: WebSocket,
-        data: str,
-        subscriptions: set,
-    ):
-        msg = WsMessage.model_validate_json(json_data=data)
-
-        if msg.msg_type == "subscribe_job_logs":
-            job_run_id = msg.msg_body.id
-            await self._api.subscribe(websocket, job_run_id)
-            subscriptions.add(job_run_id)
-        elif msg.msg_type == "unsubscribe_job_logs":
-            job_run_id = msg.msg_body.id
-            await self._api.unsubscribe(websocket, job_run_id)
-            subscriptions.discard(job_run_id)
-        elif msg.msg_type == "api_get_log_chunks":
-            await self._handle_get_log_chunks(websocket, msg.msg_body)
-        elif msg.msg_type == "api_get_log_chunk":
-            await self._handle_get_log_chunk(websocket, msg.msg_body)
-
-    async def _handle_get_log_chunks(self, websocket, msg_body):
-        job_run_id = msg_body.job_run_id
-        request_id = msg_body.request_id
-        chunks = await self._api.get_log_chunks(job_run_id=job_run_id)
-        resp = WsMessage(
-            msg_type="api_log_chunks_response",
-            msg_body=WsMsgBodyApiLogChunksResponse(
-                job_run_id=job_run_id,
-                request_id=request_id,
-                chunks=chunks,
-            ),
-        )
-        await websocket.send_text(data=resp.model_dump_json())
-
-    async def _handle_get_log_chunk(self, websocket, msg_body):
-        job_run_id = msg_body.job_run_id
-        request_id = msg_body.request_id
-        chunk_id = msg_body.chunk_id
-        data = await self._api.get_log_chunk(
-            job_run_id=job_run_id,
-            chunk_id=chunk_id,
-        )
-        resp = WsMessage(
-            msg_type="api_log_chunk_response",
-            msg_body=WsMsgBodyApiLogChunkResponse(
-                job_run_id=job_run_id,
-                request_id=request_id,
-                chunk_id=chunk_id,
-                data=data if data is not None else [],
-                status=200 if data is not None else 404,
-            ),
-        )
-        await websocket.send_text(data=resp.model_dump_json())
