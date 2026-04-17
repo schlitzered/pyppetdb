@@ -209,6 +209,8 @@ class ControllerApiV1:
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
                 crud_teams=crud_teams,
+                crud_jobs=crud_jobs,
+                crud_node_jobs=crud_node_jobs,
                 ca_service=ca_service,
             ).router,
             responses={404: {"description": "Not found"}},

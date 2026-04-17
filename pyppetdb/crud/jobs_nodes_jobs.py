@@ -12,27 +12,51 @@ class CrudJobsNodeJobs(CrudMongo):
         await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
         await self.coll.create_index([("job_id", pymongo.ASCENDING)])
         await self.coll.create_index([("node_id", pymongo.ASCENDING)])
+        await self.coll.create_index([("definition_id", pymongo.ASCENDING)])
+        await self.coll.create_index([("created_by", pymongo.ASCENDING)])
         await self.coll.create_index([("job_id", 1), ("node_id", 1)], unique=True)
 
-    async def create_node_job(self, job_id: str, node_id: str):
+    async def create_node_job(
+        self, job_id: str, definition_id: str, node_id: str, created_by: str
+    ):
         await self.create_node_jobs(
             job_id=job_id,
+            definition_id=definition_id,
             node_ids=[node_id],
+            created_by=created_by,
         )
 
-    async def create_node_jobs(self, job_id: str, node_ids: list[str]):
+    async def create_node_jobs(
+        self, job_id: str, definition_id: str, node_ids: list[str], created_by: str
+    ):
         if not node_ids:
             return
         docs = [
             {
                 "id": f"{job_id}:{node_id}",
                 "job_id": job_id,
+                "definition_id": definition_id,
                 "node_id": node_id,
                 "status": "scheduled",
+                "created_by": created_by,
             }
             for node_id in node_ids
         ]
         await self.coll.insert_many(documents=docs)
+
+    async def get_busy_nodes_for_definition(
+        self, definition_id: str, node_ids: list[str]
+    ) -> list[str]:
+        cursor = self.coll.find(
+            filter={
+                "definition_id": definition_id,
+                "node_id": {"$in": node_ids},
+                "status": {"$in": ["scheduled", "running"]},
+            },
+            projection=["node_id"],
+        )
+        result = await cursor.to_list(length=None)
+        return [doc["node_id"] for doc in result]
 
     async def cancel_node_jobs(self, job_id: str):
         await self.coll.update_many(
@@ -58,6 +82,9 @@ class CrudJobsNodeJobs(CrudMongo):
             filter={"job_id": job_id, "node_id": node_id},
             update={"$set": {"status": status}},
         )
+
+    async def delete_by_node(self, node_id: str):
+        await self.coll.delete_many(filter={"node_id": node_id})
 
     async def get(self, _id: str, fields: list) -> NodeJobGet:
         query = {"id": _id}

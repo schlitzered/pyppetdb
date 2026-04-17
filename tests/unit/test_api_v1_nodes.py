@@ -15,6 +15,10 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_groups = MagicMock()
         self.mock_crud_reports = MagicMock()
         self.mock_crud_teams = MagicMock()
+        self.mock_crud_jobs = MagicMock()
+        self.mock_crud_jobs.remove_node_from_jobs = AsyncMock()
+        self.mock_crud_node_jobs = MagicMock()
+        self.mock_crud_node_jobs.delete_by_node = AsyncMock()
         self.mock_ca_service = MagicMock()
 
         self.controller = ControllerApiV1Nodes(
@@ -26,6 +30,8 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             crud_nodes_groups=self.mock_crud_groups,
             crud_nodes_reports=self.mock_crud_reports,
             crud_teams=self.mock_crud_teams,
+            crud_jobs=self.mock_crud_jobs,
+            crud_node_jobs=self.mock_crud_node_jobs,
             ca_service=self.mock_ca_service,
         )
 
@@ -48,6 +54,8 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_groups.delete_node_from_nodes_groups = AsyncMock()
         self.mock_crud_catalogs.delete_all_from_node = AsyncMock()
         self.mock_crud_reports.delete_all_from_node = AsyncMock()
+        self.mock_crud_jobs.remove_node_from_jobs = AsyncMock()
+        self.mock_crud_node_jobs.delete_by_node = AsyncMock()
         self.mock_crud_nodes.delete = AsyncMock()
 
         mock_request = MagicMock()
@@ -64,6 +72,10 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_reports.delete_all_from_node.assert_called_once_with(
             node_id="node1"
         )
+        self.mock_crud_jobs.remove_node_from_jobs.assert_called_once_with(
+            node_id="node1"
+        )
+        self.mock_crud_node_jobs.delete_by_node.assert_called_once_with(node_id="node1")
         self.mock_crud_nodes.delete.assert_called_once_with(_id="node1")
 
     async def test_update_node_admin_required(self):

@@ -125,7 +125,7 @@ class LogSubscriptionManager:
         if job_run_id not in self._subscriptions:
             self._subscriptions[job_run_id] = set()
             is_first = True
-        
+
         self._subscriptions[job_run_id].add(websocket)
 
         if not is_first:
@@ -150,10 +150,13 @@ class LogSubscriptionManager:
                 else:
                     protocol = self._local_protocols.get(node_id)
                     if protocol:
-                        from pyppetdb.model.remote_executor import RemoteExecutorMsgBodySubscribeLogs
+                        from pyppetdb.model.remote_executor import (
+                            RemoteExecutorMsgBodySubscribeLogs,
+                        )
+
                         await protocol._send_message(
                             msg_type="subscribe_logs",
-                            body=RemoteExecutorMsgBodySubscribeLogs(job_id=job_id)
+                            body=RemoteExecutorMsgBodySubscribeLogs(job_id=job_id),
                         )
         except Exception as e:
             self._log.error(msg=f"Error determining local/remote for {job_run_id}: {e}")
@@ -181,13 +184,20 @@ class LogSubscriptionManager:
                         job_id, node_id = job_run_id.split(":", 1)
                         protocol = self._local_protocols.get(node_id)
                         if protocol:
-                            from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyUnsubscribeLogs
+                            from pyppetdb.model.remote_executor import (
+                                RemoteExecutorMsgBodyUnsubscribeLogs,
+                            )
+
                             await protocol._send_message(
                                 msg_type="unsubscribe_logs",
-                                body=RemoteExecutorMsgBodyUnsubscribeLogs(job_id=job_id)
+                                body=RemoteExecutorMsgBodyUnsubscribeLogs(
+                                    job_id=job_id
+                                ),
                             )
                     except Exception as e:
-                        self._log.error(msg=f"Error sending unsubscribe_logs to local agent: {e}")
+                        self._log.error(
+                            msg=f"Error sending unsubscribe_logs to local agent: {e}"
+                        )
 
     async def _remote_unsubscribe(
         self,
@@ -275,11 +285,15 @@ class LogSubscriptionManager:
                     request_id=request_id,
                 )
             else:
-                self._log.info(msg=f"Forwarding log chunks request for {job_run_id} to {node.remote_agent.via}")
+                self._log.info(
+                    msg=f"Forwarding log chunks request for {job_run_id} to {node.remote_agent.via}"
+                )
                 await self._ensure_remote_connection(via=node.remote_agent.via)
                 ws = self._remote_conns.get(node.remote_agent.via)
                 if not ws:
-                    self._log.error(msg=f"Failed to get inter-API connection to {node.remote_agent.via}")
+                    self._log.error(
+                        msg=f"Failed to get inter-API connection to {node.remote_agent.via}"
+                    )
                     return []
                 msg = WsMessage(
                     msg_type="api_get_log_chunks",
@@ -289,7 +303,9 @@ class LogSubscriptionManager:
                     ),
                 )
                 await ws.send(msg.model_dump_json())
-                self._log.debug(msg=f"Sent api_get_log_chunks request_id={request_id} to {node.remote_agent.via}")
+                self._log.debug(
+                    msg=f"Sent api_get_log_chunks request_id={request_id} to {node.remote_agent.via}"
+                )
 
             try:
                 result = await asyncio.wait_for(
@@ -451,10 +467,14 @@ class LogSubscriptionManager:
                                 continue
 
                             request_id = msg_body.get("request_id")
-                            self._log.debug(msg=f"Inter-API message msg_type={msg_type} request_id={request_id}")
-                            
+                            self._log.debug(
+                                msg=f"Inter-API message msg_type={msg_type} request_id={request_id}"
+                            )
+
                             if request_id and request_id in self._pending_requests:
-                                self._log.debug(msg=f"Inter-API found pending request for {request_id}")
+                                self._log.debug(
+                                    msg=f"Inter-API found pending request for {request_id}"
+                                )
                                 if msg_type == "api_log_chunks_response":
                                     self._pending_requests[request_id].set_result(
                                         msg_body.get("chunks")
@@ -475,7 +495,9 @@ class LogSubscriptionManager:
 
                             # Broadcast to local subscribers
                             if job_run_id in self._subscriptions:
-                                self._log.debug(msg=f"Inter-API broadcasting log message for {job_run_id}")
+                                self._log.debug(
+                                    msg=f"Inter-API broadcasting log message for {job_run_id}"
+                                )
                                 for local_ws in list(self._subscriptions[job_run_id]):
                                     try:
                                         await local_ws.send_text(data=message)

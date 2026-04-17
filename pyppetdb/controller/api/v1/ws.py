@@ -380,13 +380,20 @@ class ControllerApiV1Ws:
                         job_id, node_id = job_run_id.split(":", 1)
                         protocol = self._ws_manager._local_protocols.get(node_id)
                         if protocol:
-                            from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyUnsubscribeLogs
+                            from pyppetdb.model.remote_executor import (
+                                RemoteExecutorMsgBodyUnsubscribeLogs,
+                            )
+
                             await protocol._send_message(
                                 msg_type="unsubscribe_logs",
-                                body=RemoteExecutorMsgBodyUnsubscribeLogs(job_id=job_id)
+                                body=RemoteExecutorMsgBodyUnsubscribeLogs(
+                                    job_id=job_id
+                                ),
                             )
                     except Exception as e:
-                        self._log.error(msg=f"Error sending inter-API unsubscribe to local agent: {e}")
+                        self._log.error(
+                            msg=f"Error sending inter-API unsubscribe to local agent: {e}"
+                        )
                 elif msg.msg_type == "api_get_log_chunks":
                     job_run_id = msg.msg_body.job_run_id
                     request_id = msg.msg_body.request_id

@@ -25,8 +25,10 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_job = NodeJobGet(
             id="job1:node1",
             job_id="job1",
+            definition_id="def1",
             node_id="node1",
             status="running",
+            created_by="admin",
             log_blobs=[],
         )
         self.mock_crud.get = AsyncMock(return_value=mock_job)
@@ -54,8 +56,10 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_job = NodeJobGet(
             id="job1:node1",
             job_id="job1",
+            definition_id="def1",
             node_id="node1",
             status="running",
+            created_by="admin",
             log_blobs=[],
         )
         self.mock_crud.search = AsyncMock(
