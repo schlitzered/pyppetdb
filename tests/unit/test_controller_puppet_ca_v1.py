@@ -10,12 +10,15 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
+        self.mock_config.ca.autoSign = False
+        self.mock_config.ca.autoSignNodeIfExists = False
         self.mock_crud_authorities = MagicMock()
         self.mock_crud_spaces = MagicMock()
         self.mock_crud_spaces.get = AsyncMock()
         self.mock_crud_certificates = MagicMock()
         self.mock_crud_certificates.search = AsyncMock()
         self.mock_crud_certificates.get_by_cn = AsyncMock()
+        self.mock_crud_certificates.delete_by_cn = AsyncMock()
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.resource_exists = AsyncMock()
         self.mock_ca_service = MagicMock()
@@ -42,6 +45,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_node_if_exists_success(self):
         from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.model.ca_certificates import CACertificateGet
 
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
@@ -50,7 +54,15 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.ca.autoSignNodeIfExists = True
         self.mock_crud_nodes.resource_exists.return_value = "OBJ_ID"
 
-        await self.controller.submit_certificate_request("node1", mock_request)
+        self.mock_ca_service.sign_certificate.return_value = CACertificateGet(
+            certificate="SIGNED_CERT", status="signed"
+        )
+
+        mock_bg = MagicMock()
+        response = await self.controller.submit_certificate_request(
+            "node1", mock_request, mock_bg
+        )
+        self.assertEqual(response.body, b"SIGNED_CERT")
         self.mock_ca_service.sign_certificate.assert_called_once()
         self.mock_crud_nodes.resource_exists.assert_called_once_with(_id="node1")
 
@@ -64,8 +76,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.ca.autoSignNodeIfExists = True
         self.mock_crud_nodes.resource_exists.side_effect = ResourceNotFound()
 
-        await self.controller.submit_certificate_request("node1", mock_request)
-        self.mock_ca_service.sign_certificate.assert_not_called()
+        mock_bg = MagicMock()
+        await self.controller.submit_certificate_request("node1", mock_request, mock_bg)
+        mock_bg.add_task.assert_not_called()
         self.mock_crud_nodes.resource_exists.assert_called_once_with(_id="node1")
 
     async def test_get_certificate_ca(self):
@@ -98,14 +111,24 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request(self):
         from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.model.ca_certificates import CACertificateGet
 
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
 
+        self.mock_ca_service.submit_certificate_request.return_value = CACertificateGet(
+            id="1", status="requested"
+        )
+        # return something that has .certificate but is not used in the final response for this test
+        self.mock_ca_service.sign_certificate.return_value = CACertificateGet(
+            certificate="NOT_USED"
+        )
+
+        mock_bg = MagicMock()
         response = await self.controller.submit_certificate_request(
-            "node1", mock_request
+            "node1", mock_request, mock_bg
         )
         self.assertEqual(response.body, b"CSR submitted")
         self.mock_ca_service.submit_certificate_request.assert_called_once_with(
@@ -114,6 +137,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             fields=["id"],
             cn="node1",
         )
+        self.mock_ca_service.sign_certificate.assert_not_called()
 
     async def test_submit_certificate_request_mismatch(self):
         from pyppetdb.errors import QueryParamValidationError
@@ -127,8 +151,11 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             QueryParamValidationError(msg="mismatch")
         )
 
+        mock_bg = MagicMock()
         with self.assertRaises(HTTPException) as cm:
-            await self.controller.submit_certificate_request("node1", mock_request)
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, mock_bg
+            )
         self.assertEqual(cm.exception.status_code, 400)
         self.assertEqual(cm.exception.detail, "mismatch")
 
@@ -142,8 +169,11 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             QueryParamValidationError(msg="Invalid CSR")
         )
 
+        mock_bg = MagicMock()
         with self.assertRaises(HTTPException) as cm:
-            await self.controller.submit_certificate_request("node1", mock_request)
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, mock_bg
+            )
         self.assertEqual(cm.exception.status_code, 400)
         self.assertEqual(cm.exception.detail, "Invalid CSR")
 
@@ -223,13 +253,22 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_autosign_success(self):
         from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.model.ca_certificates import CACertificateGet
 
         csr_pem, _ = CAUtils.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
 
-        await self.controller.submit_certificate_request("node1", mock_request)
+        self.mock_ca_service.sign_certificate.return_value = CACertificateGet(
+            certificate="SIGNED_CERT", status="signed"
+        )
+
+        mock_bg = MagicMock()
+        response = await self.controller.submit_certificate_request(
+            "node1", mock_request, mock_bg
+        )
+        self.assertEqual(response.body, b"SIGNED_CERT")
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_submit_certificate_request_autosign_error(self):
@@ -241,8 +280,13 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.ca.autoSign = True
         self.mock_ca_service.sign_certificate.side_effect = Exception("Autosign failed")
 
-        # Should not raise HTTPException, just log error
-        await self.controller.submit_certificate_request("node1", mock_request)
+        mock_bg = MagicMock()
+        with self.assertRaises(HTTPException) as cm:
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, mock_bg
+            )
+        self.assertEqual(cm.exception.status_code, 500)
+        self.assertEqual(cm.exception.detail, "Autosign failed")
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_update_certificate_status_signed(self):
@@ -262,6 +306,16 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(response.status_code, 204)
         self.mock_ca_service.update_certificate_status.assert_called_once()
+
+    async def test_update_certificate_status_not_found(self):
+        mock_request = MagicMock()
+        mock_request.json = AsyncMock(return_value={"desired_state": "revoked"})
+        self.mock_ca_service.update_certificate_status.side_effect = ResourceNotFound(
+            details="Not found"
+        )
+        with self.assertRaises(HTTPException) as cm:
+            await self.controller.update_certificate_status("node1", mock_request)
+        self.assertEqual(cm.exception.status_code, 404)
 
     async def test_update_certificate_status_invalid(self):
         mock_request = MagicMock()

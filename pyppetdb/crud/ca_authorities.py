@@ -8,7 +8,6 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
-from pyppetdb.ca.utils import CAUtils
 from pyppetdb.model.ca_authorities import CAAuthorityGet
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
 from pyppetdb.model.ca_authorities import CACRL
@@ -112,19 +111,12 @@ class CrudCAAuthorities(CrudMongo):
         )
         return CAAuthorityGetMulti(**result)
 
-    async def sync_crl(
+    async def sync_crl_data(
         self,
         ca_id: str,
-        ca_cert_pem: bytes,
-        ca_key_pem: bytes,
-        revoked_certs: List[dict],
+        crl_pem: str,
+        next_update: datetime.datetime,
     ) -> CACRL:
-        crl_pem, next_update = CAUtils.generate_crl(
-            ca_cert_pem=ca_cert_pem,
-            ca_key_pem=ca_key_pem,
-            revoked_certs=revoked_certs,
-        )
-
         while True:
             ca_doc = await self.coll.find_one({"id": ca_id}, {"crl": 1})
             if not ca_doc:
@@ -139,7 +131,7 @@ class CrudCAAuthorities(CrudMongo):
                 {"id": ca_id, "crl.generation": current_generation},
                 {
                     "$set": {
-                        "crl.crl_pem": crl_pem.decode(),
+                        "crl.crl_pem": crl_pem,
                         "crl.updated_at": now,
                         "crl.next_update": next_update,
                         "crl.locked_at": None,

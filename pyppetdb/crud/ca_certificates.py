@@ -25,9 +25,19 @@ class CrudCACertificates(CrudMongo):
             unique=True,
         )
         await self.coll.create_index(
-            [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)]
+            [
+                ("space_id", pymongo.ASCENDING),
+                ("status", pymongo.ASCENDING),
+                ("cn", pymongo.ASCENDING),
+            ]
         )
-        await self.coll.create_index([("ca_id", pymongo.ASCENDING)])
+        await self.coll.create_index(
+            [
+                ("ca_id", pymongo.ASCENDING),
+                ("status", pymongo.ASCENDING),
+                ("cn", pymongo.ASCENDING),
+            ]
+        )
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def update(
@@ -58,6 +68,17 @@ class CrudCACertificates(CrudMongo):
             query["status"] = status
         result = await self._get(query=query, fields=fields)
         return CACertificateGet(**result)
+
+    async def delete_by_cn(
+        self,
+        space_id: str,
+        cn: str,
+        status: typing.Optional[CAStatus] = None,
+    ) -> None:
+        query = {"space_id": space_id, "cn": cn}
+        if status:
+            query["status"] = status
+        await self._delete(query=query)
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)

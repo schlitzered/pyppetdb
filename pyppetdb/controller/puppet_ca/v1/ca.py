@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, Request, Response, HTTPException
+import asyncio
+from fastapi import APIRouter, Request, Response, HTTPException, BackgroundTasks
 from pyppetdb.config import Config
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -7,7 +8,7 @@ from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ca.service import CAService
-from pyppetdb.errors import ResourceNotFound
+from pyppetdb.errors import ResourceNotFound, QueryParamValidationError
 from pyppetdb.model.ca_certificates import CACertificatePut
 
 
@@ -109,7 +110,9 @@ class ControllerPuppetCaV1CA:
 
         return Response(content=cert_doc.csr, media_type="text/plain")
 
-    async def submit_certificate_request(self, nodename: str, request: Request):
+    async def submit_certificate_request(
+        self, nodename: str, request: Request, background_tasks: BackgroundTasks
+    ):
         from pyppetdb.errors import QueryParamValidationError
 
         body = await request.body()
@@ -122,38 +125,55 @@ class ControllerPuppetCaV1CA:
                 fields=["id"],
                 cn=nodename,
             )
+
+            if self._config.ca.autoSign:
+                auto_sign = True
+            elif self._config.ca.autoSignNodeIfExists:
+                try:
+                    await self._crud_nodes.resource_exists(_id=nodename)
+                    auto_sign = True
+                    self.log.info(
+                        f"Node {nodename} exists, auto-signing CSR in space puppet-ca"
+                    )
+                except ResourceNotFound:
+                    auto_sign = False
+                    self.log.info(
+                        f"Node {nodename} does not exist, skipping auto-sign in space puppet-ca"
+                    )
+            else:
+                auto_sign = False
+
+            if auto_sign:
+                self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
+                # Use shield to ensure signing finishes even if the client disconnects while waiting
+                cert = await asyncio.shield(
+                    self._ca_service.sign_certificate(
+                        space_id="puppet-ca",
+                        cn=nodename,
+                        fields=["certificate"],
+                    )
+                )
+                return Response(content=cert.certificate, media_type="text/plain")
+
+            return Response(content="CSR submitted", media_type="text/plain")
+
         except QueryParamValidationError as e:
             raise HTTPException(status_code=400, detail=e.detail)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-        if self._config.ca.autoSign:
-            auto_sign = True
-        elif self._config.ca.autoSignNodeIfExists:
+        except asyncio.CancelledError:
+            self.log.info(
+                f"CSR submission for {nodename} cancelled, rolling back DB entry"
+            )
             try:
-                await self._crud_nodes.resource_exists(_id=nodename)
-                auto_sign = True
-                self.log.info(
-                    f"Node {nodename} exists, auto-signing CSR in space puppet-ca"
-                )
-            except ResourceNotFound:
-                auto_sign = False
-                self.log.info(
-                    f"Node {nodename} does not exist, skipping auto-sign in space puppet-ca"
-                )
-        else:
-            auto_sign = False
-
-        if auto_sign:
-            self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
-            try:
-                await self._ca_service.sign_certificate(
-                    space_id="puppet-ca", cn=nodename
+                # We only rollback if it was still in 'requested' state
+                await self._crud_certificates.delete_by_cn(
+                    space_id="puppet-ca", cn=nodename, status="requested"
                 )
             except Exception as e:
-                self.log.error(f"Failed to auto-sign CSR for {nodename}: {e}")
-
-        return Response(content="CSR submitted", media_type="text/plain")
+                self.log.error(f"Failed to rollback CSR for {nodename}: {e}")
+            raise
+        except Exception as e:
+            self.log.error(f"Failed to process CSR for {nodename}: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def get_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
@@ -189,19 +209,29 @@ class ControllerPuppetCaV1CA:
 
         try:
             if desired_state == "signed":
-                await self._ca_service.update_certificate_status(
-                    "puppet-ca", nodename, CACertificatePut(status="signed")
+                await asyncio.shield(
+                    self._ca_service.update_certificate_status(
+                        "puppet-ca", nodename, CACertificatePut(status="signed")
+                    )
                 )
                 return Response(status_code=204)
             elif desired_state == "revoked":
-                await self._ca_service.update_certificate_status(
-                    "puppet-ca", nodename, CACertificatePut(status="revoked")
+                await asyncio.shield(
+                    self._ca_service.update_certificate_status(
+                        "puppet-ca", nodename, CACertificatePut(status="revoked")
+                    )
                 )
                 return Response(status_code=204)
             else:
                 raise HTTPException(
                     status_code=400, detail=f"Invalid desired_state: {desired_state}"
                 )
+        except ResourceNotFound as e:
+            raise HTTPException(status_code=404, detail=e.detail)
+        except QueryParamValidationError as e:
+            raise HTTPException(status_code=400, detail=e.detail)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.log.error(f"Failed to update certificate status: {e}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -227,12 +257,14 @@ class ControllerPuppetCaV1CA:
         nodename = cert_info["cn"]
 
         try:
-            new_cert = await self._ca_service.renew_certificate(
-                space_id="puppet-ca", cn=nodename
+            new_cert = await asyncio.shield(
+                self._ca_service.renew_certificate(space_id="puppet-ca", cn=nodename)
             )
             return Response(content=new_cert.certificate, media_type="text/plain")
         except ResourceNotFound:
             raise HTTPException(status_code=404, detail="Certificate not found")
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.log.error(f"Failed to renew certificate for {nodename}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
