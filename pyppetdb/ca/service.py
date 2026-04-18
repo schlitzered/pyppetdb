@@ -2,6 +2,7 @@ import logging
 import asyncio
 import datetime
 import uuid
+from concurrent.futures import ProcessPoolExecutor
 
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -35,6 +36,9 @@ class CAService:
         self._crud_authorities = crud_authorities
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
+        self._executor = ProcessPoolExecutor(
+            max_workers=self._config.ca.concurrentWorkers
+        )
 
     @property
     def log(self):
@@ -51,11 +55,18 @@ class CAService:
 
         revoked_certs = await self._crud_certificates.get_revoked_for_ca(ca_id=ca_id)
 
-        await self._crud_authorities.sync_crl(
+        crl_pem, next_update = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.generate_crl,
+            ca.certificate.encode(),
+            ca_key,
+            revoked_cas + revoked_certs,
+        )
+
+        await self._crud_authorities.sync_crl_data(
             ca_id=ca_id,
-            ca_cert_pem=ca.certificate.encode(),
-            ca_key_pem=ca_key,
-            revoked_certs=revoked_cas + revoked_certs,
+            crl_pem=crl_pem.decode(),
+            next_update=next_update,
         )
 
     async def refresh_expiring_crls(self) -> None:
@@ -134,32 +145,40 @@ class CAService:
                 payload.parent_id, fields=["certificate", "chain"]
             )
             parent_key = await self._crud_authorities.get_private_key(payload.parent_id)
-            cert_pem, key_pem = CAUtils.sign_ca(
-                cn=payload.cn,
-                ca_cert_pem=parent_ca.certificate.encode(),
-                ca_key_pem=parent_key,
-                organization=payload.organization,
-                organizational_unit=payload.organizational_unit,
-                country=payload.country,
-                state=payload.state,
-                locality=payload.locality,
-                validity_days=payload.validity_days,
+            cert_pem, key_pem = await asyncio.get_running_loop().run_in_executor(
+                self._executor,
+                CAUtils.sign_ca,
+                payload.cn,
+                parent_ca.certificate.encode(),
+                parent_key,
+                payload.organization,
+                payload.organizational_unit,
+                payload.country,
+                payload.state,
+                payload.locality,
+                payload.validity_days,
             )
             chain = [parent_ca.certificate] + parent_ca.chain
         else:
             internal = True
-            cert_pem, key_pem = CAUtils.generate_ca(
-                cn=payload.cn,
-                organization=payload.organization,
-                organizational_unit=payload.organizational_unit,
-                country=payload.country,
-                state=payload.state,
-                locality=payload.locality,
-                validity_days=payload.validity_days,
+            cert_pem, key_pem = await asyncio.get_running_loop().run_in_executor(
+                self._executor,
+                CAUtils.generate_ca,
+                payload.cn,
+                payload.organization,
+                payload.organizational_unit,
+                payload.country,
+                payload.state,
+                payload.locality,
+                payload.validity_days,
             )
             chain = []
 
-        info = CAUtils.get_cert_info(cert_pem)
+        info = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.get_cert_info,
+            cert_pem,
+        )
         encrypted_key = self._crud_authorities.protector.encrypt_string(
             key_pem.decode()
         )
@@ -176,8 +195,12 @@ class CAService:
         }
 
         if internal:
-            crl_pem, next_update = CAUtils.generate_crl(
-                ca_cert_pem=cert_pem, ca_key_pem=key_pem, revoked_certs=[]
+            crl_pem, next_update = await asyncio.get_running_loop().run_in_executor(
+                self._executor,
+                CAUtils.generate_crl,
+                cert_pem,
+                key_pem,
+                [],
             )
             now = datetime.datetime.now(datetime.timezone.utc)
             from pyppetdb.model.ca_authorities import CACRL
@@ -259,7 +282,11 @@ class CAService:
             fields = ["id", "status", "ca_id"]
 
         try:
-            csr_info = CAUtils.get_csr_info(csr_pem.encode())
+            csr_info = await asyncio.get_running_loop().run_in_executor(
+                self._executor,
+                CAUtils.get_csr_info,
+                csr_pem.encode(),
+            )
         except Exception as e:
             raise QueryParamValidationError(msg=f"Invalid CSR: {e}")
 
@@ -356,15 +383,21 @@ class CAService:
         ca_cert = await self._crud_authorities.get(space.ca_id, fields=["certificate"])
         ca_key = await self._crud_authorities.get_private_key(space.ca_id)
 
-        cert_pem = CAUtils.sign_csr(
-            csr_pem=cert_data.csr.encode(),
-            ca_cert_pem=ca_cert.certificate.encode(),
-            ca_key_pem=ca_key,
-            serial_number=int(cert_data.id),
-            validity_days=self._config.ca.certificateValidityDays,
+        cert_pem = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.sign_csr,
+            cert_data.csr.encode(),
+            ca_cert.certificate.encode(),
+            ca_key,
+            self._config.ca.certificateValidityDays,
+            int(cert_data.id),
         )
 
-        info = CAUtils.get_cert_info(cert_pem)
+        info = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.get_cert_info,
+            cert_pem,
+        )
 
         payload = {"status": "signed", "certificate": cert_pem.decode(), **info}
 
@@ -420,15 +453,21 @@ class CAService:
 
         new_serial = uuid.uuid4().int
 
-        new_cert_pem = CAUtils.renew_cert(
-            cert_pem=cert_data.certificate.encode(),
-            ca_cert_pem=ca_cert.certificate.encode(),
-            ca_key_pem=ca_key,
-            serial_number=new_serial,
-            validity_days=self._config.ca.certificateValidityDays,
+        new_cert_pem = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.renew_cert,
+            cert_data.certificate.encode(),
+            ca_cert.certificate.encode(),
+            ca_key,
+            self._config.ca.certificateValidityDays,
+            new_serial,
         )
 
-        info = CAUtils.get_cert_info(new_cert_pem)
+        info = await asyncio.get_running_loop().run_in_executor(
+            self._executor,
+            CAUtils.get_cert_info,
+            new_cert_pem,
+        )
 
         payload = {
             "id": str(new_serial),
