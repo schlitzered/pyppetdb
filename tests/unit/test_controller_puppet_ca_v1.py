@@ -122,7 +122,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             id="1", status="requested"
         )
         # return something that has .certificate but is not used in the final response for this test
-        self.mock_ca_service.sign_certificate.return_value = CACertificateGet(certificate="NOT_USED")
+        self.mock_ca_service.sign_certificate.return_value = CACertificateGet(
+            certificate="NOT_USED"
+        )
 
         mock_bg = MagicMock()
         response = await self.controller.submit_certificate_request(
@@ -151,7 +153,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
         mock_bg = MagicMock()
         with self.assertRaises(HTTPException) as cm:
-            await self.controller.submit_certificate_request("node1", mock_request, mock_bg)
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, mock_bg
+            )
         self.assertEqual(cm.exception.status_code, 400)
         self.assertEqual(cm.exception.detail, "mismatch")
 
@@ -167,7 +171,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
         mock_bg = MagicMock()
         with self.assertRaises(HTTPException) as cm:
-            await self.controller.submit_certificate_request("node1", mock_request, mock_bg)
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, mock_bg
+            )
         self.assertEqual(cm.exception.status_code, 400)
         self.assertEqual(cm.exception.detail, "Invalid CSR")
 

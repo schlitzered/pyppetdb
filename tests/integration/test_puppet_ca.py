@@ -69,7 +69,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
             headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.text, "CSR submitted")
+        self.assertTrue(resp.text.startswith("-----BEGIN CERTIFICATE-----"))
 
         # 3. Check status - should be 'signed'
         resp = self.client.get(f"/puppet-ca/v1/certificate_status/{nodename}")
@@ -141,6 +141,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
             headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.text.startswith("-----BEGIN CERTIFICATE-----"))
 
         # 3. Get first cert
         resp = self.client.get(f"/puppet-ca/v1/certificate/{nodename}")
@@ -285,6 +286,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
             headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.text.startswith("-----BEGIN CERTIFICATE-----"))
 
         # 3. Check status - should be 'signed'
         resp = self.client.get(f"/puppet-ca/v1/certificate_status/{nodename}")

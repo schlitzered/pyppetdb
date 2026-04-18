@@ -8,7 +8,6 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
-from pyppetdb.ca.utils import CAUtils
 from pyppetdb.model.ca_authorities import CAAuthorityGet
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
 from pyppetdb.model.ca_authorities import CACRL
