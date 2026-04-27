@@ -151,6 +151,7 @@ class ConfigCA(BaseModel):
 
 class ConfigJobs(BaseModel):
     maxNodesPerJob: int = 1000
+    expireSeconds: int = 3600
 
 
 class Config(BaseSettings):

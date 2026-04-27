@@ -219,6 +219,7 @@ class RemoteExecutorJobManager:
 
         return RemoteExecutorMsgBodyStartJob(
             job_id=node_job.job_id,
+            job_definition_id=definition.id,
             executable=definition.executable,
             user=definition.user,
             group=definition.group,

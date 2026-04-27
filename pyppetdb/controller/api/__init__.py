@@ -71,6 +71,7 @@ class ControllerApi:
         config: Config,
         redactor: NodesSecretsRedactor,
         pyhiera,
+        ws_hub,
     ):
         self._router = APIRouter()
         self._log = log
@@ -108,6 +109,7 @@ class ControllerApi:
                 config=config,
                 redactor=redactor,
                 pyhiera=pyhiera,
+                ws_hub=ws_hub,
             ).router,
             prefix="/v1",
             responses={404: {"description": "Not found"}},
