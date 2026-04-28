@@ -6,12 +6,6 @@ from itsdangerous import URLSafeTimedSerializer
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
-from pyppetdb.crud.nodes import CrudNodes
-from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
-from pyppetdb.crud.jobs_jobs import CrudJobs
-from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
-from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
-from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.ws.hub import WsHub
 
 
@@ -22,12 +16,7 @@ class ControllerApiV1Ws:
         config: Config,
         authorize: AuthorizePyppetDB,
         authorize_client_cert: AuthorizeClientCert,
-        crud_nodes: CrudNodes,
-        crud_jobs: CrudJobs,
-        crud_job_definitions: CrudJobsDefinitions,
-        crud_node_jobs: CrudJobsNodeJobs,
-        crud_pyppetdb_nodes: CrudPyppetDBNodes,
-        redactor: NodesSecretsRedactor,
+        ws_hub: WsHub,
     ):
         self._authorize = authorize
         self._authorize_client_cert = authorize_client_cert
@@ -35,17 +24,7 @@ class ControllerApiV1Ws:
         self._log = log
         self._router = APIRouter(tags=["websocket"])
 
-        self._ws_hub = WsHub(
-            log=log,
-            config=config,
-            crud_nodes=crud_nodes,
-            crud_jobs=crud_jobs,
-            crud_job_definitions=crud_job_definitions,
-            crud_node_jobs=crud_node_jobs,
-            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
-            redactor=redactor,
-            authorize_client_cert=authorize_client_cert,
-        )
+        self._ws_hub = ws_hub
 
         self.router.add_api_route(
             "/ws/token",

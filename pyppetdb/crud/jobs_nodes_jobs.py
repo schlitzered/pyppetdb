@@ -1,4 +1,5 @@
 import typing
+import datetime
 import pymongo
 
 from pyppetdb.crud.common import CrudMongo
@@ -30,6 +31,7 @@ class CrudJobsNodeJobs(CrudMongo):
     ):
         if not node_ids:
             return
+        now = datetime.datetime.now()
         docs = [
             {
                 "id": f"{job_id}:{node_id}",
@@ -38,10 +40,31 @@ class CrudJobsNodeJobs(CrudMongo):
                 "node_id": node_id,
                 "status": "scheduled",
                 "created_by": created_by,
+                "created_at": now,
             }
             for node_id in node_ids
         ]
         await self.coll.insert_many(documents=docs)
+
+    async def expire_scheduled_jobs(
+        self, timeout_seconds: int
+    ) -> typing.List[NodeJobGet]:
+        threshold = datetime.datetime.now() - datetime.timedelta(
+            seconds=timeout_seconds
+        )
+        query = {"status": "scheduled", "created_at": {"$lt": threshold}}
+
+        expired_jobs = []
+        async for doc in self.coll.find(filter=query):
+            expired_jobs.append(NodeJobGet(**self._format(doc)))
+
+        if expired_jobs:
+            await self.coll.update_many(
+                filter=query,
+                update={"$set": {"status": "failed"}},
+            )
+
+        return expired_jobs
 
     async def get_busy_nodes_for_definition(
         self, definition_id: str, node_ids: list[str]

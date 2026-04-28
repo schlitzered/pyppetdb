@@ -115,6 +115,7 @@ class ControllerApiV1:
         config: Config,
         redactor: NodesSecretsRedactor,
         pyhiera,
+        ws_hub,
     ):
         self._router = APIRouter()
         self._log = log
@@ -373,12 +374,7 @@ class ControllerApiV1:
             config=self._config,
             authorize=authorize,
             authorize_client_cert=authorize_client_cert_puppet,
-            crud_nodes=crud_nodes,
-            crud_jobs=crud_jobs,
-            crud_job_definitions=crud_job_definitions,
-            crud_node_jobs=crud_node_jobs,
-            crud_pyppetdb_nodes=crud_pyppetdb_nodes,
-            redactor=redactor,
+            ws_hub=ws_hub,
         )
 
         self.router.include_router(

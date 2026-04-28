@@ -81,6 +81,14 @@ class WsHub:
     def subscriptions(self):
         return self._subscriptions
 
+    async def run(self):
+        """Start background tasks managed by the hub."""
+        await self.remote_executor.run()
+
+    def stop(self):
+        """Stop background tasks managed by the hub."""
+        self.remote_executor.stop()
+
     @property
     def job_run_id_to_via(self):
         return self._job_run_id_to_via

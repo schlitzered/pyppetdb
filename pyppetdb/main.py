@@ -66,6 +66,7 @@ from pyppetdb.model.users import UserPost
 
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
+from pyppetdb.ws.hub import WsHub
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.nodes_reports import NodesReportsRedactor
 from pyppetdb.crud.nodes_catalogs import NodesCatalogsRedactor
@@ -79,11 +80,32 @@ version = "0.0.0"
 settings = Config()
 
 
-async def dummy_sleep_background_task(log: logging.Logger):
-    log.info("starting sleep background task")
+async def expire_scheduled_jobs_worker(
+    log: logging.Logger,
+    config: Config,
+    crud_node_jobs: CrudJobsNodeJobs,
+    hub: WsHub,
+):
+    log.info("starting scheduled jobs expiration worker")
     while True:
-        await asyncio.sleep(5)
-        log.info("sleeping background task")
+        try:
+            expired_jobs = await crud_node_jobs.expire_scheduled_jobs(
+                timeout_seconds=config.jobs.expireSeconds
+            )
+            for job in expired_jobs:
+                log.warning(
+                    f"Job {job.job_id} for node {job.node_id} expired and marked as failed"
+                )
+                await hub.job_finished(
+                    node_id=job.node_id,
+                    job_id=job.job_id,
+                    status="failed",
+                    exit_code=1,
+                )
+        except Exception as e:
+            log.error(f"Error in scheduled jobs expiration worker: {e}")
+
+        await asyncio.sleep(60)
 
 
 async def ensure_default_ca_setup(
@@ -359,6 +381,26 @@ async def prepare_env():
     )
     env["ca_service"] = ca_service
 
+    authorize_client_cert_puppet = AuthorizeClientCert(
+        log=log,
+        trusted_cns=settings.app.puppet.trustedCns,
+        crud_ca_certificates=crud_ca_certificates,
+    )
+    env["authorize_client_cert_puppet"] = authorize_client_cert_puppet
+
+    ws_hub = WsHub(
+        log=log,
+        config=settings,
+        crud_nodes=crud_nodes,
+        crud_jobs=crud_jobs,
+        crud_job_definitions=crud_job_definitions,
+        crud_node_jobs=crud_node_jobs,
+        crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+        redactor=nodes_secrets_redactor,
+        authorize_client_cert=authorize_client_cert_puppet,
+    )
+    env["ws_hub"] = ws_hub
+
     pyhiera = PyHiera(
         log=log,
         config=settings.hiera,
@@ -400,13 +442,6 @@ async def prepare_env():
         crud_users_credentials=crud_users_credentials,
     )
     env["authorize_pyppetdb"] = authorize_pyppetdb
-
-    authorize_client_cert_puppet = AuthorizeClientCert(
-        log=log,
-        trusted_cns=settings.app.puppet.trustedCns,
-        crud_ca_certificates=crud_ca_certificates,
-    )
-    env["authorize_client_cert_puppet"] = authorize_client_cert_puppet
 
     authorize_client_cert_pdb = AuthorizeClientCert(
         log=log,
@@ -461,14 +496,29 @@ async def lifespan_dev(app: FastAPI):
         config=settings,
         pyhiera=env["pyhiera"],
         redactor=env["nodes_secrets_redactor"],
+        ws_hub=env["ws_hub"],
     )
     app.include_router(controller.router_dev)
 
     refresh_task = None
     expired_task = None
+    expire_jobs_task = None
     heartbeat_task = asyncio.create_task(
         pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
         name="pyppetdb-nodes-heartbeat",
+    )
+    expire_jobs_task = asyncio.create_task(
+        expire_scheduled_jobs_worker(
+            log=env["log"],
+            config=settings,
+            crud_node_jobs=env["crud_node_jobs"],
+            hub=env["ws_hub"],
+        ),
+        name="expire-scheduled-jobs",
+    )
+    ws_hub_task = asyncio.create_task(
+        env["ws_hub"].run(),
+        name="ws-hub-background",
     )
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
@@ -482,6 +532,11 @@ async def lifespan_dev(app: FastAPI):
     yield
     if heartbeat_task:
         heartbeat_task.cancel()
+    if expire_jobs_task:
+        expire_jobs_task.cancel()
+    if ws_hub_task:
+        env["ws_hub"].stop()
+        ws_hub_task.cancel()
     if refresh_task:
         refresh_task.cancel()
     if expired_task:
@@ -976,6 +1031,7 @@ async def main_run():
         config=settings,
         pyhiera=env["pyhiera"],
         redactor=env["nodes_secrets_redactor"],
+        ws_hub=env["ws_hub"],
     )
     apps = list()
     apps_tasks = list()
@@ -992,6 +1048,23 @@ async def main_run():
         asyncio.create_task(
             pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
             name="pyppetdb-nodes-heartbeat",
+        )
+    )
+    worker_tasks.append(
+        asyncio.create_task(
+            expire_scheduled_jobs_worker(
+                log=env["log"],
+                config=settings,
+                crud_node_jobs=env["crud_node_jobs"],
+                hub=env["ws_hub"],
+            ),
+            name="expire-scheduled-jobs",
+        )
+    )
+    worker_tasks.append(
+        asyncio.create_task(
+            env["ws_hub"].run(),
+            name="ws-hub-background",
         )
     )
     if settings.ca.enableCrlRefresh:
@@ -1036,6 +1109,8 @@ async def main_run():
         )
         if not stop_event.is_set():
             request_stop()
+
+        env["ws_hub"].stop()
 
         for t in worker_tasks + [all_tasks[-1]]:
             if not t.done():

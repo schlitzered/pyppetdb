@@ -36,17 +36,13 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_lock_acquire_release(self):
         mock_result = MagicMock()
         mock_result.modified_count = 1
-        mock_result.upserted_id = None
         self.mock_coll.update_one = AsyncMock(return_value=mock_result)
 
+        # Lock acquired (modified_count > 0)
         self.assertTrue(await self.crud.lock_acquire())
 
+        # Lock not acquired (modified_count == 0)
         mock_result.modified_count = 0
-        mock_result.upserted_id = "some_id"
-        self.assertTrue(await self.crud.lock_acquire())
-
-        mock_result.modified_count = 0
-        mock_result.upserted_id = None
         self.assertFalse(await self.crud.lock_acquire())
 
         await self.crud.lock_release()

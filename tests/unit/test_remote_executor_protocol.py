@@ -104,20 +104,12 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.protocol._job_manager.busy)
         self.assertIsNone(self.protocol._job_manager.current_job_id)
 
-    @patch(
-        "pyppetdb.ws.remote_executor.asyncio.sleep",
-        return_value=None,
-    )
-    async def test_poll_and_start_job(self, mock_sleep):
+    async def test_trigger_job_check(self):
         # Mock finding a job
         mock_node_job = MagicMock()
         mock_node_job.job_id = "job1"
 
-        async def stop_loop(*args, **kwargs):
-            self.protocol._running = False
-            return mock_node_job
-
-        self.mock_crud_node_jobs.get_oldest_scheduled.side_effect = stop_loop
+        self.mock_crud_node_jobs.get_oldest_scheduled.return_value = mock_node_job
 
         # Mock job and definition
         mock_job = MagicMock()
@@ -127,6 +119,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_jobs.get.return_value = mock_job
 
         mock_def = MagicMock()
+        mock_def.id = "def1"
         mock_def.executable = "/bin/ls"
         mock_def.params_template = []
         mock_def.user = "root"
@@ -135,13 +128,16 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
 
         self.protocol._send_message = AsyncMock()
 
-        await asyncio.wait_for(self.protocol._poll_for_jobs(), timeout=1.0)
+        await self.protocol.trigger_job_check()
 
-        self.mock_crud_node_jobs.get_oldest_scheduled.assert_called()
+        self.mock_crud_node_jobs.get_oldest_scheduled.assert_called_with(
+            node_id="node1"
+        )
         self.protocol._send_message.assert_called_once()
         args = self.protocol._send_message.call_args[1]
         self.assertEqual(args["msg_type"], "start_job")
         self.assertEqual(args["body"].job_id, "job1")
+        self.assertEqual(args["body"].job_definition_id, "def1")
 
     @patch(
         "pyppetdb.ws.remote_executor.asyncio.sleep",
@@ -149,7 +145,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
     )
     async def test_run_disconnect(self, mock_sleep):
         self.mock_ws.receive_text.side_effect = WebSocketDisconnect()
-        self.protocol._poll_for_jobs = AsyncMock()
+        self.protocol.trigger_job_check = AsyncMock()
         self.protocol._heartbeat = AsyncMock()
 
         self.mock_crud_nodes.get.return_value = MagicMock(remote_agent=None)

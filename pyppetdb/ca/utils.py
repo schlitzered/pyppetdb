@@ -206,13 +206,35 @@ class CAUtils:
             )
         )
 
-        allowed_extensions = (x509.SubjectAlternativeName,)
+        cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        san_extension = None
+        try:
+            san_extension = csr.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+        except x509.ExtensionNotFound:
+            pass
+
+        if san_extension:
+            san_values = list(san_extension.value)
+            dns_names = san_extension.value.get_values_for_type(x509.DNSName)
+            if cn not in dns_names:
+                san_values.append(x509.DNSName(cn))
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName(san_values),
+                critical=san_extension.critical,
+            )
+        else:
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName([x509.DNSName(cn)]),
+                critical=False,
+            )
 
         for extension in csr.extensions:
-            if isinstance(extension.value, allowed_extensions):
-                builder = builder.add_extension(
-                    extension.value, critical=extension.critical
-                )
+            if isinstance(extension.value, x509.SubjectAlternativeName):
+                continue
+            # Future-proof: handle other allowed extensions if needed
+            pass
 
         cert = builder.sign(ca_key, hashes.SHA256())
 
@@ -251,13 +273,35 @@ class CAUtils:
             )
         )
 
-        allowed_extensions = (x509.SubjectAlternativeName,)
+        cn = old_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        san_extension = None
+        try:
+            san_extension = old_cert.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+        except x509.ExtensionNotFound:
+            pass
+
+        if san_extension:
+            san_values = list(san_extension.value)
+            dns_names = san_extension.value.get_values_for_type(x509.DNSName)
+            if cn not in dns_names:
+                san_values.append(x509.DNSName(cn))
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName(san_values),
+                critical=san_extension.critical,
+            )
+        else:
+            builder = builder.add_extension(
+                x509.SubjectAlternativeName([x509.DNSName(cn)]),
+                critical=False,
+            )
 
         for extension in old_cert.extensions:
-            if isinstance(extension.value, allowed_extensions):
-                builder = builder.add_extension(
-                    extension.value, critical=extension.critical
-                )
+            if isinstance(extension.value, x509.SubjectAlternativeName):
+                continue
+            # Future-proof: handle other allowed extensions if needed
+            pass
 
         new_cert = builder.sign(ca_key, hashes.SHA256())
 

@@ -37,6 +37,7 @@ class RemoteExecutorMsgBodyHeartbeat(BaseModel):
 class RemoteExecutorMsgBodyStartJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
+    job_definition_id: str
     executable: str
     user: str
     group: str

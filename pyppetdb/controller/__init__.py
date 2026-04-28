@@ -78,6 +78,7 @@ class Controller:
         config: Config,
         redactor: NodesSecretsRedactor,
         pyhiera,
+        ws_hub,
     ):
         self._log = log
         self._router_dev = APIRouter()
@@ -116,6 +117,7 @@ class Controller:
             config=config,
             redactor=redactor,
             pyhiera=pyhiera,
+            ws_hub=ws_hub,
         ).router
 
         router_oauth = ControllerOauth(

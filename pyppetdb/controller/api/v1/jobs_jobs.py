@@ -143,7 +143,10 @@ class ControllerApiV1JobsJobs:
         )
 
         limit = self._config.jobs.maxNodesPerJob
-        count = await self._crud_nodes.count(fact=data.node_filter)
+        count = await self._crud_nodes.count(
+            fact=data.node_filter,
+            remote_agent_connected=True,
+        )
 
         if count > limit:
             raise HTTPException(
@@ -153,6 +156,7 @@ class ControllerApiV1JobsJobs:
 
         nodes_result = await self._crud_nodes.search(
             fact=data.node_filter,
+            remote_agent_connected=True,
             fields=["id"],
             limit=limit,
         )
