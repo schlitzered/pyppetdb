@@ -501,8 +501,6 @@ async def lifespan_dev(app: FastAPI):
     app.include_router(controller.router_dev)
 
     refresh_task = None
-    expired_task = None
-    expire_jobs_task = None
     heartbeat_task = asyncio.create_task(
         pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
         name="pyppetdb-nodes-heartbeat",

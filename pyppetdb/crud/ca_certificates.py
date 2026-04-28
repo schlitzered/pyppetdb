@@ -1,6 +1,5 @@
 import logging
 import typing
-import datetime
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
 
