@@ -545,7 +545,7 @@ class WsRemoteExecutor:
                         doc = change.get("fullDocument")
                         if not doc:
                             continue
-                        
+
                         node_id = doc.get("node_id")
                         if node_id in self._local_protocols:
                             protocol = self._local_protocols[node_id]

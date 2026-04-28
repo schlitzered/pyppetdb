@@ -130,7 +130,9 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
 
         await self.protocol.trigger_job_check()
 
-        self.mock_crud_node_jobs.get_oldest_scheduled.assert_called_with(node_id="node1")
+        self.mock_crud_node_jobs.get_oldest_scheduled.assert_called_with(
+            node_id="node1"
+        )
         self.protocol._send_message.assert_called_once()
         args = self.protocol._send_message.call_args[1]
         self.assertEqual(args["msg_type"], "start_job")

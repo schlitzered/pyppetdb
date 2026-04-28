@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
-from fastapi import WebSocketDisconnect
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 

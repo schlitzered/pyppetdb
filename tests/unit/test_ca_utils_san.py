@@ -1,7 +1,5 @@
 import unittest
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.x509.oid import NameOID
 from pyppetdb.ca.utils import CAUtils
 
 
@@ -70,16 +68,16 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_renew_cert_inject_san_no_original_san(self):
         cn = "test-node"
         csr_pem, _ = CAUtils.generate_csr(cn=cn)
-        
-        # Manually sign without SAN first to test renewal injection 
+
+        # Manually sign without SAN first to test renewal injection
         # Actually CAUtils.sign_csr now ALWAYS injects SAN, so I have to test if it keeps it.
-        
+
         signed_cert_pem = CAUtils.sign_csr(
             csr_pem=csr_pem,
             ca_cert_pem=self.ca_cert_pem,
             ca_key_pem=self.ca_key_pem,
         )
-        
+
         renewed_cert_pem = CAUtils.renew_cert(
             cert_pem=signed_cert_pem,
             ca_cert_pem=self.ca_cert_pem,
