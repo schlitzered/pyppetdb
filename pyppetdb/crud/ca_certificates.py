@@ -1,5 +1,6 @@
 import logging
 import typing
+import datetime
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
 
@@ -37,6 +38,15 @@ class CrudCACertificates(CrudMongo):
                 ("status", pymongo.ASCENDING),
                 ("cn", pymongo.ASCENDING),
             ]
+        )
+        await self.coll.create_index(
+            [("not_after", pymongo.ASCENDING)], expireAfterSeconds=0
+        )
+        # Ensure lock document exists
+        await self.coll.update_one(
+            {"id": "expired_revocation_lock"},
+            {"$setOnInsert": {"locked_at": None}},
+            upsert=True,
         )
         self.log.info(f"creating {self.resource_type} indices, done")
 
@@ -99,8 +109,6 @@ class CrudCACertificates(CrudMongo):
         return revoked
 
     async def revoke_expired(self) -> list[dict]:
-        import datetime
-
         now = datetime.datetime.now(datetime.timezone.utc)
         query = {
             "status": "signed",
@@ -123,8 +131,6 @@ class CrudCACertificates(CrudMongo):
         return revoked_info
 
     async def lock_acquire(self, lock_timeout_minutes: int = 5) -> bool:
-        import datetime
-
         now = datetime.datetime.now(datetime.timezone.utc)
         timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
 
@@ -137,12 +143,8 @@ class CrudCACertificates(CrudMongo):
                 ],
             },
             {"$set": {"locked_at": now}},
-            upsert=True,
         )
-        # Note: if it's an upsert it might not count as modified_count > 0 in some cases
-        # but with $set and the filter, if it was newly created it should be fine.
-        # Wait, if it was upserted, it means it didn't exist, so we got the lock.
-        return result.modified_count > 0 or result.upserted_id is not None
+        return result.modified_count > 0
 
     async def lock_release(self) -> None:
         await self.coll.update_one(

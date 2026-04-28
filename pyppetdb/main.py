@@ -516,6 +516,10 @@ async def lifespan_dev(app: FastAPI):
         ),
         name="expire-scheduled-jobs",
     )
+    ws_hub_task = asyncio.create_task(
+        env["ws_hub"].run(),
+        name="ws-hub-background",
+    )
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
@@ -530,6 +534,9 @@ async def lifespan_dev(app: FastAPI):
         heartbeat_task.cancel()
     if expire_jobs_task:
         expire_jobs_task.cancel()
+    if ws_hub_task:
+        env["ws_hub"].stop()
+        ws_hub_task.cancel()
     if refresh_task:
         refresh_task.cancel()
     if expired_task:
@@ -1054,6 +1061,12 @@ async def main_run():
             name="expire-scheduled-jobs",
         )
     )
+    worker_tasks.append(
+        asyncio.create_task(
+            env["ws_hub"].run(),
+            name="ws-hub-background",
+        )
+    )
     if settings.ca.enableCrlRefresh:
         worker_tasks.append(
             asyncio.create_task(
@@ -1096,6 +1109,8 @@ async def main_run():
         )
         if not stop_event.is_set():
             request_stop()
+
+        env["ws_hub"].stop()
 
         for t in worker_tasks + [all_tasks[-1]]:
             if not t.done():

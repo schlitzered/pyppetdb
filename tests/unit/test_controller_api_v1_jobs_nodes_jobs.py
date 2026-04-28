@@ -1,4 +1,5 @@
 import unittest
+import datetime
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from fastapi import Request
@@ -29,6 +30,7 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1",
             status="running",
             created_by="admin",
+            created_at=datetime.datetime.now(),
             log_blobs=[],
         )
         self.mock_crud.get = AsyncMock(return_value=mock_job)
@@ -60,6 +62,7 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1",
             status="running",
             created_by="admin",
+            created_at=datetime.datetime.now(),
             log_blobs=[],
         )
         self.mock_crud.search = AsyncMock(

@@ -281,10 +281,12 @@ class RemoteExecutorProtocol:
     async def run(self):
         await self._job_manager.initialize()
 
-        polling_task = asyncio.create_task(coro=self._poll_for_jobs())
         heartbeat_task = asyncio.create_task(coro=self._heartbeat())
 
         try:
+            # Initial catch-up: check for jobs immediately on connection
+            await self.trigger_job_check()
+
             while self._running:
                 data = await self._websocket.receive_text()
                 self._last_activity = time.time()
@@ -297,16 +299,31 @@ class RemoteExecutorProtocol:
             raise
         finally:
             self._running = False
-            polling_task.cancel()
             heartbeat_task.cancel()
             try:
                 await asyncio.gather(
-                    polling_task,
                     heartbeat_task,
                     return_exceptions=True,
                 )
             except Exception:
                 pass
+
+    async def trigger_job_check(self):
+        if not self._running or self._job_manager.busy:
+            return
+
+        node_job = await self._crud_node_jobs.get_oldest_scheduled(
+            node_id=self._node_id
+        )
+        if node_job:
+            try:
+                msg_body = await self._job_manager.start_job(node_job=node_job)
+                await self._send_message(
+                    msg_type="start_job",
+                    body=msg_body,
+                )
+            except Exception as e:
+                self._log.error(f"Error triggering job for {self._node_id}: {e}")
 
     async def _handle_message(
         self,
@@ -337,8 +354,13 @@ class RemoteExecutorProtocol:
                 )
             elif msg_type == "finish" and isinstance(body, RemoteExecutorMsgBodyFinish):
                 await self._job_manager.handle_finish(body=body)
+                # After finishing, check if there's another job waiting
+                await self.trigger_job_check()
             elif msg_type == "status" and isinstance(body, RemoteExecutorMsgBodyStatus):
                 await self._job_manager.handle_status(body=body)
+                # If agent reported it became idle, check for jobs
+                if not body.busy:
+                    await self.trigger_job_check()
             elif msg_type == "log_chunks" and isinstance(
                 body, RemoteExecutorMsgBodyLogChunks
             ):
@@ -501,6 +523,40 @@ class WsRemoteExecutor:
         self._via = via
 
         self._local_protocols: Dict[str, RemoteExecutorProtocol] = {}
+        self._running = True
+
+    async def run(self):
+        """Start the background Change Stream watcher."""
+        self._log.info("Starting Remote Executor job watcher Change Stream")
+        while self._running:
+            try:
+                pipeline = [
+                    {
+                        "$match": {
+                            "operationType": {"$in": ["insert", "replace", "update"]},
+                            "fullDocument.status": "scheduled",
+                        }
+                    }
+                ]
+                async with self._crud_node_jobs.coll.watch(
+                    pipeline, full_document="updateLookup"
+                ) as stream:
+                    async for change in stream:
+                        doc = change.get("fullDocument")
+                        if not doc:
+                            continue
+                        
+                        node_id = doc.get("node_id")
+                        if node_id in self._local_protocols:
+                            protocol = self._local_protocols[node_id]
+                            # Schedule the job check in the background
+                            asyncio.create_task(protocol.trigger_job_check())
+            except Exception as e:
+                self._log.error(f"Error in Change Stream watcher: {e}")
+                await asyncio.sleep(5)
+
+    def stop(self):
+        self._running = False
 
     def register_protocol(self, node_id: str, protocol: RemoteExecutorProtocol):
         old_protocol = self._local_protocols.get(node_id)
