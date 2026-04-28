@@ -1,115 +1,108 @@
 # Architecture & Deployment Scenarios
 
-This page describes common deployment scenarios for **pyppetdb** using Mermaid diagrams.
+This page describes common deployment scenarios and data flows for **pyppetdb**.
 
-## 1. Full Proxy and Backend Architecture
+## 1. Component Overview
 
-In a standard deployment, pyppetdb acts as a high-performance middleware between your Puppet nodes and the traditional Puppet infrastructure (Puppetserver, PuppetDB).
+pyppetdb consists of three primary functional components, typically listening on different ports:
+
+*   **Puppet API Proxy (Port 8001)**: Handles Puppetserver and CA replacement/proxying.
+*   **PuppetDB API Proxy (Port 8002)**: Handles PuppetDB query proxying.
+*   **Management API (Port 8000)**: The main REST API for users, frontends, and inter-service communication.
 
 ```mermaid
 graph TD
-    subgraph "Managed Infrastructure"
-        Node1[Puppet Node A]
-        Node2[Puppet Node B]
-        NodeN[Puppet Node ...]
+    subgraph "External Access"
+        User[Human / CLI / Web UI]
+        Agent[Puppet Agent]
     end
 
-    LB[Load Balancer]
-
-    subgraph "pyppetdb High Availability Cluster"
-        P1[pyppetdb Instance 1]
-        P2[pyppetdb Instance 2]
-        P3[pyppetdb Instance N]
+    subgraph "Ingress Layer"
+        Proxy[Apache / Nginx]
     end
 
-    subgraph "State & Storage"
-        DB[(MongoDB Cluster)]
+    subgraph "pyppetdb Service"
+        direction TB
+        API_8000[Management API :8000]
+        Proxy_8001[Puppet Proxy :8001]
+        PDB_8002[PuppetDB Proxy :8002]
     end
 
-    subgraph "Legacy/Upstream Infrastructure (Optional)"
+    subgraph "Backend Infrastructure"
         PS[Puppetserver]
         PDB[PuppetDB]
+        DB[(MongoDB)]
     end
 
-    Node1 & Node2 & NodeN --> LB
-    LB --> P1 & P2 & P3
-    P1 & P2 & P3 <--> DB
-    P1 & P2 & P3 -- "Proxy & Cache" --> PS
-    P1 & P2 & P3 -- "Proxy Queries" --> PDB
+    User --> Proxy --> API_8000
+    Agent --> Proxy_8001
+    Proxy_8001 --> PS
+    PS --> PDB_8002
+    PDB_8002 --> PDB
+    API_8000 & Proxy_8001 & PDB_8002 <--> DB
 ```
 
-## 2. Catalog Caching & Redaction Flow
+## 2. Agent Interaction & Data Flow
 
-This diagram illustrates how pyppetdb offloads catalog requests and ensures sensitive data is redacted before reaching the node.
-
-```mermaid
-sequenceDiagram
-    participant Node
-    participant pyppetdb
-    participant MongoDB
-    participant Puppetserver
-
-    Node->>pyppetdb: GET /puppet/v3/catalog/{node}
-    pyppetdb->>MongoDB: Query Catalog Cache (TTL check)
-    
-    alt Cache Hit
-        MongoDB-->>pyppetdb: Return Cached Catalog
-        pyppetdb->>pyppetdb: Redact Secrets
-        pyppetdb-->>Node: 200 OK (Cached Catalog)
-    else Cache Miss
-        pyppetdb->>Puppetserver: POST /puppet/v3/catalog/{node}
-        Puppetserver-->>pyppetdb: Return Compiled Catalog
-        pyppetdb->>MongoDB: Store Catalog in Cache
-        pyppetdb->>pyppetdb: Redact Secrets
-        pyppetdb-->>Node: 200 OK (Fresh Catalog)
-    end
-```
-
-## 3. High-Availability Puppet CA
-
-Unlike the standard Puppet CA which is often a single point of failure, pyppetdb allows any node in the cluster to handle CA operations by backing the certificate state in MongoDB.
+From the perspective of a Puppet Agent, pyppetdb acts as the entry point for both catalog compilation and data submission. Note that the Puppetserver must be co-located or accessible to the Puppet Proxy.
 
 ```mermaid
 graph LR
-    subgraph "Nodes"
-        N1[Node 1]
-        N2[Node 2]
-    end
+    Node[Puppet Agent]
+    P1[pyppetdb :8001<br/>Puppet Proxy]
+    PS[Puppetserver]
+    P2[pyppetdb :8002<br/>PuppetDB Proxy]
+    PDB[PuppetDB]
 
-    subgraph "pyppetdb CA Pool"
-        CA1[pyppetdb CA Instance A]
-        CA2[pyppetdb CA Instance B]
-    end
-
-    DB[(Shared MongoDB)]
-
-    N1 -- "CSR / Cert Refresh" --> CA1
-    N2 -- "CSR / Cert Refresh" --> CA2
-    CA1 <--> DB
-    CA2 <--> DB
+    Node -- "1. Catalog/Cert" --> P1
+    P1 -- "2. Proxy" --> PS
+    PS -- "3. Store Facts/Catalog" --> P2
+    P2 -- "4. Optional Forward" --> PDB
 ```
 
-## 4. Secure Job Execution (pyppetdb-agent)
+## 3. Secret Redaction Strategy
 
-The job execution engine uses a secure, bidirectional communication channel between the pyppetdb API and the agents.
+Redaction is applied at the **Management API** level. The Puppet Agent requires unredacted secrets to configure the system, while humans and external consumers of the API see redacted data.
 
 ```mermaid
-graph RL
-    subgraph "Management Layer"
-        UI[Web UI / CLI]
-        API[pyppetdb API]
-        Hub[WebSocket Hub]
-    end
+sequenceDiagram
+    participant Node as Puppet Agent
+    participant P1 as pyppetdb :8001
+    participant PS as Puppetserver
+    participant DB as MongoDB
+    participant API as pyppetdb :8000
+    participant User as Human / UI
 
-    subgraph "Managed Node"
-        Agent[pyppetdb Agent]
-        Jobs[Pre-defined Job Scripts]
-    end
+    Note over Node, PS: Catalog Compilation
+    Node->>P1: GET /puppet/v3/catalog
+    P1->>PS: Proxy Request
+    PS-->>P1: Compiled Catalog (Full Secrets)
+    P1->>DB: Store Catalog (Full Secrets)
+    P1-->>Node: Return Catalog (Full Secrets)
+    
+    Note over API, User: API Consumption
+    User->>API: GET /api/v1/nodes/{node}/catalog
+    API->>DB: Fetch Catalog
+    DB-->>API: Return Raw Catalog
+    API->>API: Redact Secrets
+    API-->>User: Return Redacted Catalog
+```
 
-    UI -- "Trigger Job" --> API
-    API -- "Instruction" --> Hub
-    Hub -- "Encrypted WS Message" --> Agent
-    Agent -- "Validate & Execute" --> Jobs
-    Agent -- "Real-time Log Stream" --> Hub
-    Hub -- "Updates" --> UI
+## 4. Secure Job Execution (Inter-API WebSocket)
+
+When a user triggers a job, the request traverses the management API and uses an internal WebSocket channel to reach the specific pyppetdb instance managing the agent connection.
+
+```mermaid
+graph TD
+    User[Human / UI]
+    API[pyppetdb :8000<br/>Management API]
+    WS[Inter-API WebSocket]
+    Proxy[pyppetdb :8001<br/>Puppet Proxy]
+    Agent[pyppetdb-agent]
+
+    User -- "Trigger Job" --> API
+    API -- "Instruction" --> WS
+    WS -- "Relay" --> Proxy
+    Proxy -- "WebSocket" --> Agent
+    Agent -- "Execute Job" --> Jobs[Pre-defined Scripts]
 ```
