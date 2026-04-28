@@ -441,18 +441,328 @@ server_urls = https://puppetsrv-1.example.com:8002
 ### PuppetDB
 No config changes needed on PuppetDB
 
-For a complete list of all configuration variables, see the [Configuration Reference](configuration_reference.md).
+
+## MongoDB Setup
+
+**pyppetdb** requires a MongoDB **Replica Set** to function correctly, even if you are only running a single-node instance.
+This is because the application makes heavy use of **MongoDB Change Streams**
+to react to data modifications in real-time, which avoids the performance overhead of constant database polling.
+
+### Single-Node Development Setup (No Password)
+
+For development or small-scale testing, you can initialize a single-node replica set with the following steps:
+
+1.  **Install MongoDB**: Follow the [official MongoDB installation guide](https://www.mongodb.com/docs/manual/installation/) for your operating system.
+2.  **Configure Replication**: Edit your `mongod.conf` (usually in `/etc/mongod.conf`) to enable replication:
+    ```yaml
+    replication:
+      replSetName: "rs0"
+    ```
+3.  **Restart and Initialize**: Restart the MongoDB service and initialize the replica set via the `mongosh` shell:
+    ```bash
+    sudo systemctl restart mongod
+    mongosh --eval "rs.initiate()"
+    ```
+
+### Production Recommendations
+
+*   **High Availability**: For production environments, it is strongly recommended to deploy at least a **3-node replica set** to ensure fault tolerance and data consistency.
+*   **Security**: Always enable authentication and configure robust Access Control Lists (ACLs).
+*   **Sharding**: pyppetdb supports sharded MongoDB clusters for massive scale. Detailed instructions for configuring node placement and sharding will be covered on a separate page.
 
 ---
 
 ## Web Server Configuration
 
-### Nginx (Example)
-```nginx
-# TBD: Example configuration for Nginx as a reverse proxy
+
+### Nginx
+
+Nginx is used to serve the `pyppetdb-web` frontend and act as a reverse proxy for the `pyppetdb` API.
+
+#### 1. Install Nginx
+On Debian/Ubuntu:
+```bash
+sudo apt-get install nginx
 ```
 
-### Apache (Example)
+#### 2. Install pyppetdb-web
+```bash
+sudo mkdir -p /opt/pyppetdb_web
+cd /opt/pyppetdb_web
+sudo wget https://github.com/schlitzered/pyppetdb-web/releases/download/v0.0.4/pyppetdb-web-0.0.4.tar.gz
+sudo tar xf pyppetdb-web-0.0.4.tar.gz
+sudo rm pyppetdb-web-0.0.4.tar.gz
+```
+
+#### 3. Configure Nginx
+Create a new configuration file at **`/etc/nginx/conf.d/pyppetdb.conf`**:
+
+```nginx
+server {
+    listen 80;
+    server_name _; # Change this to your domain if needed
+
+    root /opt/pyppetdb_web/;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # Single Page Application routing
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API Proxy and WebSockets
+    location ~ ^/(api|docs|oauth|openapi\.json|versions) {
+        proxy_pass https://127.0.0.1:8000;
+        
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Increase timeouts for long-running log streams
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    # Static assets caching
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, no-transform";
+    }
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
+}
+```
+
+#### 4. Enable and Start Nginx
+```bash
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+### Apache
+
+Apache can be used as an alternative to Nginx. Ensure the following modules are enabled: `proxy`, `proxy_http`, `proxy_wstunnel`, `rewrite`, `headers`, `deflate`, and `ssl`.
+
+#### 1. Enable Required Modules
+```bash
+sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers deflate ssl
+```
+
+#### 2. Configure Apache
+Create a new virtual host configuration, for example at **`/etc/apache2/sites-available/pyppetdb.conf`**:
+
 ```apache
-# TBD: Example configuration for Apache as a reverse proxy
+<VirtualHost *:80>
+    ServerName _; # Change this to your domain if needed
+    DocumentRoot /opt/pyppetdb_web
+
+    <Directory /opt/pyppetdb_web>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+
+        # Single Page Application routing
+        RewriteEngine On
+        RewriteBase /
+        RewriteRule ^index\.html$ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteRule . /index.html [L]
+    </Directory>
+
+    # API Proxy and WebSockets settings for Backend
+    SSLProxyEngine on
+    SSLProxyVerify none
+    SSLProxyCheckPeerCN off
+    SSLProxyCheckPeerName off
+    SSLProxyCheckPeerExpire off
+
+    ProxyRequests Off
+    ProxyPreserveHost On
+
+    # WebSocket support (must come before standard proxy)
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/(api|docs|oauth|openapi\.json|versions)(.*) wss://127.0.0.1:8000/$1$2 [P,L]
+
+    # Standard proxy for API paths
+    ProxyPassMatch ^/(api|docs|oauth|openapi\.json|versions) https://127.0.0.1:8000
+    ProxyPassReverse / https://127.0.0.1:8000
+
+    # Increase timeouts for long-running log streams
+    ProxyTimeout 3600
+
+    # Compression
+    AddOutputFilterByType DEFLATE text/plain text/html text/xml text/css application/xml application/xhtml+xml application/rss+xml application/javascript application/x-javascript application/json
+
+    # Static assets caching
+    <LocationMatch "^/assets/">
+        Header set Cache-Control "max-age=31536000, public, no-transform"
+    </LocationMatch>
+
+    # Security headers
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Content-Type-Options "nosniff"
+</VirtualHost>
+```
+
+#### 3. Enable the Site and Restart Apache
+```bash
+sudo a2ensite pyppetdb.conf
+sudo systemctl restart apache2
+```
+
+---
+
+## Initialization
+
+Before starting the service, you must perform several one-time initialization steps.
+Ensure you have your virtual environment activated and are in the pyppetdb directory.
+
+```bash
+source /opt/pyppetdb/bin/activate
+cd /opt/pyppetdb
+```
+
+The `pyppetdb` command provides several sub-commands for initialization:
+
+```bash
+pyppetdb --help
+```
+
+**Output:**
+```text
+usage: pyppetdb [-h] {create-admin,init-ca,import-puppet-ca} ...
+
+positional arguments:
+  {create-admin,init-ca,import-puppet-ca}
+    create-admin        create an admin user
+    init-ca             initialize the default puppet ca and generate a server cert
+    import-puppet-ca    Import an existing Puppet CA into pyppetdb
+
+options:
+  -h, --help            show this help message and exit
+```
+
+### 1. Create Administrative User
+
+Use the `create-admin` command to set up your first user.
+
+```bash
+# Check available options
+pyppetdb create-admin --help
+```
+
+**Output:**
+```text
+usage: pyppetdb create-admin [-h] [--user-id USER_ID] [--email EMAIL] [--name NAME] [--password PASSWORD]
+
+options:
+  -h, --help           show this help message and exit
+  --user-id USER_ID
+  --email EMAIL
+  --name NAME
+  --password PASSWORD
+```
+
+**Example Call:**
+```bash
+pyppetdb create-admin --user-id admin --email admin@example.com --name "System Admin" --password "ChangeMe123!"
+```
+
+### 2. Configure Certificate Authority
+
+Depending on your environment, you can either import an existing Puppet CA or initialize a completely fresh one.
+
+#### Option A: Import Existing Puppet CA
+If you are migrating from a standard Puppetserver, you can import the existing CA directory.
+
+```bash
+pyppetdb import-puppet-ca --help
+```
+
+**Output:**
+```text
+usage: pyppetdb import-puppet-ca [-h] --ca-dir CA_DIR
+
+options:
+  -h, --help       show this help message and exit
+  --ca-dir CA_DIR  Path to the Puppet CA directory (e.g., /etc/puppetlabs/puppetserver/ca)
+```
+
+**Example Call:**
+```bash
+pyppetdb import-puppet-ca --ca-dir /etc/puppetlabs/puppetserver/ca
+```
+
+#### Option B: Initialize Fresh CA
+If you are starting from scratch, use `init-ca` to generate the root certificates and the initial server certificate.
+
+```bash
+pyppetdb init-ca --help
+```
+
+**Output:**
+```text
+usage: pyppetdb init-ca [-h] [--cn CN] [--alt-names ALT_NAMES] [--ca-path CA_PATH] [--cert-path CERT_PATH] [--key-path KEY_PATH]
+
+options:
+  -h, --help            show this help message and exit
+  --cn CN               The common name for the server certificate
+  --alt-names ALT_NAMES
+                        Optional comma-separated list of SANs
+  --ca-path CA_PATH     Path to save the CA certificate (default: /etc/puppetlabs/puppet/ssl/certs/ca.pem)
+  --cert-path CERT_PATH
+                        Path to save the server certificate
+  --key-path KEY_PATH   Path to save the server private key
+```
+
+---
+
+## Starting pyppetdb
+
+Once initialized, you can start the application by running the `pyppetdb` command. Note that the process runs in the foreground by default.
+
+### Systemd Unit File
+
+For production deployments, it is recommended to run pyppetdb as a systemd service. Create the following file at **`/etc/systemd/system/pyppetdb.service`**:
+
+```ini
+[Unit]
+Description=pyppetdb service
+After=network.target mongodb.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/pyppetdb
+ExecStart=/opt/pyppetdb/bin/pyppetdb
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Enable and Start
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable pyppetdb
+sudo systemctl start pyppetdb
 ```
