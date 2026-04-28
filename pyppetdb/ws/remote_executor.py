@@ -246,6 +246,7 @@ class RemoteExecutorProtocol:
         self._node_id = node_id
         self._websocket = websocket
         self._crud_node_jobs = crud_node_jobs
+        self._redactor = redactor
 
         self._log_handler = RemoteExecutorLogHandler(
             log=log,
@@ -393,9 +394,13 @@ class RemoteExecutorProtocol:
         body: RemoteExecutorMsgBodyLogChunkData,
     ):
         if body.request_id in self.pending_agent_requests:
-            self.pending_agent_requests[body.request_id].set_result(
-                [log.model_dump() for log in body.data]
-            )
+            redacted_data = []
+            for log in body.data:
+                entry = log.model_dump()
+                entry["msg"] = self._redactor.redact(entry["msg"])
+                redacted_data.append(entry)
+
+            self.pending_agent_requests[body.request_id].set_result(redacted_data)
 
     async def request_log_chunks(
         self,
