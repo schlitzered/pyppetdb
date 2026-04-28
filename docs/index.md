@@ -3,6 +3,8 @@
 Welcome to **pyppetdb**, a high-performance, modular replacement and enhancement for various
 components of the Puppet infrastructure.
 
+For a visual overview of how it fits into your environment, see the [Architecture & Deployment Scenarios](architecture.md) page.
+
 Originally conceived as a lightweight replacement for PuppetDB, pyppetdb has evolved into a
 versatile middleware layer that sits between your Puppet nodes, Puppetservers, and PuppetDB.
 It is designed to improve scalability and reliability across your entire Puppet fleet.
