@@ -19,6 +19,7 @@ nav:
   - Introduction: index.md
   - Architecture: architecture.md
   - Setup: setup.md
+  - Configuration Reference: configuration_reference.md
   - Nodes: nodes.md
   - Hiera: hiera.md
   - Administration: administration.md
