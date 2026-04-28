@@ -501,8 +501,6 @@ async def lifespan_dev(app: FastAPI):
     app.include_router(controller.router_dev)
 
     refresh_task = None
-    expired_task = None
-    expire_jobs_task = None
     heartbeat_task = asyncio.create_task(
         pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
         name="pyppetdb-nodes-heartbeat",
@@ -524,10 +522,6 @@ async def lifespan_dev(app: FastAPI):
         refresh_task = asyncio.create_task(
             env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
         )
-        expired_task = asyncio.create_task(
-            env["ca_service"].expired_certificates_worker(),
-            name="ca-expired-revocation",
-        )
 
     yield
     if heartbeat_task:
@@ -539,8 +533,6 @@ async def lifespan_dev(app: FastAPI):
         ws_hub_task.cancel()
     if refresh_task:
         refresh_task.cancel()
-    if expired_task:
-        expired_task.cancel()
 
     await env["crud_nodes"].cleanup_remote_agents(via=socket.getfqdn())
 
@@ -1071,12 +1063,6 @@ async def main_run():
         worker_tasks.append(
             asyncio.create_task(
                 env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
-            )
-        )
-        worker_tasks.append(
-            asyncio.create_task(
-                env["ca_service"].expired_certificates_worker(),
-                name="ca-expired-revocation",
             )
         )
 

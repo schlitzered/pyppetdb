@@ -96,39 +96,6 @@ class CAService:
                 self.log.error(f"Error in CRL refresh worker: {e}")
             await asyncio.sleep(43200)
 
-    async def revoke_expired_certificates(self) -> None:
-        if await self._crud_certificates.lock_acquire():
-            try:
-                self.log.info("Checking for expired certificates...")
-                revoked_info = await self._crud_certificates.revoke_expired()
-                if revoked_info:
-                    self.log.info(f"Revoked {len(revoked_info)} expired certificates")
-                    ca_ids = {info["ca_id"] for info in revoked_info}
-                    for ca_id in ca_ids:
-                        try:
-                            await self.refresh_crl(ca_id)
-                        except Exception as e:
-                            self.log.error(
-                                f"Failed to refresh CRL for CA '{ca_id}': {e}"
-                            )
-
-                else:
-                    self.log.info("No expired certificates found")
-            finally:
-                await self._crud_certificates.lock_release()
-        else:
-            self.log.debug(
-                "Expired certificates revocation is already locked by another process"
-            )
-
-    async def expired_certificates_worker(self) -> None:
-        while True:
-            try:
-                await self.revoke_expired_certificates()
-            except Exception as e:
-                self.log.error(f"Error in expired certificates worker: {e}")
-            await asyncio.sleep(60)
-
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost, fields: list = None
     ) -> CAAuthorityGet:
@@ -428,9 +395,6 @@ class CAService:
         cert = await self._crud_certificates.update(
             query={"id": cert_doc.id}, payload=payload, fields=fields
         )
-
-        space = await self._crud_spaces.get(space_id, fields=["ca_id"])
-        await self.refresh_crl(space.ca_id)
         return cert
 
     async def renew_certificate(
