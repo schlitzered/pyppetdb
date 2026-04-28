@@ -54,6 +54,8 @@ class WsInterAPI:
                 await websocket.close(code=4003)
                 return
 
+            self._log.info(msg=f"WS inter_api: accepted connection from {cn}")
+
             subscriptions = set()
             try:
                 while True:
@@ -66,6 +68,7 @@ class WsInterAPI:
             except WebSocketDisconnect:
                 pass
             finally:
+                self._log.info(msg=f"WS inter_api: connection from {cn} closed")
                 for job_run_id in list(subscriptions):
                     await self._hub.unsubscribe(
                         websocket=websocket,
@@ -249,6 +252,7 @@ class WsInterAPI:
         while True:
             try:
                 async with websockets.connect(uri=url, ssl=ssl_context) as ws:
+                    self._log.info(msg=f"Initiating Inter-API connection to {via}")
                     self._remote_conns[via] = ws
 
                     for jrid, jvia in self._hub.job_run_id_to_via.items():
@@ -260,11 +264,28 @@ class WsInterAPI:
                             await ws.send(sub_msg.model_dump_json())
 
                     try:
-                        async for message in ws:
-                            last_activity = await self._handle_remote_api_message(
-                                via, message
-                            )
+                        while True:
+                            try:
+                                message = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                                last_activity = await self._handle_remote_api_message(
+                                    via, message
+                                )
+                            except asyncio.TimeoutError:
+                                has_subscriptions = any(
+                                    v == via
+                                    for v in self._hub.job_run_id_to_via.values()
+                                )
+                                if not has_subscriptions and (
+                                    asyncio.get_event_loop().time() - last_activity
+                                    > self._config.app.main.interApiIdleTimeout
+                                ):
+                                    self._log.info(
+                                        msg=f"Closing idle Inter-API connection to {via} due to inactivity"
+                                    )
+                                    await ws.close()
+                                    return
                     finally:
+                        self._log.info(msg=f"Inter-API connection to {via} closed")
                         self._remote_conns.pop(via, None)
             except Exception as e:
                 self._log.error(msg=f"Inter-API connection to {via} failed: {e}")
@@ -274,8 +295,12 @@ class WsInterAPI:
                 v == via for v in self._hub.job_run_id_to_via.values()
             )
             if not has_subscriptions and (
-                asyncio.get_event_loop().time() - last_activity > 300.0
+                asyncio.get_event_loop().time() - last_activity
+                > self._config.app.main.interApiIdleTimeout
             ):
+                self._log.info(
+                    msg=f"Closing idle Inter-API connection to {via} due to inactivity"
+                )
                 break
             await asyncio.sleep(delay=5)
 

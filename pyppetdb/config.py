@@ -40,6 +40,7 @@ class ConfigAppMain(BaseModel):
     port: int = 8000
     ssl: typing.Optional[ConfigAppSSL] = None
     storeHistory: ConfigAppStoreHistory = ConfigAppStoreHistory()
+    interApiIdleTimeout: int = 300
 
 
 class ConfigAppPuppet(BaseModel):
