@@ -18,8 +18,7 @@ theme:
 nav:
   - Introduction: index.md
   - Architecture: architecture.md
-  - Installation: installation.md
-  - Configuration: configuration.md
+  - Setup: setup.md
   - Nodes: nodes.md
   - Hiera: hiera.md
   - Administration: administration.md
