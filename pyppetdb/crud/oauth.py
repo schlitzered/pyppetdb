@@ -1,4 +1,10 @@
 import logging
+import warnings
+try:
+    from authlib.deprecate import AuthlibDeprecationWarning
+    warnings.filterwarnings("ignore", category=AuthlibDeprecationWarning)
+except ImportError:
+    pass
 
 from authlib.integrations.starlette_client import OAuth as authlibOauth
 

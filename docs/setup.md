@@ -752,6 +752,7 @@ After=network.target mongodb.service
 Type=simple
 User=root
 WorkingDirectory=/opt/pyppetdb
+EnvironmentFile=/opt/pyppetdb/.env
 ExecStart=/opt/pyppetdb/bin/pyppetdb
 Restart=always
 RestartSec=5
