@@ -1,0 +1,34 @@
+site_name: pyppetdb
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Introduction: index.md
+  - Installation: installation.md
+  - Configuration: configuration.md
+  - Nodes: nodes.md
+  - Hiera: hiera.md
+  - Administration: administration.md
+  - CA: ca.md
+  - Jobs: jobs.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - toc:
+      permalink: true
