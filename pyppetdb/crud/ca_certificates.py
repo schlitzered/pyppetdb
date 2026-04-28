@@ -42,12 +42,6 @@ class CrudCACertificates(CrudMongo):
         await self.coll.create_index(
             [("not_after", pymongo.ASCENDING)], expireAfterSeconds=0
         )
-        # Ensure lock document exists
-        await self.coll.update_one(
-            {"id": "expired_revocation_lock"},
-            {"$setOnInsert": {"locked_at": None}},
-            upsert=True,
-        )
         self.log.info(f"creating {self.resource_type} indices, done")
 
     async def update(
@@ -107,49 +101,6 @@ class CrudCACertificates(CrudMongo):
                 }
             )
         return revoked
-
-    async def revoke_expired(self) -> list[dict]:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        query = {
-            "status": "signed",
-            "not_after": {"$lt": now},
-        }
-        cursor = self.coll.find(query, {"id": 1, "space_id": 1, "ca_id": 1})
-        revoked_info = []
-        async for cert in cursor:
-            await self.coll.update_one(
-                {"_id": cert["_id"]},
-                {
-                    "$set": {
-                        "status": "revoked",
-                        "revocation_date": now,
-                        "cert_uniqueness": cert["id"],
-                    }
-                },
-            )
-            revoked_info.append({"space_id": cert["space_id"], "ca_id": cert["ca_id"]})
-        return revoked_info
-
-    async def lock_acquire(self, lock_timeout_minutes: int = 5) -> bool:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
-
-        result = await self.coll.update_one(
-            {
-                "id": "expired_revocation_lock",
-                "$or": [
-                    {"locked_at": None},
-                    {"locked_at": {"$lt": timeout}},
-                ],
-            },
-            {"$set": {"locked_at": now}},
-        )
-        return result.modified_count > 0
-
-    async def lock_release(self) -> None:
-        await self.coll.update_one(
-            {"id": "expired_revocation_lock"}, {"$set": {"locked_at": None}}
-        )
 
     async def search(
         self,
