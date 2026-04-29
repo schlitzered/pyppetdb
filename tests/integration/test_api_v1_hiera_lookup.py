@@ -18,7 +18,7 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         # Tests that need template levels will create them explicitly
         self.client.post(
             "/api/v1/hiera/levels/common",
-            json={"priority": 100, "description": "Common level (no template)"},
+            json={"priority": 10, "description": "Common level (no template)"},
             headers=self._auth_headers(),
         )
         # Create test key
@@ -86,7 +86,7 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         )
         self.client.post(
             "/api/v1/hiera/levels/{hostname}",
-            json={"priority": 10, "description": "Host level"},
+            json={"priority": 100, "description": "Host level"},
             headers=self._auth_headers(),
         )
         # Create data at different levels
@@ -144,7 +144,7 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         # Create hostname level
         self.client.post(
             "/api/v1/hiera/levels/{hostname}",
-            json={"priority": 10},
+            json={"priority": 100},
             headers=self._auth_headers(),
         )
         # Create data requiring multiple facts
@@ -407,7 +407,7 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         # Create hostname level
         self.client.post(
             "/api/v1/hiera/levels/{hostname}",
-            json={"priority": 10},
+            json={"priority": 100},
             headers=self._auth_headers(),
         )
         # Create data at multiple levels

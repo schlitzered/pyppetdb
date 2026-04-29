@@ -6,7 +6,6 @@ from pyppetdb.hiera.schema_model_factory import SchemaModelFactory
 from pyppetdb.hiera.key_model_utils import prefixed_key_model_id
 from pyppetdb.hiera.backend import PyHieraBackendCrudHieraLevelDataAsync
 from pyppetdb.hiera import PyHiera
-from pyppetdb.config import ConfigHiera
 
 
 class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
@@ -89,14 +88,38 @@ class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results[0].level, "level1/doc1")
 
         mock_crud.search.assert_called_once_with(
-            key_id="mykey", _id_list=["level1"], sort="priority", sort_order="ascending"
+            key_id="mykey",
+            _id_list=["level1"],
+            sort="priority",
+            sort_order="descending",
         )
+
+    async def test_pyhiera_backend_expand_level(self):
+        backend = PyHieraBackendCrudHieraLevelDataAsync(
+            log=self.log,
+            identifier="test_backend",
+            crud_hiera_level_data=MagicMock(),
+            priority=10,
+            hierarchy=["{role}", "{pyppetdb.role}"],
+        )
+
+        # Flat fact
+        level = backend._expand_level("{role}", {"role": "web"})
+        self.assertEqual(level, "web")
+
+        # Nested fact
+        level = backend._expand_level("{pyppetdb.role}", {"pyppetdb.role": "db"})
+        self.assertEqual(level, "db")
+
+        # Missing nested fact
+        with self.assertRaises(Exception) as cm:
+            backend._expand_level("{pyppetdb.role}", {"other": "thing"})
+        self.assertIn("'pyppetdb.role'", str(cm.exception))
 
     def test_pyhiera_init(self):
         from unittest.mock import patch
 
         mock_crud = MagicMock()
-        config = ConfigHiera(enable=True)
 
         with patch("pyppetdb.hiera.PyHieraAsync") as mock_pyhiera_async_cls:
             mock_hiera_instance = mock_pyhiera_async_cls.return_value
@@ -104,7 +127,6 @@ class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
 
             PyHiera(
                 log=self.log,
-                config=config,
                 crud_hiera_level_data=mock_crud,
                 hiera_level_ids=["level1"],
             )

@@ -24,10 +24,23 @@ class TestCrudHieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         normalized = self.crud._normalize_facts(level_id, facts)
         self.assertEqual(normalized, {"environment": "prod", "osfamily": "RedHat"})
 
+        # Nested fact
+        level_id = "role/{pyppetdb.role}"
+        facts = {"pyppetdb.role": "web", "other": "ignored"}
+        normalized = self.crud._normalize_facts(level_id, facts)
+        self.assertEqual(normalized, {"pyppetdb.role": "web"})
+
     def test_validate_level_and_id_success(self):
         level_id = "nodes/{certname}"
         data_id = "nodes/node1.example.com"
         facts = {"certname": "node1.example.com"}
+        # Should not raise
+        self.crud._validate_level_and_id(level_id, data_id, facts)
+
+    def test_validate_level_and_id_success_nested(self):
+        level_id = "role/{pyppetdb.role}"
+        data_id = "role/web"
+        facts = {"pyppetdb.role": "web"}
         # Should not raise
         self.crud._validate_level_and_id(level_id, data_id, facts)
 

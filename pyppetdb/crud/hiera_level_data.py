@@ -1,5 +1,4 @@
 import logging
-import string
 import typing
 
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -18,6 +17,7 @@ from pyppetdb.model.hiera_level_data import HieraLevelDataGet
 from pyppetdb.model.hiera_level_data import HieraLevelDataGetMulti
 from pyppetdb.model.hiera_level_data import HieraLevelDataPost
 from pyppetdb.model.hiera_level_data import HieraLevelDataPut
+from pyppetdb.helpers.hiera import HieraLevelFormatter
 
 
 class CrudHieraLevelData(CrudMongo):
@@ -32,6 +32,7 @@ class CrudHieraLevelData(CrudMongo):
             log=log,
             coll=coll,
         )
+        self._formatter = HieraLevelFormatter()
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -46,21 +47,18 @@ class CrudHieraLevelData(CrudMongo):
         await self.coll.create_index([("key", pymongo.ASCENDING)])
         self.log.info(f"creating {self.resource_type} indices, done")
 
-    @staticmethod
-    def _normalize_facts(level_id: str, facts: dict[str, str]) -> dict[str, str]:
-        fields = [
-            fname for _, fname, _, _ in string.Formatter().parse(level_id) if fname
-        ]
+    def _normalize_facts(self, level_id: str, facts: dict[str, str]) -> dict[str, str]:
+        fields = [fname for _, fname, _, _ in self._formatter.parse(level_id) if fname]
         return {k: v for k, v in facts.items() if k in fields}
 
-    @staticmethod
     def _validate_level_and_id(
+        self,
         level_id: str,
         data_id: str,
         facts: dict[str, str],
     ):
         try:
-            if not data_id == level_id.format(**facts):
+            if not data_id == self._formatter.format(level_id, **facts):
                 raise QueryParamValidationError(
                     msg=f"invalid data_id {data_id}, not matching expanded level_id {level_id}"
                 )

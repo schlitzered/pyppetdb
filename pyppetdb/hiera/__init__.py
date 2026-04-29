@@ -2,7 +2,6 @@ from logging import Logger
 
 from pyhiera import PyHieraAsync
 
-from pyppetdb.config import ConfigHiera
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.hiera.backend import PyHieraBackendCrudHieraLevelDataAsync
 from pyppetdb.hiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
@@ -13,12 +12,10 @@ class PyHiera:
     def __init__(
         self,
         log: Logger,
-        config: ConfigHiera,
         crud_hiera_level_data: CrudHieraLevelData,
         hiera_level_ids: list[str],
     ):
         self._log = log
-        self._config = config
         self._hiera = PyHieraAsync()
         self._register_static_key_models()
         self._hiera.backend_add(
@@ -30,10 +27,6 @@ class PyHiera:
                 hierarchy=hiera_level_ids,
             )
         )
-
-    @property
-    def config(self) -> ConfigHiera:
-        return self._config
 
     @property
     def log(self):
