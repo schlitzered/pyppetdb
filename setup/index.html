@@ -1,0 +1,1660 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../architecture/">
+      
+      
+        <link rel="next" href="../configuration_reference/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Setup - pyppetdb</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#setup-and-configuration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pyppetdb" class="md-header__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pyppetdb
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Setup
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration_reference/" class="md-tabs__link">
+        
+  
+    
+  
+  Configuration Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../nodes/" class="md-tabs__link">
+        
+  
+    
+  
+  Nodes
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../hiera/" class="md-tabs__link">
+        
+  
+    
+  
+  Hiera
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+    
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ca/" class="md-tabs__link">
+        
+  
+    
+  
+  CA
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../jobs/" class="md-tabs__link">
+        
+  
+    
+  
+  Jobs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pyppetdb" class="md-nav__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    pyppetdb
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Installation
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      Prerequisites
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#system-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      System Dependencies
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recommended-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recommended Setup
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pyppetdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pyppetdb
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#puppetserver" class="md-nav__link">
+    <span class="md-ellipsis">
+      puppetserver
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#puppetdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      PuppetDB
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mongodb-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      MongoDB Setup
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MongoDB Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-node-development-setup-no-password" class="md-nav__link">
+    <span class="md-ellipsis">
+      Single-Node Development Setup (No Password)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#production-recommendations" class="md-nav__link">
+    <span class="md-ellipsis">
+      Production Recommendations
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web-server-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web Server Configuration
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Web Server Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      Nginx
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Nginx">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-install-nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Install Nginx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-install-pyppetdb-web" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Install pyppetdb-web
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-configure-nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Configure Nginx
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-enable-and-start-nginx" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Enable and Start Nginx
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apache" class="md-nav__link">
+    <span class="md-ellipsis">
+      Apache
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Apache">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-enable-required-modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Enable Required Modules
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-configure-apache" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Configure Apache
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-enable-the-site-and-restart-apache" class="md-nav__link">
+    <span class="md-ellipsis">
+      3. Enable the Site and Restart Apache
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#initialization" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initialization
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Initialization">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-create-administrative-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      1. Create Administrative User
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-configure-certificate-authority" class="md-nav__link">
+    <span class="md-ellipsis">
+      2. Configure Certificate Authority
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Configure Certificate Authority">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#option-a-import-existing-puppet-ca" class="md-nav__link">
+    <span class="md-ellipsis">
+      Option A: Import Existing Puppet CA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#option-b-initialize-fresh-ca" class="md-nav__link">
+    <span class="md-ellipsis">
+      Option B: Initialize Fresh CA
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-pyppetdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      Starting pyppetdb
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting pyppetdb">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#systemd-unit-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      Systemd Unit File
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#enable-and-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enable and Start
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nodes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Nodes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hiera/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hiera
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ca/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="setup-and-configuration">Setup and Configuration<a class="headerlink" href="#setup-and-configuration" title="Permanent link">&para;</a></h1>
+<p>This guide covers the installation of <strong>pyppetdb</strong> and how to configure it for your environment.</p>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<p>pyppetdb is strictly tested on <strong>Python 3.12</strong>. While it may run on other versions, all
+dependencies in <code>requirements.txt</code> are verified against the 3.12 runtime. It is highly
+recommended to run pyppetdb within a dedicated virtual environment.</p>
+<h3 id="system-dependencies">System Dependencies<a class="headerlink" href="#system-dependencies" title="Permanent link">&para;</a></h3>
+<p>pyppetdb utilizes the <code>bonsai</code> library for optional LDAP integration (used to synchronize
+teams with LDAP group members). To install this dependency, your system must have LDAP
+development headers and a C compiler installed.</p>
+<p><strong>On Debian/Ubuntu:</strong>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>build-essential<span class="w"> </span>python3.12-dev<span class="w"> </span>libldap2-dev<span class="w"> </span>libsasl2-dev
+</code></pre></div></p>
+<p><strong>On RHEL/CentOS:</strong>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>yum<span class="w"> </span>install<span class="w"> </span>gcc<span class="w"> </span>python3.12-devel<span class="w"> </span>openldap-devel<span class="w"> </span>cyrus-sasl-devel
+</code></pre></div></p>
+<h3 id="recommended-setup">Recommended Setup<a class="headerlink" href="#recommended-setup" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>Create a Virtual Environment:</strong>
+    <div class="highlight"><pre><span></span><code>python3.12<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>/opt/pyppetdb
+<span class="nb">source</span><span class="w"> </span>/opt/pyppetdb/bin/activate
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install pyppetdb:</strong>
+    You can install pyppetdb directly via pip:
+    <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>pyppetdb
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install from Source (Development):</strong>
+    If you are installing from the repository:
+    <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/schlitzered/pyppetdb.git
+<span class="nb">cd</span><span class="w"> </span>pyppetdb
+pip<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.txt
+</code></pre></div></p>
+</li>
+</ol>
+<hr />
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<h3 id="pyppetdb">Pyppetdb<a class="headerlink" href="#pyppetdb" title="Permanent link">&para;</a></h3>
+<p>pyppetdb is configured via environment variables or a <code>.env</code> file. It uses Pydantic for
+configuration management, supporting nested settings using the <code>_</code> delimiter.</p>
+<p><strong>Note:</strong> Configuration keys are case-sensitive. Nested settings use the <code>_</code> delimiter to
+map to the internal model structure.</p>
+<p>Below is an example of a production-ready configuration using a .env file.
+The env file needs to be placed in the working directory of pyppetdb, example /opt/pyppetdb/.env</p>
+<div class="highlight"><pre><span></span><code># security related settings
+app_secretkey=SomethingSuperSecretHere
+app_wssalt=AnotherSuperSecretSecret
+
+# Main API Settings
+app_main_facts_index=[ &quot;role&quot;, &quot;stage&quot;, &quot;location&quot;, &quot;provider&quot; ]
+app_main_host=0.0.0.0
+app_main_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
+app_main_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
+app_main_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+
+# Puppet Proxy Settings
+app_puppet_port=8140 # we are taking over the puppetserver port
+app_puppet_serverurl=http://127.0.0.1:8144 # the puppetserver instance on the same node
+app_puppet_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
+app_puppet_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
+app_puppet_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+app_puppet_catalogCacheFacts=[ &quot;role&quot;, &quot;stage&quot;, &quot;location&quot;, &quot;provider&quot; ]
+app_puppet_catalogCache=True
+app_puppet_trustedCns=[ &quot;puppetsrv-1.example.com&quot; ] # usually it is enough if this is to the fqdn of the current node
+
+# PuppetDB Proxy Settings
+app_puppetdb_host=0.0.0.0
+app_puppetdb_serverurl=http://127.0.0.1:8080 # if omitted, will not forward requests to real puppetdb
+app_puppetdb_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
+app_puppetdb_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
+app_puppetdb_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+app_puppetdb_trustedCns=[ &quot;puppetsrv-1.example.com&quot; ] # usually it is enough if this is to the fqdn of the current node
+
+# MongoDB Settings
+# this is used if you like to shard the shard-able collections
+mongodb_placementFacts=[ &quot;role&quot;, &quot;stage&quot;, &quot;location&quot;, &quot;provider&quot; ]
+</code></pre></div>
+<h3 id="puppetserver">puppetserver<a class="headerlink" href="#puppetserver" title="Permanent link">&para;</a></h3>
+<p>puppet server needs to get reconfigured. ssl needs to be disabled,
+and it needs to read the CN from a header instead of cert itself,
+this is needed because pyppetdb is executing the mtls validation with the agent.</p>
+<p><strong><code>/etc/puppetlabs/puppetserver/conf.d/webserver.conf</code></strong>
+<div class="highlight"><pre><span></span><code>webserver: {
+    access-log-config: /etc/puppetlabs/puppetserver/request-logging.xml
+    client-auth: want
+    host: 127.0.0.1 # for security reason, only listen on localhost
+    port: 8144 # we adjust the port, since pyppetdb will take over
+    #ssl-host: 0.0.0.0
+    #ssl-port: 8140
+    #ssl-cert: /etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
+    #ssl-key: /etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+    #ssl-ca-cert: /etc/puppetlabs/puppet/ssl/certs/ca.pem
+
+}
+</code></pre></div>
+we need to set "allow-header-cert-info: true", so puppetserver picks up cert info from headers.
+We only show the complete file here, for completeness,
+but you actually only need to add the single line at the right place</p>
+<p><strong><code>/etc/puppetlabs/puppetserver/conf.d/auth.conf</code></strong>
+<div class="highlight"><pre><span></span><code>authorization: {
+    version: 1
+    allow-header-cert-info: true
+    rules: [
+        {
+            # Allow nodes to retrieve their own catalog
+            match-request: {
+                path: &quot;^/puppet/v3/catalog/([^/]+)$&quot;
+                type: regex
+                method: [get, post]
+            }
+            allow: &quot;$1&quot;
+            sort-order: 500
+            name: &quot;puppetlabs v3 catalog from agents&quot;
+        },
+        {
+            # Allow services to retrieve catalogs on behalf of others
+            match-request: {
+                path: &quot;^/puppet/v4/catalog/?$&quot;
+                type: regex
+                method: post
+            }
+            deny: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs v4 catalog for services&quot;
+        },
+        {
+            # Allow nodes to retrieve the certificate they requested earlier
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate/&quot;
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: &quot;puppetlabs certificate&quot;
+        },
+        {
+            # Allow all nodes to access the certificate revocation list
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate_revocation_list/ca&quot;
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: &quot;puppetlabs crl&quot;
+        },
+        {
+            # Allow nodes to request a new certificate
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate_request&quot;
+                type: path
+                method: [get, put]
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: &quot;puppetlabs csr&quot;
+        },
+        {
+            # Allow nodes to renew their certificate
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate_renewal&quot;
+                type: path
+                method: post
+            }
+            # this endpoint should never be unauthenticated, as it requires the cert to be provided.
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs certificate renewal&quot;
+        },
+        {
+            # Allow the CA CLI to access the certificate_status endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate_status&quot;
+                type: path
+                method: [get, put, delete]
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs cert status&quot;
+        },
+        {
+            match-request: {
+                path: &quot;^/puppet-ca/v1/certificate_revocation_list$&quot;
+                type: regex
+                method: put
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs CRL update&quot;
+        },
+        {
+            # Allow the CA CLI to access the certificate_statuses endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/certificate_statuses&quot;
+                type: path
+                method: get
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs cert statuses&quot;
+        },
+        {
+            # Allow authenticated access to the CA expirations endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/expirations&quot;
+                type: path
+                method: get
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs CA cert and CRL expirations&quot;
+        },
+        {
+            # Allow the CA CLI to access the certificate clean endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/clean&quot;
+                type: path
+                method: put
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs cert clean&quot;
+        },
+        {
+            # Allow the CA CLI to access the certificate sign endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/sign&quot;
+                type: path
+                method: post
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs cert sign&quot;
+        },
+        {
+            # Allow the CA CLI to access the certificate sign all endpoint
+            match-request: {
+                path: &quot;/puppet-ca/v1/sign/all&quot;
+                type: path
+                method: post
+            }
+            allow: {
+               extensions: {
+                   pp_cli_auth: &quot;true&quot;
+               }
+            }
+            sort-order: 500
+            name: &quot;puppetlabs cert sign all&quot;
+        },
+        {
+            # Allow unauthenticated access to the status service endpoint
+            match-request: {
+                path: &quot;/status/v1/services&quot;
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: &quot;puppetlabs status service - full&quot;
+        },
+        {
+            match-request: {
+                path: &quot;/status/v1/simple&quot;
+                type: path
+                method: get
+            }
+            allow-unauthenticated: true
+            sort-order: 500
+            name: &quot;puppetlabs status service - simple&quot;
+        },
+        {
+            match-request: {
+                path: &quot;/puppet/v3/environments&quot;
+                type: path
+                method: get
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs environments&quot;
+        },
+        {
+            # Allow nodes to access all file_bucket_files.  Note that access for
+            # the &#39;delete&#39; method is forbidden by Puppet regardless of the
+            # configuration of this rule.
+            match-request: {
+                path: &quot;/puppet/v3/file_bucket_file&quot;
+                type: path
+                method: [get, head, post, put]
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs file bucket file&quot;
+        },
+        {
+            # Allow nodes to access all file_content.  Note that access for the
+            # &#39;delete&#39; method is forbidden by Puppet regardless of the
+            # configuration of this rule.
+            match-request: {
+                path: &quot;/puppet/v3/file_content&quot;
+                type: path
+                method: [get, post]
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs file content&quot;
+        },
+        {
+            # Allow nodes to access all file_metadata.  Note that access for the
+            # &#39;delete&#39; method is forbidden by Puppet regardless of the
+            # configuration of this rule.
+            match-request: {
+                path: &quot;/puppet/v3/file_metadata&quot;
+                type: path
+                method: [get, post]
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs file metadata&quot;
+        },
+        {
+            # Allow nodes to retrieve only their own node definition
+            match-request: {
+                path: &quot;^/puppet/v3/node/([^/]+)$&quot;
+                type: regex
+                method: get
+            }
+            allow: &quot;$1&quot;
+            sort-order: 500
+            name: &quot;puppetlabs node&quot;
+        },
+        {
+            # Allow nodes to store only their own reports
+            match-request: {
+                path: &quot;^/puppet/v3/report/([^/]+)$&quot;
+                type: regex
+                method: put
+            }
+            allow: &quot;$1&quot;
+            sort-order: 500
+            name: &quot;puppetlabs report&quot;
+        },
+        {
+            # Allow nodes to update their own facts
+            match-request: {
+                path: &quot;^/puppet/v3/facts/([^/]+)$&quot;
+                type: regex
+                method: put
+            }
+            allow: &quot;$1&quot;
+            sort-order: 500
+            name: &quot;puppetlabs facts&quot;
+        },
+        {
+            match-request: {
+                path: &quot;/puppet/v3/static_file_content&quot;
+                type: path
+                method: get
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppetlabs static file content&quot;
+        },
+        {
+            match-request: {
+                path: &quot;/puppet/v3/tasks&quot;
+                type: path
+            }
+            allow: &quot;*&quot;
+            sort-order: 500
+            name: &quot;puppet tasks information&quot;
+        },
+        {
+            # Deny everything else. This ACL is not strictly
+            # necessary, but illustrates the default policy
+            match-request: {
+                path: &quot;/&quot;
+                type: path
+            }
+            deny: &quot;*&quot;
+            sort-order: 999
+            name: &quot;puppetlabs deny all&quot;
+        }
+    ]
+}
+</code></pre></div></p>
+<p><strong><code>/etc/puppetlabs/puppet/puppetdb.conf</code></strong>
+<div class="highlight"><pre><span></span><code><span class="k">[main]</span>
+<span class="na">server_urls</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">https://puppetsrv-1.example.com:8002</span>
+</code></pre></div></p>
+<h3 id="puppetdb">PuppetDB<a class="headerlink" href="#puppetdb" title="Permanent link">&para;</a></h3>
+<p>No config changes needed on PuppetDB</p>
+<h2 id="mongodb-setup">MongoDB Setup<a class="headerlink" href="#mongodb-setup" title="Permanent link">&para;</a></h2>
+<p><strong>pyppetdb</strong> requires a MongoDB <strong>Replica Set</strong> to function correctly, even if you are only running a single-node instance.
+This is because the application makes heavy use of <strong>MongoDB Change Streams</strong>
+to react to data modifications in real-time, which avoids the performance overhead of constant database polling.</p>
+<h3 id="single-node-development-setup-no-password">Single-Node Development Setup (No Password)<a class="headerlink" href="#single-node-development-setup-no-password" title="Permanent link">&para;</a></h3>
+<p>For development or small-scale testing, you can initialize a single-node replica set with the following steps:</p>
+<ol>
+<li><strong>Install MongoDB</strong>: Follow the <a href="https://www.mongodb.com/docs/manual/installation/">official MongoDB installation guide</a> for your operating system.</li>
+<li><strong>Configure Replication</strong>: Edit your <code>mongod.conf</code> (usually in <code>/etc/mongod.conf</code>) to enable replication:
+    <div class="highlight"><pre><span></span><code><span class="nt">replication</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">replSetName</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;rs0&quot;</span>
+</code></pre></div></li>
+<li><strong>Restart and Initialize</strong>: Restart the MongoDB service and initialize the replica set via the <code>mongosh</code> shell:
+    <div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>mongod
+mongosh<span class="w"> </span>--eval<span class="w"> </span><span class="s2">&quot;rs.initiate()&quot;</span>
+</code></pre></div></li>
+</ol>
+<h3 id="production-recommendations">Production Recommendations<a class="headerlink" href="#production-recommendations" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>High Availability</strong>: For production environments, it is strongly recommended to deploy at least a <strong>3-node replica set</strong> to ensure fault tolerance and data consistency.</li>
+<li><strong>Security</strong>: Always enable authentication and configure robust Access Control Lists (ACLs).</li>
+<li><strong>Sharding</strong>: pyppetdb supports sharded MongoDB clusters for massive scale. Detailed instructions for configuring node placement and sharding will be covered on a separate page.</li>
+</ul>
+<hr />
+<h2 id="web-server-configuration">Web Server Configuration<a class="headerlink" href="#web-server-configuration" title="Permanent link">&para;</a></h2>
+<h3 id="nginx">Nginx<a class="headerlink" href="#nginx" title="Permanent link">&para;</a></h3>
+<p>Nginx is used to serve the <code>pyppetdb-web</code> frontend and act as a reverse proxy for the <code>pyppetdb</code> API.</p>
+<h4 id="1-install-nginx">1. Install Nginx<a class="headerlink" href="#1-install-nginx" title="Permanent link">&para;</a></h4>
+<p>On Debian/Ubuntu:
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>nginx
+</code></pre></div></p>
+<h4 id="2-install-pyppetdb-web">2. Install pyppetdb-web<a class="headerlink" href="#2-install-pyppetdb-web" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/opt/pyppetdb_web
+<span class="nb">cd</span><span class="w"> </span>/opt/pyppetdb_web
+sudo<span class="w"> </span>wget<span class="w"> </span>https://github.com/schlitzered/pyppetdb-web/releases/download/v0.0.4/pyppetdb-web-0.0.4.tar.gz
+sudo<span class="w"> </span>tar<span class="w"> </span>xf<span class="w"> </span>pyppetdb-web-0.0.4.tar.gz
+sudo<span class="w"> </span>rm<span class="w"> </span>pyppetdb-web-0.0.4.tar.gz
+</code></pre></div>
+<h4 id="3-configure-nginx">3. Configure Nginx<a class="headerlink" href="#3-configure-nginx" title="Permanent link">&para;</a></h4>
+<p>Create a new configuration file at <strong><code>/etc/nginx/conf.d/pyppetdb.conf</code></strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kn">listen</span><span class="w"> </span><span class="mi">80</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">server_name</span><span class="w"> </span><span class="s">_</span><span class="p">;</span><span class="w"> </span><span class="c1"># Change this to your domain if needed</span>
+
+<span class="w">    </span><span class="kn">root</span><span class="w"> </span><span class="s">/opt/pyppetdb_web/</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">index</span><span class="w"> </span><span class="s">index.html</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1"># Gzip compression</span>
+<span class="w">    </span><span class="kn">gzip</span><span class="w"> </span><span class="no">on</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">gzip_types</span><span class="w"> </span><span class="s">text/plain</span><span class="w"> </span><span class="s">text/css</span><span class="w"> </span><span class="s">application/json</span><span class="w"> </span><span class="s">application/javascript</span><span class="w"> </span><span class="s">text/xml</span><span class="w"> </span><span class="s">application/xml</span><span class="w"> </span><span class="s">application/xml+rss</span><span class="w"> </span><span class="s">text/javascript</span><span class="p">;</span>
+
+<span class="w">    </span><span class="c1"># Single Page Application routing</span>
+<span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">try_files</span><span class="w"> </span><span class="nv">$uri</span><span class="w"> </span><span class="nv">$uri/</span><span class="w"> </span><span class="s">/index.html</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1"># API Proxy and WebSockets</span>
+<span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="p">~</span><span class="w"> </span><span class="sr">^/(api|docs|oauth|openapi\.json|versions)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">proxy_pass</span><span class="w"> </span><span class="s">https://127.0.0.1:8000</span><span class="p">;</span>
+
+<span class="w">        </span><span class="c1"># Standard proxy headers</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Host</span><span class="w"> </span><span class="nv">$host</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Real-IP</span><span class="w"> </span><span class="nv">$remote_addr</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-For</span><span class="w"> </span><span class="nv">$proxy_add_x_forwarded_for</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">X-Forwarded-Proto</span><span class="w"> </span><span class="nv">$scheme</span><span class="p">;</span>
+
+<span class="w">        </span><span class="c1"># WebSocket support</span>
+<span class="w">        </span><span class="kn">proxy_http_version</span><span class="w"> </span><span class="mi">1</span><span class="s">.1</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Upgrade</span><span class="w"> </span><span class="nv">$http_upgrade</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_set_header</span><span class="w"> </span><span class="s">Connection</span><span class="w"> </span><span class="s">&quot;upgrade&quot;</span><span class="p">;</span>
+
+<span class="w">        </span><span class="c1"># Increase timeouts for long-running log streams</span>
+<span class="w">        </span><span class="kn">proxy_read_timeout</span><span class="w"> </span><span class="s">3600s</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">proxy_send_timeout</span><span class="w"> </span><span class="s">3600s</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1"># Static assets caching</span>
+<span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/assets/</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">expires</span><span class="w"> </span><span class="s">1y</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">Cache-Control</span><span class="w"> </span><span class="s">&quot;public,</span><span class="w"> </span><span class="s">no-transform&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="c1"># Security headers</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;SAMEORIGIN&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-XSS-Protection</span><span class="w"> </span><span class="s">&quot;1</span><span class="p">;</span><span class="w"> </span><span class="kn">mode=block&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<h4 id="4-enable-and-start-nginx">4. Enable and Start Nginx<a class="headerlink" href="#4-enable-and-start-nginx" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>nginx
+sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>nginx
+</code></pre></div>
+<h3 id="apache">Apache<a class="headerlink" href="#apache" title="Permanent link">&para;</a></h3>
+<p>Apache can be used as an alternative to Nginx. Ensure the following modules are enabled: <code>proxy</code>, <code>proxy_http</code>, <code>proxy_wstunnel</code>, <code>rewrite</code>, <code>headers</code>, <code>deflate</code>, and <code>ssl</code>.</p>
+<h4 id="1-enable-required-modules">1. Enable Required Modules<a class="headerlink" href="#1-enable-required-modules" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>a2enmod<span class="w"> </span>proxy<span class="w"> </span>proxy_http<span class="w"> </span>proxy_wstunnel<span class="w"> </span>rewrite<span class="w"> </span>headers<span class="w"> </span>deflate<span class="w"> </span>ssl
+</code></pre></div>
+<h4 id="2-configure-apache">2. Configure Apache<a class="headerlink" href="#2-configure-apache" title="Permanent link">&para;</a></h4>
+<p>Create a new virtual host configuration, for example at <strong><code>/etc/apache2/sites-available/pyppetdb.conf</code></strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">&lt;VirtualHost</span><span class="w"> </span><span class="s">*:80</span><span class="nt">&gt;</span>
+<span class="w">    </span><span class="nb">ServerName</span><span class="w"> </span>_;<span class="w"> </span>#<span class="w"> </span>Change<span class="w"> </span>this<span class="w"> </span>to<span class="w"> </span>your<span class="w"> </span>domain<span class="w"> </span>if<span class="w"> </span>needed
+<span class="w">    </span><span class="nb">DocumentRoot</span><span class="w"> </span><span class="sx">/opt/pyppetdb_web</span>
+
+<span class="w">    </span><span class="nt">&lt;Directory</span><span class="w"> </span><span class="s">/opt/pyppetdb_web</span><span class="nt">&gt;</span>
+<span class="w">        </span><span class="nb">Options</span><span class="w"> </span>-Indexes<span class="w"> </span>+FollowSymLinks
+<span class="w">        </span><span class="nb">AllowOverride</span><span class="w"> </span><span class="k">None</span>
+<span class="w">        </span><span class="nb">Require</span><span class="w"> </span><span class="k">all</span><span class="w"> </span>granted
+
+<span class="w">        </span><span class="c"># Single Page Application routing</span>
+<span class="w">        </span><span class="nb">RewriteEngine</span><span class="w"> </span><span class="k">On</span>
+<span class="w">        </span><span class="nb">RewriteBase</span><span class="w"> </span>/
+<span class="w">        </span><span class="nb">RewriteRule</span><span class="w"> </span>^index\.html$<span class="w"> </span>-<span class="w"> </span>[L]
+<span class="w">        </span><span class="nb">RewriteCond</span><span class="w"> </span>%{REQUEST_FILENAME}<span class="w"> </span>!-f
+<span class="w">        </span><span class="nb">RewriteCond</span><span class="w"> </span>%{REQUEST_FILENAME}<span class="w"> </span>!-d
+<span class="w">        </span><span class="nb">RewriteRule</span><span class="w"> </span>.<span class="w"> </span><span class="sx">/index.html</span><span class="w"> </span>[L]
+<span class="w">    </span><span class="nt">&lt;/Directory&gt;</span>
+
+<span class="w">    </span><span class="c"># API Proxy and WebSockets settings for Backend</span>
+<span class="w">    </span><span class="nb">SSLProxyEngine</span><span class="w"> </span><span class="k">on</span>
+<span class="w">    </span><span class="nb">SSLProxyVerify</span><span class="w"> </span><span class="k">none</span>
+<span class="w">    </span><span class="nb">SSLProxyCheckPeerCN</span><span class="w"> </span><span class="k">off</span>
+<span class="w">    </span><span class="nb">SSLProxyCheckPeerName</span><span class="w"> </span><span class="k">off</span>
+<span class="w">    </span><span class="nb">SSLProxyCheckPeerExpire</span><span class="w"> </span><span class="k">off</span>
+
+<span class="w">    </span><span class="nb">ProxyRequests</span><span class="w"> </span><span class="k">Off</span>
+<span class="w">    </span><span class="nb">ProxyPreserveHost</span><span class="w"> </span><span class="k">On</span>
+
+<span class="w">    </span><span class="c"># WebSocket support (must come before standard proxy)</span>
+<span class="w">    </span><span class="nb">RewriteEngine</span><span class="w"> </span><span class="k">On</span>
+<span class="w">    </span><span class="nb">RewriteCond</span><span class="w"> </span>%{HTTP:Upgrade}<span class="w"> </span>websocket<span class="w"> </span>[NC]
+<span class="w">    </span><span class="nb">RewriteCond</span><span class="w"> </span>%{HTTP:Connection}<span class="w"> </span>upgrade<span class="w"> </span>[NC]
+<span class="w">    </span><span class="nb">RewriteRule</span><span class="w"> </span>^/(api|docs|oauth|openapi\.json|versions)(.*)<span class="w"> </span>wss://127.0.0.1:8000/$1$2<span class="w"> </span>[P,L]
+
+<span class="w">    </span><span class="c"># Standard proxy for API paths</span>
+<span class="w">    </span><span class="nb">ProxyPassMatch</span><span class="w"> </span>^/(api|docs|oauth|openapi\.json|versions)<span class="w"> </span>https://127.0.0.1:8000
+<span class="w">    </span><span class="nb">ProxyPassReverse</span><span class="w"> </span>/<span class="w"> </span>https://127.0.0.1:8000
+
+<span class="w">    </span><span class="c"># Increase timeouts for long-running log streams</span>
+<span class="w">    </span><span class="nb">ProxyTimeout</span><span class="w"> </span><span class="m">3600</span>
+
+<span class="w">    </span><span class="c"># Compression</span>
+<span class="w">    </span><span class="nb">AddOutputFilterByType</span><span class="w"> </span>DEFLATE<span class="w"> </span>text/plain<span class="w"> </span>text/html<span class="w"> </span>text/xml<span class="w"> </span>text/css<span class="w"> </span>application/xml<span class="w"> </span>application/xhtml+xml<span class="w"> </span>application/rss+xml<span class="w"> </span>application/javascript<span class="w"> </span>application/x-javascript<span class="w"> </span>application/json
+
+<span class="w">    </span><span class="c"># Static assets caching</span>
+<span class="w">    </span><span class="nt">&lt;LocationMatch</span><span class="w"> </span><span class="s">&quot;^/assets/&quot;</span><span class="nt">&gt;</span>
+<span class="w">        </span><span class="nb">Header</span><span class="w"> </span>set<span class="w"> </span>Cache-Control<span class="w"> </span><span class="s2">&quot;max-age=31536000, public, no-transform&quot;</span>
+<span class="w">    </span><span class="nt">&lt;/LocationMatch&gt;</span>
+
+<span class="w">    </span><span class="c"># Security headers</span>
+<span class="w">    </span><span class="nb">Header</span><span class="w"> </span>set<span class="w"> </span>X-Frame-Options<span class="w"> </span><span class="s2">&quot;SAMEORIGIN&quot;</span>
+<span class="w">    </span><span class="nb">Header</span><span class="w"> </span>set<span class="w"> </span>X-XSS-Protection<span class="w"> </span><span class="s2">&quot;1; mode=block&quot;</span>
+<span class="w">    </span><span class="nb">Header</span><span class="w"> </span>set<span class="w"> </span>X-Content-Type-Options<span class="w"> </span><span class="s2">&quot;nosniff&quot;</span>
+<span class="nt">&lt;/VirtualHost&gt;</span>
+</code></pre></div>
+<h4 id="3-enable-the-site-and-restart-apache">3. Enable the Site and Restart Apache<a class="headerlink" href="#3-enable-the-site-and-restart-apache" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>a2ensite<span class="w"> </span>pyppetdb.conf
+sudo<span class="w"> </span>systemctl<span class="w"> </span>restart<span class="w"> </span>apache2
+</code></pre></div>
+<hr />
+<h2 id="initialization">Initialization<a class="headerlink" href="#initialization" title="Permanent link">&para;</a></h2>
+<p>Before starting the service, you must perform several one-time initialization steps.
+Ensure you have your virtual environment activated and are in the pyppetdb directory.</p>
+<div class="highlight"><pre><span></span><code><span class="nb">source</span><span class="w"> </span>/opt/pyppetdb/bin/activate
+<span class="nb">cd</span><span class="w"> </span>/opt/pyppetdb
+</code></pre></div>
+<p>The <code>pyppetdb</code> command provides several sub-commands for initialization:</p>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>--help
+</code></pre></div>
+<p><strong>Output:</strong>
+<div class="highlight"><pre><span></span><code>usage: pyppetdb [-h] {create-admin,init-ca,import-puppet-ca} ...
+
+positional arguments:
+  {create-admin,init-ca,import-puppet-ca}
+    create-admin        create an admin user
+    init-ca             initialize the default puppet ca and generate a server cert
+    import-puppet-ca    Import an existing Puppet CA into pyppetdb
+
+options:
+  -h, --help            show this help message and exit
+</code></pre></div></p>
+<h3 id="1-create-administrative-user">1. Create Administrative User<a class="headerlink" href="#1-create-administrative-user" title="Permanent link">&para;</a></h3>
+<p>Use the <code>create-admin</code> command to set up your first user.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Check available options</span>
+pyppetdb<span class="w"> </span>create-admin<span class="w"> </span>--help
+</code></pre></div>
+<p><strong>Output:</strong>
+<div class="highlight"><pre><span></span><code>usage: pyppetdb create-admin [-h] [--user-id USER_ID] [--email EMAIL] [--name NAME] [--password PASSWORD]
+
+options:
+  -h, --help           show this help message and exit
+  --user-id USER_ID
+  --email EMAIL
+  --name NAME
+  --password PASSWORD
+</code></pre></div></p>
+<p><strong>Example Call:</strong>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>create-admin<span class="w"> </span>--user-id<span class="w"> </span>admin<span class="w"> </span>--email<span class="w"> </span>admin@example.com<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;System Admin&quot;</span><span class="w"> </span>--password<span class="w"> </span><span class="s2">&quot;ChangeMe123!&quot;</span>
+</code></pre></div></p>
+<h3 id="2-configure-certificate-authority">2. Configure Certificate Authority<a class="headerlink" href="#2-configure-certificate-authority" title="Permanent link">&para;</a></h3>
+<p>Depending on your environment, you can either import an existing Puppet CA or initialize a completely fresh one.</p>
+<h4 id="option-a-import-existing-puppet-ca">Option A: Import Existing Puppet CA<a class="headerlink" href="#option-a-import-existing-puppet-ca" title="Permanent link">&para;</a></h4>
+<p>If you are migrating from a standard Puppetserver, you can import the existing CA directory.</p>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>import-puppet-ca<span class="w"> </span>--help
+</code></pre></div>
+<p><strong>Output:</strong>
+<div class="highlight"><pre><span></span><code>usage: pyppetdb import-puppet-ca [-h] --ca-dir CA_DIR
+
+options:
+  -h, --help       show this help message and exit
+  --ca-dir CA_DIR  Path to the Puppet CA directory (e.g., /etc/puppetlabs/puppetserver/ca)
+</code></pre></div></p>
+<p><strong>Example Call:</strong>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>import-puppet-ca<span class="w"> </span>--ca-dir<span class="w"> </span>/etc/puppetlabs/puppetserver/ca
+</code></pre></div></p>
+<h4 id="option-b-initialize-fresh-ca">Option B: Initialize Fresh CA<a class="headerlink" href="#option-b-initialize-fresh-ca" title="Permanent link">&para;</a></h4>
+<p>If you are starting from scratch, use <code>init-ca</code> to generate the root certificates and the initial server certificate.</p>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>init-ca<span class="w"> </span>--help
+</code></pre></div>
+<p><strong>Output:</strong>
+<div class="highlight"><pre><span></span><code>usage: pyppetdb init-ca [-h] [--cn CN] [--alt-names ALT_NAMES] [--ca-path CA_PATH] [--cert-path CERT_PATH] [--key-path KEY_PATH]
+
+options:
+  -h, --help            show this help message and exit
+  --cn CN               The common name for the server certificate
+  --alt-names ALT_NAMES
+                        Optional comma-separated list of SANs
+  --ca-path CA_PATH     Path to save the CA certificate (default: /etc/puppetlabs/puppet/ssl/certs/ca.pem)
+  --cert-path CERT_PATH
+                        Path to save the server certificate
+  --key-path KEY_PATH   Path to save the server private key
+</code></pre></div></p>
+<hr />
+<h2 id="starting-pyppetdb">Starting pyppetdb<a class="headerlink" href="#starting-pyppetdb" title="Permanent link">&para;</a></h2>
+<p>Once initialized, you can start the application by running the <code>pyppetdb</code> command. Note that the process runs in the foreground by default.</p>
+<h3 id="systemd-unit-file">Systemd Unit File<a class="headerlink" href="#systemd-unit-file" title="Permanent link">&para;</a></h3>
+<p>For production deployments, it is recommended to run pyppetdb as a systemd service. Create the following file at <strong><code>/etc/systemd/system/pyppetdb.service</code></strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[Unit]</span>
+<span class="na">Description</span><span class="o">=</span><span class="s">pyppetdb service</span>
+<span class="na">After</span><span class="o">=</span><span class="s">network.target mongodb.service</span>
+
+<span class="k">[Service]</span>
+<span class="na">Type</span><span class="o">=</span><span class="s">simple</span>
+<span class="na">User</span><span class="o">=</span><span class="s">root</span>
+<span class="na">WorkingDirectory</span><span class="o">=</span><span class="s">/opt/pyppetdb</span>
+<span class="na">EnvironmentFile</span><span class="o">=</span><span class="s">/opt/pyppetdb/.env</span>
+<span class="na">ExecStart</span><span class="o">=</span><span class="s">/opt/pyppetdb/bin/pyppetdb</span>
+<span class="na">Restart</span><span class="o">=</span><span class="s">always</span>
+<span class="na">RestartSec</span><span class="o">=</span><span class="s">5</span>
+
+<span class="k">[Install]</span>
+<span class="na">WantedBy</span><span class="o">=</span><span class="s">multi-user.target</span>
+</code></pre></div>
+<h3 id="enable-and-start">Enable and Start<a class="headerlink" href="#enable-and-start" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>sudo<span class="w"> </span>systemctl<span class="w"> </span>daemon-reload
+sudo<span class="w"> </span>systemctl<span class="w"> </span><span class="nb">enable</span><span class="w"> </span>pyppetdb
+sudo<span class="w"> </span>systemctl<span class="w"> </span>start<span class="w"> </span>pyppetdb
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>
