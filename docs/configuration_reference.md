@@ -64,11 +64,6 @@ This page provides a detailed reference of all configuration variables available
 | `mongodb_database` | `pyppetdb` | Database name. |
 | `mongodb_placementFacts` | `[]` | Facts used for node placement logic. |
 
-### Hiera (`hiera_`)
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `hiera_enable` | `true` | Enable the PyHiera backend. |
-
 ### Jobs (`jobs_`)
 | Variable | Default | Description |
 |----------|---------|-------------|
