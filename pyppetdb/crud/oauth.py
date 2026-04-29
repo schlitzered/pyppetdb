@@ -1,7 +1,9 @@
 import logging
 import warnings
+
 try:
     from authlib.deprecate import AuthlibDeprecationWarning
+
     warnings.filterwarnings("ignore", category=AuthlibDeprecationWarning)
 except ImportError:
     pass

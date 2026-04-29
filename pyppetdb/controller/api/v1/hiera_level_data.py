@@ -57,7 +57,7 @@ class ControllerApiV1HieraLevelData:
         )
 
         self.router.add_api_route(
-            "/",
+            "",
             self.search,
             response_model=HieraLevelDataGetMulti,
             response_model_exclude_unset=True,

@@ -1,6 +1,8 @@
 import warnings
+
 try:
     from authlib.deprecate import AuthlibDeprecationWarning
+
     # TODO: Remove this warning suppression once Authlib is updated to a version
     # that fixes internal deprecated imports (Issue #880).
     # Suppress Authlib deprecation warning regarding jose/joserfc transition
@@ -413,7 +415,6 @@ async def prepare_env():
 
     pyhiera = PyHiera(
         log=log,
-        config=settings.hiera,
         crud_hiera_level_data=crud_hiera_level_data,
         hiera_level_ids=crud_hiera_levels.cache.level_ids,
     )

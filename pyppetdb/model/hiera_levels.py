@@ -36,7 +36,7 @@ class HieraLevelGetMulti(BaseModel):
 
 
 class HieraLevelPost(BaseModel):
-    priority: Optional[StrictInt] = None
+    priority: StrictInt
     description: Optional[StrictStr] = None
 
 

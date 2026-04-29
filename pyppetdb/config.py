@@ -137,11 +137,6 @@ class ConfigOAuth(BaseModel):
     url: ConfigOAuthUrl
 
 
-class ConfigHiera(BaseModel):
-    enable: bool = True
-    plugin: typing.Optional[dict[str, str]] = None
-
-
 class ConfigCA(BaseModel):
     enableCrlRefresh: bool = True
     autoSign: bool = False
@@ -158,7 +153,6 @@ class ConfigJobs(BaseModel):
 class Config(BaseSettings):
     app: ConfigApp = ConfigApp()
     ca: ConfigCA = ConfigCA()
-    hiera: ConfigHiera = ConfigHiera()
     jobs: ConfigJobs = ConfigJobs()
     ldap: ConfigLdap = ConfigLdap()
     mongodb: ConfigMongodb = ConfigMongodb()
