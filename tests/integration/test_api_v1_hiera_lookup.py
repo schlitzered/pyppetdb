@@ -255,10 +255,20 @@ class TestApiV1HieraLookup(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::complex",
             json={
                 "model": {
+                    "title": "ComplexModel",
                     "type": "object",
+                    "required": ["data"],
                     "properties": {
-                        "servers": {"type": "array", "items": {"type": "string"}},
-                        "config": {"type": "object"},
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "servers": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "config": {"type": "object"},
+                            },
+                        }
                     },
                 }
             },
@@ -300,7 +310,14 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         # Create dynamic model for complex data
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::dict",
-            json={"model": {"type": "object"}},
+            json={
+                "model": {
+                    "title": "DictModel",
+                    "type": "object",
+                    "required": ["data"],
+                    "properties": {"data": {"type": "object"}},
+                }
+            },
             headers=self._auth_headers(),
         )
         self.client.post(

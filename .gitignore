@@ -1,5 +1,6 @@
 .coverage
 GEMINI.md
+api_secret.txt
 .env
 *.pyc
 .idea

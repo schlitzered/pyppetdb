@@ -79,7 +79,7 @@ class ControllerApiV1HieraKeyModelsStatic:
         ),
     ):
         await self.authorize.require_admin(request=request)
-        result = self.crud_hiera_key_models_static.search(
+        result = await self.crud_hiera_key_models_static.search(
             _id=key_model_id,
             fields=list(fields),
             sort=sort,
@@ -96,7 +96,7 @@ class ControllerApiV1HieraKeyModelsStatic:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_admin(request=request)
-        result = self.crud_hiera_key_models_static.get(
+        result = await self.crud_hiera_key_models_static.get(
             _id=key_model_id,
             fields=list(fields),
         )

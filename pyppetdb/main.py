@@ -417,6 +417,7 @@ async def prepare_env():
         log=log,
         crud_hiera_level_data=crud_hiera_level_data,
         hiera_level_ids=crud_hiera_levels.cache.level_ids,
+        hiera_config=settings.app.main.hiera,
     )
     env["pyhiera"] = pyhiera
 

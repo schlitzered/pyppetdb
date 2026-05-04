@@ -33,9 +33,21 @@ class ConfigAppStoreHistory(BaseModel):
     ttl: typing.Optional[int] = 7776000
 
 
+class ConfigAppHiera(BaseModel):
+    keyModels: typing.Optional[typing.List[str]] = None
+
+    @field_validator("keyModels", mode="before")
+    @classmethod
+    def parse_key_models(cls, v):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
+
+
 class ConfigAppMain(BaseModel):
     enable: bool = True
     facts: ConfigAppFacts = ConfigAppFacts()
+    hiera: ConfigAppHiera = ConfigAppHiera()
     host: str = "0.0.0.0"
     port: int = 8000
     ssl: typing.Optional[ConfigAppSSL] = None

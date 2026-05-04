@@ -5,7 +5,7 @@ from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 from pyppetdb.errors import QueryParamValidationError
 
 
-class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
+class TestCrudHieraKeyModelsStaticUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
@@ -14,47 +14,50 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
             self.mock_config, self.log, self.mock_pyhiera
         )
 
-    def test_get_success(self):
+    async def test_get_success(self):
         mock_model_type = MagicMock()
         mock_model_type.return_value.description = "desc"
         self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
 
-        result = self.crud.get(_id="static:test")
+        result = await self.crud.get(_id="static:test")
         self.assertEqual(result.id, "static:test")
         self.assertEqual(result.description, "desc")
 
-    def test_get_not_found(self):
+    async def test_get_not_found(self):
         self.mock_pyhiera.hiera.key_models = {}
         with self.assertRaises(QueryParamValidationError):
-            self.crud.get(_id="static:unknown")
+            await self.crud.get(_id="static:unknown")
 
-    def test_get_invalid_prefix(self):
+    async def test_get_invalid_prefix(self):
         with self.assertRaises(QueryParamValidationError):
-            self.crud.get(_id="dynamic:test")
+            await self.crud.get(_id="dynamic:test")
 
-    def test_search(self):
-        mock_model1 = MagicMock()
-        mock_model1.return_value.description = "desc1"
-        mock_model2 = MagicMock()
-        mock_model2.return_value.description = "desc2"
+    async def test_search(self):
+        mock_model1_type = MagicMock()
+        mock_model1 = mock_model1_type.return_value
+        mock_model1.description = "desc1"
+
+        mock_model2_type = MagicMock()
+        mock_model2 = mock_model2_type.return_value
+        mock_model2.description = "desc2"
 
         self.mock_pyhiera.hiera.key_models = {
-            "static:test1": mock_model1,
-            "static:test2": mock_model2,
+            "static:test1": mock_model1_type,
+            "static:test2": mock_model2_type,
             "dynamic:other": MagicMock(),
         }
 
         # Test basic search
-        result = self.crud.search(_id="test1")
+        result = await self.crud.search(_id="test1")
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].id, "static:test1")
 
         # Test sort
-        result = self.crud.search(sort="id", sort_order="descending")
+        result = await self.crud.search(sort="id", sort_order="descending")
         self.assertEqual(result.result[0].id, "static:test2")
 
         # Test pagination
-        result = self.crud.search(limit=1)
+        result = await self.crud.search(limit=1)
         self.assertEqual(len(result.result), 1)
 
     def test_build_item_with_model_field(self):
@@ -67,6 +70,6 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
         self.assertEqual(item.id, "static:test")
         self.assertEqual(item.model, {"properties": {}})
 
-    def test_search_invalid_regex(self):
+    async def test_search_invalid_regex(self):
         with self.assertRaises(QueryParamValidationError):
-            self.crud.search(_id="[")
+            await self.crud.search(_id="[")

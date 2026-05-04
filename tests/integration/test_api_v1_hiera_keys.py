@@ -54,7 +54,17 @@ class TestApiV1HieraKeys(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::custom_model",
             json={
                 "description": "Custom model",
-                "model": {"type": "object", "properties": {"name": {"type": "string"}}},
+                "model": {
+                    "title": "CustomModel",
+                    "type": "object",
+                    "required": ["data"],
+                    "properties": {
+                        "data": {
+                            "type": "object",
+                            "properties": {"name": {"type": "string"}},
+                        }
+                    },
+                },
             },
             headers=self._auth_headers(),
         )

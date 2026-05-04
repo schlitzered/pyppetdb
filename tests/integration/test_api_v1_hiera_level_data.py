@@ -332,10 +332,20 @@ class TestApiV1HieraLevelData(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::complex",
             json={
                 "model": {
+                    "title": "ComplexModel",
                     "type": "object",
+                    "required": ["data"],
                     "properties": {
-                        "servers": {"type": "array", "items": {"type": "string"}},
-                        "config": {"type": "object"},
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "servers": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "config": {"type": "object"},
+                            },
+                        }
                     },
                 }
             },

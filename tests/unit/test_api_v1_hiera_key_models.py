@@ -36,17 +36,46 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.require_admin = AsyncMock()
         self.mock_crud_dynamic.create = AsyncMock()
 
-        data = HieraKeyModelDynamicPost(model={"type": "object"})
+        data = HieraKeyModelDynamicPost(
+            model={
+                "title": "TestModel",
+                "type": "object",
+                "required": [
+                    "data",
+                ],
+                "properties": {
+                    "data": {
+                        "type": "object",
+                    },
+                },
+            },
+        )
         mock_request = MagicMock()
         await self.dynamic_controller.create(
-            request=mock_request, data=data, key_model_id="dynamic:test", fields=set()
+            request=mock_request,
+            data=data,
+            key_model_id="dynamic:test",
+            fields=set(),
         )
 
         self.mock_crud_dynamic.create.assert_called_once()
 
     async def test_dynamic_create_invalid_prefix(self):
         self.mock_authorize.require_admin = AsyncMock()
-        data = HieraKeyModelDynamicPost(model={"type": "object"})
+        data = HieraKeyModelDynamicPost(
+            model={
+                "title": "TestModel",
+                "type": "object",
+                "required": [
+                    "data",
+                ],
+                "properties": {
+                    "data": {
+                        "type": "object",
+                    },
+                },
+            },
+        )
         mock_request = MagicMock()
 
         with self.assertRaises(QueryParamValidationError):
@@ -102,7 +131,7 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_static_get(self):
         self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_static.get = MagicMock()
+        self.mock_crud_static.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.static_controller.get(
@@ -114,7 +143,7 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_static_search(self):
         self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_static.search = MagicMock()
+        self.mock_crud_static.search = AsyncMock()
 
         mock_request = MagicMock()
         await self.static_controller.search(

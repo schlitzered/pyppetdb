@@ -96,7 +96,7 @@ class TestCrudHieraKeysAdapterUnit(unittest.IsolatedAsyncioTestCase):
             "documentKey": {"_id": "doc1"},
             "fullDocument": {"id": "key1", "key_model_id": "static:test"},
         }
-        self.mock_pyhiera.hiera.key_models = {"static:test": MagicMock()}
+        self.mock_pyhiera.hiera.keyModels = {"static:test": MagicMock()}
         await self.adapter._handle_change(change)
         self.mock_pyhiera.hiera.key_add.assert_called_once_with("key1", "static:test")
         self.assertEqual(self.adapter._doc_to_key["doc1"], "key1")
@@ -117,7 +117,7 @@ class TestCrudHieraKeysAdapterUnit(unittest.IsolatedAsyncioTestCase):
             ]
         )
         self.mock_coll.find.return_value = mock_cursor
-        self.mock_pyhiera.hiera.key_models = {"m1": MagicMock(), "m2": MagicMock()}
+        self.mock_pyhiera.hiera.keyModels = {"m1": MagicMock(), "m2": MagicMock()}
 
         await self.adapter._load_initial_data()
         self.assertEqual(self.adapter._doc_to_key["d1"], "k1")

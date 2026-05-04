@@ -199,6 +199,7 @@ class CrudHieraKeys(CrudMongo):
         self,
         _id: typing.Optional[str] = None,
         model: typing.Optional[str] = None,
+        model_id: typing.Optional[str] = None,
         deprecated: typing.Optional[bool] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
@@ -209,6 +210,7 @@ class CrudHieraKeys(CrudMongo):
         query = {}
         self._filter_re(query, "id", _id)
         self._filter_re(query, "key_model_id", model)
+        self._filter_literal(query, "key_model_id", model_id)
         self._filter_boolean(query, "deprecated", deprecated)
 
         result = await self._search(

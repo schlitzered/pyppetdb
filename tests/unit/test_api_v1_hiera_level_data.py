@@ -38,10 +38,12 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             return_value=MagicMock(key_model_id="static:test")
         )
         self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(priority=10))
-        self.mock_crud_static.get = MagicMock()
+        self.mock_crud_static.get = AsyncMock()
 
         # Mock model type and validation
         mock_model_type = MagicMock()
+        mock_validate_result = MagicMock()
+        mock_model_type.return_value.validate.return_value = mock_validate_result
         self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
 
         self.mock_crud_level_data.create = AsyncMock(
@@ -72,6 +74,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             return_value=MagicMock(key_model_id="static:test")
         )
         self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(priority=10))
+        self.mock_crud_static.get = AsyncMock()
 
         mock_model_type = MagicMock()
         mock_model_type.return_value.validate.side_effect = ValueError("bad data")
@@ -96,6 +99,12 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             return_value=MagicMock(key_model_id="static:unknown")
         )
         self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(priority=10))
+        # CrudStatic.get is now async and raises QueryParamValidationError if not found
+        self.mock_crud_static.get = AsyncMock(
+            side_effect=QueryParamValidationError(
+                msg="key model static:unknown not found"
+            )
+        )
         self.mock_pyhiera.hiera.key_models = {}
 
         data = HieraLevelDataPost(data={"foo": "bar"}, facts={"os": "linux"})
@@ -165,9 +174,12 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="static:test")
         )
-        self.mock_crud_levels.get = AsyncMock()
+        self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(id="l1"))
+        self.mock_crud_static.get = AsyncMock()
 
         mock_model_type = MagicMock()
+        mock_validate_result = MagicMock()
+        mock_model_type.return_value.validate.return_value = mock_validate_result
         self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
 
         self.mock_crud_level_data.get = AsyncMock(
