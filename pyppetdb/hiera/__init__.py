@@ -3,7 +3,6 @@ from logging import Logger
 
 from pyhiera import PyHieraAsync
 
-from pyppetdb.config import ConfigAppHiera
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.hiera.backend import PyHieraBackendCrudHieraLevelDataAsync
 from pyppetdb.hiera.key_model_utils import KEY_MODEL_STATIC_PREFIX
