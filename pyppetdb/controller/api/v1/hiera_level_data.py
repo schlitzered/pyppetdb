@@ -140,7 +140,6 @@ class ControllerApiV1HieraLevelData:
         await self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
         return model_id
 
-
     async def _get_model_type(self, model_id: str):
         key_model_id = await self._key_model_exists(model_id)
         model_type = self.pyhiera.hiera.key_models.get(key_model_id)

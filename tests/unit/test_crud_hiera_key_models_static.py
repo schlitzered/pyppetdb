@@ -60,7 +60,6 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.IsolatedAsyncioTestCase):
         result = await self.crud.search(limit=1)
         self.assertEqual(len(result.result), 1)
 
-
     def test_build_item_with_model_field(self):
         mock_model_type = MagicMock()
         mock_model = mock_model_type.return_value

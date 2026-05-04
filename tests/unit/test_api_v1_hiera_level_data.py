@@ -51,7 +51,6 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_cache.delete_by_key_and_facts = AsyncMock()
 
-
         data = HieraLevelDataPost(data={"foo": "bar"}, facts={"os": "linux"})
         mock_request = MagicMock()
         await self.controller.create(
@@ -102,7 +101,9 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(priority=10))
         # CrudStatic.get is now async and raises QueryParamValidationError if not found
         self.mock_crud_static.get = AsyncMock(
-            side_effect=QueryParamValidationError(msg="key model static:unknown not found")
+            side_effect=QueryParamValidationError(
+                msg="key model static:unknown not found"
+            )
         )
         self.mock_pyhiera.hiera.key_models = {}
 
