@@ -160,7 +160,7 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
 
         # We pass the 'value' of the key, which is the dict {"foo": "bar"}
         res = instance.validate({"foo": "bar"})
-        self.assertEqual(res.data["data"], {"foo": "bar"})
+        self.assertEqual(res.data, {"foo": "bar"})
 
     def test_build_key_model_class_wrapped_dict(self):
         # Test the case reported by user: Wrapped style schema with dict value
@@ -186,4 +186,4 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
 
         # This should now succeed due to the fix
         res = instance.validate(input_data)
-        self.assertEqual(res.data["data"], input_data)
+        self.assertEqual(res.data, input_data)

@@ -33,7 +33,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_key_model_exists_static(self):
-        self.mock_crud_static.get = MagicMock()
+        self.mock_crud_static.get = AsyncMock()
         await self.controller._key_model_exists("static:test")
         self.mock_crud_static.get.assert_called_once_with(
             _id="static:test", fields=["id"]

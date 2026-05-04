@@ -120,7 +120,7 @@ class ControllerApiV1HieraKeys:
         if model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             await self.crud_hiera_key_models_dynamic.get(_id=model_id, fields=["id"])
             return model_id
-        self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
+        await self.crud_hiera_key_models_static.get(_id=model_id, fields=["id"])
         return model_id
 
     async def _validate_key_data(self, model_id: str, data):

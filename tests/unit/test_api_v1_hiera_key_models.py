@@ -131,7 +131,7 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_static_get(self):
         self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_static.get = MagicMock()
+        self.mock_crud_static.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.static_controller.get(
@@ -143,7 +143,7 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_static_search(self):
         self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_static.search = MagicMock()
+        self.mock_crud_static.search = AsyncMock()
 
         mock_request = MagicMock()
         await self.static_controller.search(

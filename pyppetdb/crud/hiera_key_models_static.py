@@ -62,7 +62,7 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
                 )
         return item
 
-    def search(
+    async def search(
         self,
         _id: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
@@ -101,7 +101,7 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
             **{"result": items, "meta": {"result_size": total}}
         )
 
-    def get(
+    async def get(
         self,
         _id: str,
         fields: typing.Optional[list] = None,
