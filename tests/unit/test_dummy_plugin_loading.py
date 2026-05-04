@@ -12,7 +12,10 @@ class TestDummyPluginLoading(unittest.TestCase):
         self.log = logging.getLogger("test")
         self.mock_crud = MagicMock()
         # Add the plugin directory to sys.path so it can be imported
-        self.plugin_path = os.path.abspath("pyppetdb_dummy_plugin")
+        # Find the project root relative to this test file
+        test_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(test_dir))
+        self.plugin_path = os.path.join(project_root, "pyppetdb_dummy_plugin")
         sys.path.insert(0, self.plugin_path)
 
     def tearDown(self):

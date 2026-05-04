@@ -94,3 +94,31 @@ class TestHieraPlugins(unittest.TestCase):
         self.assertIn(
             "Failed to load Hiera plugin module: pyppetdb_missing", cm.output[0]
         )
+
+    @patch("importlib.import_module")
+    @patch("pyppetdb.hiera.PyHieraAsync")
+    def test_load_plugins_missing_attribute(
+        self, mock_pyhiera_async_cls, mock_import_module
+    ):
+        mock_hiera_instance = mock_pyhiera_async_cls.return_value
+        mock_hiera_instance.keyModels = {}
+
+        # Mock plugin module without key_models
+        mock_module = MagicMock(spec=[])
+        del mock_module.key_models
+        mock_import_module.return_value = mock_module
+
+        hiera_config = ConfigAppHiera(keyModels=["dummy"])
+
+        with self.assertLogs("test", level="WARNING") as cm:
+            PyHiera(
+                log=self.log,
+                crud_hiera_level_data=self.mock_crud,
+                hiera_level_ids=["level1"],
+                hiera_config=hiera_config,
+            )
+
+        self.assertIn(
+            "Hiera plugin module pyppetdb_dummy does not contain 'key_models'",
+            cm.output[0],
+        )

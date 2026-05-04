@@ -70,7 +70,13 @@ class PyHiera:
                 self._log.warning(f"Failed to load Hiera plugin module: {module_name}")
                 continue
 
-            key_models = getattr(module, "key_models", {})
+            key_models = getattr(module, "key_models", None)
+            if key_models is None:
+                self._log.warning(
+                    f"Hiera plugin module {module_name} does not contain 'key_models'"
+                )
+                continue
+
             for key, model_type in key_models.items():
                 if keys_to_load and key not in keys_to_load:
                     continue
