@@ -154,7 +154,7 @@ class ControllerApiV1HieraKeyModelsDynamic:
     ):
         await self.authorize.require_admin(request=request)
         keys = await self.crud_hiera_keys.search(
-            model=key_model_id,
+            model_id=key_model_id,
             fields=["id"],
             limit=10,
         )

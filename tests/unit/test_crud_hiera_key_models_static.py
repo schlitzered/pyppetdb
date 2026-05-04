@@ -17,14 +17,14 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
     def test_get_success(self):
         mock_model_type = MagicMock()
         mock_model_type.return_value.description = "desc"
-        self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
+        self.mock_pyhiera.hiera.keyModels = {"static:test": mock_model_type}
 
         result = self.crud.get(_id="static:test")
         self.assertEqual(result.id, "static:test")
         self.assertEqual(result.description, "desc")
 
     def test_get_not_found(self):
-        self.mock_pyhiera.hiera.key_models = {}
+        self.mock_pyhiera.hiera.keyModels = {}
         with self.assertRaises(QueryParamValidationError):
             self.crud.get(_id="static:unknown")
 
@@ -38,7 +38,7 @@ class TestCrudHieraKeyModelsStaticUnit(unittest.TestCase):
         mock_model2 = MagicMock()
         mock_model2.return_value.description = "desc2"
 
-        self.mock_pyhiera.hiera.key_models = {
+        self.mock_pyhiera.hiera.keyModels = {
             "static:test1": mock_model1,
             "static:test2": mock_model2,
             "dynamic:other": MagicMock(),

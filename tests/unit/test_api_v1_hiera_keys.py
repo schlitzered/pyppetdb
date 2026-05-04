@@ -68,7 +68,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_level_data.search = AsyncMock(return_value=mock_level_data)
 
         # Mock validation success
-        self.mock_pyhiera.hiera.key_models = {"dynamic:new": MagicMock()}
+        self.mock_pyhiera.hiera.keyModels = {"dynamic:new": MagicMock()}
         self.mock_crud_keys.update = AsyncMock()
 
         data = HieraKeyPut(key_model_id="dynamic:new")

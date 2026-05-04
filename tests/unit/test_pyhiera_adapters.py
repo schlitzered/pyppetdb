@@ -17,14 +17,14 @@ class TestPyHieraAdaptersUnit(unittest.IsolatedAsyncioTestCase):
         adapter = CrudHieraKeysAdapter(self.log, self.mock_coll, self.mock_pyhiera)
 
         # Mock key model existence
-        self.mock_pyhiera.hiera.key_models = {"model1": MagicMock()}
+        self.mock_pyhiera.hiera.keyModels = {"model1": MagicMock()}
 
         adapter._add_or_update_key("key1", "model1")
         self.mock_pyhiera.hiera.key_add.assert_called_once_with("key1", "model1")
 
     def test_hiera_keys_adapter_add_key_missing_model(self):
         adapter = CrudHieraKeysAdapter(self.log, self.mock_coll, self.mock_pyhiera)
-        self.mock_pyhiera.hiera.key_models = {}
+        self.mock_pyhiera.hiera.keyModels = {}
 
         adapter._add_or_update_key("key1", "model1")
         self.mock_pyhiera.hiera.key_add.assert_not_called()
@@ -62,7 +62,7 @@ class TestPyHieraAdaptersUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_hiera_keys_adapter_handle_change_insert(self):
         adapter = CrudHieraKeysAdapter(self.log, self.mock_coll, self.mock_pyhiera)
-        self.mock_pyhiera.hiera.key_models = {"model1": MagicMock()}
+        self.mock_pyhiera.hiera.keyModels = {"model1": MagicMock()}
 
         change = {
             "operationType": "insert",

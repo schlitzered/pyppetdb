@@ -113,59 +113,143 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             json={
                 "description": "Custom model",
                 "model": {
+                    "title": "CustomModel",
                     "type": "object",
+                    "required": [
+                        "data",
+                    ],
                     "properties": {
-                        "name": {"type": "string"},
-                        "age": {"type": "integer"},
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                },
+                                "age": {
+                                    "type": "integer",
+                                },
+                            },
+                            "required": [
+                                "name",
+                            ],
+                        },
                     },
-                    "required": ["name"],
                 },
             },
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.status_code,
+            201,
+        )
         data = response.json()
-        self.assertEqual(data["id"], "dynamic::custom_model")
-        self.assertEqual(data["description"], "Custom model")
-        self.assertIn("model", data)
+        self.assertEqual(
+            data["id"],
+            "dynamic::custom_model",
+        )
+        self.assertEqual(
+            data["description"],
+            "Custom model",
+        )
+        self.assertIn(
+            "model",
+            data,
+        )
 
     def test_create_dynamic_model_without_prefix(self):
         """Test that creating without prefix fails"""
         response = self.client.post(
             "/api/v1/hiera/key_models/dynamic/custom_model",
             json={
-                "model": {"type": "string"},
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
             },
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.status_code,
+            422,
+        )
 
     def test_create_dynamic_model_with_static_prefix(self):
         """Test that creating with wrong prefix fails"""
         response = self.client.post(
             "/api/v1/hiera/key_models/dynamic/static::custom",
             json={
-                "model": {"type": "string"},
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
             },
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.status_code,
+            422,
+        )
 
     def test_create_dynamic_model_duplicate(self):
         """Test creating duplicate dynamic model fails"""
         # Create first model
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
-            json={"model": {"type": "string"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         # Try to create duplicate
         response = self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
-            json={"model": {"type": "integer"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "integer",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.status_code,
+            400,
+        )
 
     def test_get_dynamic_model(self):
         """Test retrieving a dynamic model"""
@@ -174,7 +258,18 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             json={
                 "description": "Test model",
-                "model": {"type": "string"},
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
             },
             headers=self._auth_headers(),
         )
@@ -183,10 +278,19 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         data = response.json()
-        self.assertEqual(data["id"], "dynamic::test")
-        self.assertEqual(data["description"], "Test model")
+        self.assertEqual(
+            data["id"],
+            "dynamic::test",
+        )
+        self.assertEqual(
+            data["description"],
+            "Test model",
+        )
 
     def test_get_dynamic_model_not_found(self):
         """Test getting non-existent model returns 404"""
@@ -201,7 +305,20 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
         # Create model
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
-            json={"model": {"type": "string"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         # Delete model
@@ -209,26 +326,47 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         # Verify deletion
         get_response = self.client.get(
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             headers=self._auth_headers(),
         )
-        self.assertEqual(get_response.status_code, 404)
+        self.assertEqual(
+            get_response.status_code,
+            404,
+        )
 
     def test_delete_dynamic_model_in_use(self):
         """Test that deleting model in use by keys fails"""
         # Create model
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
-            json={"model": {"type": "string"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         # Create key using this model
         self.client.post(
             "/api/v1/hiera/keys/test_key",
-            json={"key_model_id": "dynamic::test"},
+            json={
+                "key_model_id": "dynamic::test",
+            },
             headers=self._auth_headers(),
         )
         # Try to delete model
@@ -236,20 +374,54 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 422)
-        self.assertIn("still in use", response.json()["detail"])
+        self.assertEqual(
+            response.status_code,
+            422,
+        )
+        self.assertIn(
+            "still in use",
+            response.json()["detail"],
+        )
 
     def test_search_dynamic_models(self):
         """Test searching dynamic models"""
         # Create multiple models
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::model1",
-            json={"description": "First", "model": {"type": "string"}},
+            json={
+                "description": "First",
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::model2",
-            json={"description": "Second", "model": {"type": "integer"}},
+            json={
+                "description": "Second",
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "integer",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         # Search all models
@@ -257,21 +429,53 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         data = response.json()
-        self.assertEqual(len(data["result"]), 2)
+        self.assertEqual(
+            len(data["result"]),
+            2,
+        )
 
     def test_search_dynamic_models_with_filter(self):
         """Test searching dynamic models with filter"""
         # Create multiple models
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::prod_model",
-            json={"model": {"type": "string"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::dev_model",
-            json={"model": {"type": "string"}},
+            json={
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
+            },
             headers=self._auth_headers(),
         )
         # Search with filter
@@ -279,10 +483,18 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic?key_model_id=dynamic::prod",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         data = response.json()
-        self.assertEqual(len(data["result"]), 1)
-        self.assertTrue(data["result"][0]["id"].startswith("dynamic::prod"))
+        self.assertEqual(
+            len(data["result"]),
+            1,
+        )
+        self.assertTrue(
+            data["result"][0]["id"].startswith("dynamic::prod"),
+        )
 
     def test_search_dynamic_models_pagination(self):
         """Test pagination in dynamic model search"""
@@ -290,7 +502,20 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
         for i in range(25):
             self.client.post(
                 f"/api/v1/hiera/key_models/dynamic/dynamic::model{i:02d}",
-                json={"model": {"type": "string"}},
+                json={
+                    "model": {
+                        "title": "Title",
+                        "type": "object",
+                        "required": [
+                            "data",
+                        ],
+                        "properties": {
+                            "data": {
+                                "type": "string",
+                            },
+                        },
+                    },
+                },
                 headers=self._auth_headers(),
             )
         # Get first page
@@ -298,30 +523,60 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic?page=0&limit=10",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         data = response.json()
-        self.assertEqual(len(data["result"]), 10)
+        self.assertEqual(
+            len(data["result"]),
+            10,
+        )
 
     def test_dynamic_model_complex_schema(self):
         """Test creating model with complex JSON schema"""
         complex_schema = {
+            "title": "ComplexModel",
             "type": "object",
+            "required": [
+                "data",
+            ],
             "properties": {
-                "server": {
+                "data": {
                     "type": "object",
                     "properties": {
-                        "host": {"type": "string"},
-                        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
-                        "ssl": {"type": "boolean"},
+                        "server": {
+                            "type": "object",
+                            "properties": {
+                                "host": {
+                                    "type": "string",
+                                },
+                                "port": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 65535,
+                                },
+                                "ssl": {
+                                    "type": "boolean",
+                                },
+                            },
+                            "required": [
+                                "host",
+                                "port",
+                            ],
+                        },
+                        "users": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                            },
+                        },
                     },
-                    "required": ["host", "port"],
-                },
-                "users": {
-                    "type": "array",
-                    "items": {"type": "string"},
+                    "required": [
+                        "server",
+                    ],
                 },
             },
-            "required": ["server"],
         }
         response = self.client.post(
             "/api/v1/hiera/key_models/dynamic/dynamic::server_config",
@@ -331,10 +586,19 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             },
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.status_code,
+            201,
+        )
         data = response.json()
-        self.assertEqual(data["id"], "dynamic::server_config")
-        self.assertEqual(data["model"], complex_schema)
+        self.assertEqual(
+            data["id"],
+            "dynamic::server_config",
+        )
+        self.assertEqual(
+            data["model"],
+            complex_schema,
+        )
 
     def test_unauthorized_access(self):
         """Test that endpoints require authentication"""
@@ -348,7 +612,18 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test",
             json={
                 "description": "Test",
-                "model": {"type": "string"},
+                "model": {
+                    "title": "Title",
+                    "type": "object",
+                    "required": [
+                        "data",
+                    ],
+                    "properties": {
+                        "data": {
+                            "type": "string",
+                        },
+                    },
+                },
             },
             headers=self._auth_headers(),
         )
@@ -357,11 +632,23 @@ class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
             "/api/v1/hiera/key_models/dynamic/dynamic::test?fields=id&fields=description",
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         data = response.json()
-        self.assertIn("id", data)
-        self.assertIn("description", data)
-        self.assertNotIn("model", data)
+        self.assertIn(
+            "id",
+            data,
+        )
+        self.assertIn(
+            "description",
+            data,
+        )
+        self.assertNotIn(
+            "model",
+            data,
+        )
 
 
 if __name__ == "__main__":

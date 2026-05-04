@@ -42,7 +42,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
 
         # Mock model type and validation
         mock_model_type = MagicMock()
-        self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
+        self.mock_pyhiera.hiera.keyModels = {"static:test": mock_model_type}
 
         self.mock_crud_level_data.create = AsyncMock(
             return_value=MagicMock(facts={"os": "linux"})
@@ -75,7 +75,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
 
         mock_model_type = MagicMock()
         mock_model_type.return_value.validate.side_effect = ValueError("bad data")
-        self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
+        self.mock_pyhiera.hiera.keyModels = {"static:test": mock_model_type}
 
         data = HieraLevelDataPost(data={"foo": "bar"}, facts={"os": "linux"})
         mock_request = MagicMock()
@@ -96,7 +96,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             return_value=MagicMock(key_model_id="static:unknown")
         )
         self.mock_crud_levels.get = AsyncMock(return_value=MagicMock(priority=10))
-        self.mock_pyhiera.hiera.key_models = {}
+        self.mock_pyhiera.hiera.keyModels = {}
 
         data = HieraLevelDataPost(data={"foo": "bar"}, facts={"os": "linux"})
         mock_request = MagicMock()
@@ -168,7 +168,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_levels.get = AsyncMock()
 
         mock_model_type = MagicMock()
-        self.mock_pyhiera.hiera.key_models = {"static:test": mock_model_type}
+        self.mock_pyhiera.hiera.keyModels = {"static:test": mock_model_type}
 
         self.mock_crud_level_data.get = AsyncMock(
             return_value=MagicMock(facts={"os": "linux"})

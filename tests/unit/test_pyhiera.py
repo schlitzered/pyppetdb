@@ -118,17 +118,19 @@ class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
 
     def test_pyhiera_init(self):
         from unittest.mock import patch
+        from pyppetdb.config import ConfigAppHiera
 
         mock_crud = MagicMock()
 
         with patch("pyppetdb.hiera.PyHieraAsync") as mock_pyhiera_async_cls:
             mock_hiera_instance = mock_pyhiera_async_cls.return_value
-            mock_hiera_instance.key_models = {}
+            mock_hiera_instance.keyModels = {}
 
             PyHiera(
                 log=self.log,
                 crud_hiera_level_data=mock_crud,
                 hiera_level_ids=["level1"],
+                hiera_config=ConfigAppHiera(),
             )
 
             # Verify backend was added
