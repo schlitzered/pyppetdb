@@ -29,7 +29,7 @@ class TestCrudHieraKeyModelsDynamicUnit(unittest.IsolatedAsyncioTestCase):
             "title": "StringModel",
             "type": "object",
             "required": ["data"],
-            "properties": {"data": {"type": "string"}}
+            "properties": {"data": {"type": "string"}},
         }
         self.crud._create = AsyncMock(
             return_value={
@@ -51,7 +51,7 @@ class TestCrudHieraKeyModelsDynamicUnit(unittest.IsolatedAsyncioTestCase):
             "title": "StringModel",
             "type": "object",
             "required": ["data"],
-            "properties": {"data": {"type": "string"}}
+            "properties": {"data": {"type": "string"}},
         }
         payload = HieraKeyModelDynamicPost(model=valid_model)
         with self.assertRaises(QueryParamValidationError):
@@ -93,7 +93,7 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
             "title": "StringModel",
             "type": "object",
             "required": ["data"],
-            "properties": {"data": {"type": "string"}}
+            "properties": {"data": {"type": "string"}},
         }
         change = {
             "operationType": "insert",
@@ -125,7 +125,7 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
             "title": "StringModel",
             "type": "object",
             "required": ["data"],
-            "properties": {"data": {"type": "string"}}
+            "properties": {"data": {"type": "string"}},
         }
         mock_cursor = MagicMock()
         mock_cursor.__aiter__.return_value = iter(
@@ -150,12 +150,14 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
         schema = {
             "type": "object",
             "required": ["data"],
-            "properties": {"data": {"type": "object", "properties": {"foo": {"type": "string"}}}}
+            "properties": {
+                "data": {"type": "object", "properties": {"foo": {"type": "string"}}}
+            },
         }
         model_class = self.adapter._build_key_model_class("dynamic:m1", schema, "desc")
         self.assertTrue(issubclass(model_class, PyHieraKeyBase))
         instance = model_class()
-        
+
         # We pass the 'value' of the key, which is the dict {"foo": "bar"}
         res = instance.validate({"foo": "bar"})
         self.assertEqual(res.data["data"], {"foo": "bar"})
@@ -171,15 +173,17 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
                     "properties": {
                         "a": {"type": "string"},
                         "b": {"type": "string"},
-                        "c": {"type": "string"}
-                    }
+                        "c": {"type": "string"},
+                    },
                 }
-            }
+            },
         }
-        model_class = self.adapter._build_key_model_class("dynamic:complex2", schema, "desc")
+        model_class = self.adapter._build_key_model_class(
+            "dynamic:complex2", schema, "desc"
+        )
         instance = model_class()
         input_data = {"a": "asd", "b": "asd", "c": "asd"}
-        
+
         # This should now succeed due to the fix
         res = instance.validate(input_data)
         self.assertEqual(res.data["data"], input_data)
