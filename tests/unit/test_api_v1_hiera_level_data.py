@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLevelData
 from pyppetdb.model.hiera_level_data import HieraLevelDataPost, HieraLevelDataPut
-from pyppetdb.errors import QueryParamValidationError, ResourceNotFound
+from pyppetdb.errors import QueryParamValidationError
 
 
 class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
