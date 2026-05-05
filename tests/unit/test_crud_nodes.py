@@ -148,20 +148,28 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             ["=", "fact_pyppetdb__role", "web"],
             ["~", "tag", "shared"],
             [">", "fact_os__release__major", "7"],
-            ["null?", "fact_old", True]
+            ["null?", "fact_old", True],
         ]
         result = self.crud.translate_resource_query(ast)
         # Order might change due to how cleanup handles single-element $and
         self.assertEqual(result["$and"][0], {"catalog.resources_exported.type": "File"})
         self.assertEqual(result["$and"][1], {"id": {"$ne": "node1"}})
-        self.assertEqual(result["$and"][2], {"catalog.resources_exported.parameters.owner": "root"})
+        self.assertEqual(
+            result["$and"][2], {"catalog.resources_exported.parameters.owner": "root"}
+        )
         self.assertEqual(result["$and"][3], {"facts.pyppetdb.role": "web"})
-        self.assertEqual(result["$and"][4], {"catalog.resources_exported.tags": {"$regex": "shared"}})
+        self.assertEqual(
+            result["$and"][4], {"catalog.resources_exported.tags": {"$regex": "shared"}}
+        )
         self.assertEqual(result["$and"][5], {"facts.os.release.major": {"$gt": "7"}})
         self.assertEqual(result["$and"][6], {"facts.old": {"$type": 10}})
 
     def test_translate_resource_query_in_array(self):
-        ast = ["and", ["=", "exported", True], ["in", "certname", ["array", ["n1", "n2"]]]]
+        ast = [
+            "and",
+            ["=", "exported", True],
+            ["in", "certname", ["array", ["n1", "n2"]]],
+        ]
         result = self.crud.translate_resource_query(ast)
         self.assertEqual(result, {"id": {"$in": ["n1", "n2"]}})
 

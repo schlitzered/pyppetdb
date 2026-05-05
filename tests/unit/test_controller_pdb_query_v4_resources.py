@@ -26,27 +26,31 @@ class TestControllerPdbQueryV4ResourcesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_config.app.puppetdb.resourceQueryInternal = True
         mock_request = MagicMock()
         mock_request.query_params = {"query": '["=", "type", "File"]'}
-        
+
         translated = {"catalog.resources_exported.type": "File"}
         self.mock_crud_nodes.translate_resource_query.return_value = translated
-        self.mock_crud_nodes.query_exported_resources = AsyncMock(return_value=[{"certname": "node1"}])
+        self.mock_crud_nodes.query_exported_resources = AsyncMock(
+            return_value=[{"certname": "node1"}]
+        )
 
         result = await self.controller.get(mock_request)
-        
+
         self.assertEqual(result, [{"certname": "node1"}])
         self.mock_crud_nodes.translate_resource_query.assert_called_once()
-        self.mock_crud_nodes.query_exported_resources.assert_called_once_with(translated)
+        self.mock_crud_nodes.query_exported_resources.assert_called_once_with(
+            translated
+        )
 
     async def test_get_internal_unsupported_query(self):
         # When resourceQueryInternal is True and query is unsupported, return [] (no fallback)
         self.mock_config.app.puppetdb.resourceQueryInternal = True
         mock_request = MagicMock()
         mock_request.query_params = {"query": '["=", "unsupported", "val"]'}
-        
+
         self.mock_crud_nodes.translate_resource_query.return_value = None
 
         result = await self.controller.get(mock_request)
-        
+
         self.assertEqual(result, [])
         self.mock_crud_nodes.translate_resource_query.assert_called_once()
 
@@ -56,7 +60,7 @@ class TestControllerPdbQueryV4ResourcesUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         mock_request.query_params = {"query": '["=", "type", "Class"]'}
         mock_request.headers = {}
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = [{"certname": "node1"}]
 

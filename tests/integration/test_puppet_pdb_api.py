@@ -76,6 +76,7 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
     @patch("httpx.AsyncClient.get")
     def test_pdb_query_v4_resources_forwarding(self, mock_get):
         from pyppetdb.main import settings
+
         settings.app.puppetdb.resourceQueryInternal = False
 
         mock_response_data = [{"certname": "node1"}]
@@ -94,6 +95,7 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
 
     def test_pdb_query_v4_resources_local(self):
         from pyppetdb.main import settings
+
         settings.app.puppetdb.resourceQueryInternal = True
 
         # Database is empty, so it should return []
