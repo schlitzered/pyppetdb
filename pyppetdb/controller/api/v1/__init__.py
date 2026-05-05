@@ -266,6 +266,7 @@ class ControllerApiV1:
                 crud_ldap=crud_ldap,
                 crud_ca_spaces=crud_ca_spaces,
                 crud_ca_authorities=crud_ca_authorities,
+                crud_jobs_definitions=crud_job_definitions,
             ).router,
             responses={404: {"description": "Not found"}},
         )
@@ -352,6 +353,7 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_jobs_definitions=crud_job_definitions,
+                crud_teams=crud_teams,
             ).router,
             responses={404: {"description": "Not found"}},
         )

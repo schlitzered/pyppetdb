@@ -51,6 +51,10 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CAAuthorityGet(**result)
 
+    async def resource_exists(self, _id: str) -> str:
+        query = {"id": _id}
+        return await self._resource_exists(query=query)
+
     async def delete(self, _id: str) -> None:
         await self._delete(query={"id": _id})
 

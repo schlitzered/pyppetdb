@@ -15,15 +15,17 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_authorize = MagicMock()
         self.mock_crud = MagicMock()
+        self.mock_crud_teams = MagicMock()
         self.controller = ControllerApiV1JobsDefinitions(
             log=self.log,
             authorize=self.mock_authorize,
             crud_jobs_definitions=self.mock_crud,
+            crud_teams=self.mock_crud_teams,
         )
 
     async def test_create_validation_success(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         payload = JobDefinitionPost(
             id="def1",
@@ -43,7 +45,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_validation_missing_param(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         payload = JobDefinitionPost(
             id="def1",
@@ -61,7 +63,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_validation_extra_param(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         payload = JobDefinitionPost(
             id="def1",
@@ -82,7 +84,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_validation_success_partial_template(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         # Mock existing
         mock_existing = MagicMock()
@@ -101,7 +103,7 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_validation_failure_partial_template(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         # Mock existing
         mock_existing = MagicMock()

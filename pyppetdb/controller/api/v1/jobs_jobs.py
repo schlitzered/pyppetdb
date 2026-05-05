@@ -123,7 +123,13 @@ class ControllerApiV1JobsJobs:
         )
 
     async def create(self, request: Request, data: JobPost):
-        user = await self.authorize.require_admin(request=request)
+        user = await self.authorize.require_perm(
+            request=request,
+            permission=[
+                "JOBS:JOB::CREATE",
+                f"JOBS:JOB:{data.definition_id}:CREATE",
+            ],
+        )
 
         definition = await self.crud_jobs_definitions.get(
             _id=data.definition_id,
@@ -188,7 +194,19 @@ class ControllerApiV1JobsJobs:
         return job
 
     async def cancel(self, request: Request, job_id: str):
-        await self.authorize.require_admin(request=request)
+        job = await self.crud_jobs.get(
+            _id=job_id,
+            fields=["definition_id"],
+        )
+
+        await self.authorize.require_perm(
+            request=request,
+            permission=[
+                "JOBS:JOB::CREATE",
+                f"JOBS:JOB:{job.definition_id}:CREATE",
+            ],
+        )
+
         await self._crud_jobs_node_jobs.cancel_node_jobs(job_id=job_id)
         return DataDelete()
 

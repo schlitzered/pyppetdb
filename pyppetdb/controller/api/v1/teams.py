@@ -20,6 +20,7 @@ from pyppetdb.model.teams import TeamGet
 from pyppetdb.model.teams import TeamGetMulti
 from pyppetdb.model.teams import TeamPost
 from pyppetdb.model.teams import TeamPut
+from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 
 
 class ControllerApiV1Teams:
@@ -32,6 +33,7 @@ class ControllerApiV1Teams:
         crud_ldap: CrudLdap,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_authorities: CrudCAAuthorities,
+        crud_jobs_definitions: CrudJobsDefinitions,
     ):
         self._authorize = authorize
         self._crud_nodes_groups = crud_nodes_groups
@@ -39,6 +41,7 @@ class ControllerApiV1Teams:
         self._crud_ldap = crud_ldap
         self._crud_ca_spaces = crud_ca_spaces
         self._crud_ca_authorities = crud_ca_authorities
+        self._crud_jobs_definitions = crud_jobs_definitions
         self._log = log
 
         self._router = APIRouter(
@@ -123,6 +126,11 @@ class ControllerApiV1Teams:
             r"^CA:AUTHORITIES:DELETE$": None,
             r"^CA:SPACES:([^:]+):CERTS:UPDATE$": "space",
             r"^CA:AUTHORITIES:([^:]+):CERTS:UPDATE$": "authority",
+            r"^JOBS:JOB::CREATE$": None,
+            r"^JOBS:JOB:([^:]+):CREATE$": "job_definition",
+            r"^JOBS:DEFINITION::CREATE$": None,
+            r"^JOBS:DEFINITION::UPDATE$": None,
+            r"^JOBS:DEFINITION::DELETE$": None,
         }
 
         for perm in permissions:
@@ -134,7 +142,7 @@ class ControllerApiV1Teams:
                     if lookup_type == "space":
                         resource_id = match.group(1)
                         try:
-                            await self._crud_ca_spaces.get(resource_id, fields=["id"])
+                            await self._crud_ca_spaces.resource_exists(resource_id)
                         except ResourceNotFound:
                             raise QueryParamValidationError(
                                 msg=f"CA Space '{resource_id}' does not exist (referenced in permission '{perm}')"
@@ -142,12 +150,20 @@ class ControllerApiV1Teams:
                     elif lookup_type == "authority":
                         resource_id = match.group(1)
                         try:
-                            await self._crud_ca_authorities.get(
-                                resource_id, fields=["id"]
-                            )
+                            await self._crud_ca_authorities.resource_exists(resource_id)
                         except ResourceNotFound:
                             raise QueryParamValidationError(
                                 msg=f"CA Authority '{resource_id}' does not exist (referenced in permission '{perm}')"
+                            )
+                    elif lookup_type == "job_definition":
+                        resource_id = match.group(1)
+                        try:
+                            await self._crud_jobs_definitions.resource_exists(
+                                resource_id
+                            )
+                        except ResourceNotFound:
+                            raise QueryParamValidationError(
+                                msg=f"Job Definition '{resource_id}' does not exist (referenced in permission '{perm}')"
                             )
                     break
 

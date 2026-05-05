@@ -45,6 +45,10 @@ class CrudCASpaces(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CASpaceGet(**result)
 
+    async def resource_exists(self, _id: str) -> str:
+        query = {"id": _id}
+        return await self._resource_exists(query=query)
+
     async def delete(self, query: dict) -> None:
         if query.get("id") == "puppet-ca":
             raise QueryParamValidationError(
