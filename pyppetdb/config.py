@@ -91,6 +91,7 @@ class ConfigAppPuppetdb(BaseModel):
     timeout: int = 60
     ssl: typing.Optional[ConfigAppSSL] = None
     trustedCns: typing.Optional[list[str]] = []
+    resourceQueryInternal: bool = True
 
     @field_validator("trustedCns", mode="before")
     @classmethod

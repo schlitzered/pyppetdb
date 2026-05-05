@@ -28,6 +28,155 @@ from pyppetdb.errors import BackendError
 from pyppetdb.helpers.placement import calculate_placement
 
 
+class PuppetDBASTParser:
+    def __init__(self):
+        self._operators = {
+            "and": self._translate_and,
+            "or": self._translate_or,
+            "not": self._translate_not,
+            "=": self._translate_comparison,
+            ">": self._translate_comparison,
+            "<": self._translate_comparison,
+            ">=": self._translate_comparison,
+            "<=": self._translate_comparison,
+            "~": self._translate_comparison,
+            "null?": self._translate_comparison,
+            "in": self._translate_in,
+        }
+
+    def parse(self, ast: list) -> typing.Optional[dict]:
+        if not ast or not isinstance(ast, list):
+            return None
+        res = self._translate(ast)
+        if res is None:
+            return None
+        return self._cleanup(res)
+
+    def _translate(self, node: list) -> typing.Optional[dict]:
+        if not isinstance(node, list) or not node:
+            return None
+        op = node[0]
+        handler = self._operators.get(op)
+        if handler:
+            return handler(node)
+        return None
+
+    def _translate_and(self, node: list) -> typing.Optional[dict]:
+        translated = [self._translate(x) for x in node[1:]]
+        valid = [x for x in translated if x is not None]
+        if not valid:
+            return None
+        if len(valid) == 1:
+            return valid[0]
+        return {"$and": valid}
+
+    def _translate_or(self, node: list) -> typing.Optional[dict]:
+        translated = [self._translate(x) for x in node[1:]]
+        valid = [x for x in translated if x is not None]
+        if not valid:
+            return None
+        if len(valid) == 1:
+            return valid[0]
+        return {"$or": valid}
+
+    def _translate_not(self, node: list) -> typing.Optional[dict]:
+        if len(node) != 2:
+            return None
+        translated = self._translate(node[1])
+        if not translated:
+            return None
+        if len(translated) == 1:
+            k = list(translated.keys())[0]
+            v = translated[k]
+            if isinstance(v, dict):
+                return {k: {"$not": v}}
+            else:
+                return {k: {"$ne": v}}
+        return {"$nor": [translated]}
+
+    def _translate_comparison(self, node: list) -> typing.Optional[dict]:
+        if len(node) != 3:
+            return None
+        op = node[0]
+        field = node[1]
+        val = node[2]
+        target = self._map_field(field)
+        if not target:
+            return None
+
+        if (
+            target == "catalog.resources_exported.exported"
+            and op == "="
+            and val is True
+        ):
+            return {}
+
+        if op == "=":
+            return {target: val}
+        elif op == ">":
+            return {target: {"$gt": val}}
+        elif op == "<":
+            return {target: {"$lt": val}}
+        elif op == ">=":
+            return {target: {"$gte": val}}
+        elif op == "<=":
+            return {target: {"$lte": val}}
+        elif op == "~":
+            return {target: {"$regex": val}}
+        elif op == "null?":
+            return (
+                {target: {"$type": 10}}
+                if val
+                else {target: {"$ne": None, "$exists": True}}
+            )
+        return None
+
+    def _translate_in(self, node: list) -> typing.Optional[dict]:
+        if len(node) != 3:
+            return None
+        field = node[1]
+        target = self._map_field(field)
+        if not target:
+            return None
+        val = node[2]
+        if isinstance(val, list) and val and val[0] == "array":
+            return {target: {"$in": val[1]}}
+        return None
+
+    def _map_field(self, field) -> typing.Optional[str]:
+        if isinstance(field, str):
+            if field.startswith("fact_"):
+                path = field.replace("fact_", "", 1).replace("__", ".")
+                return f"facts.{path}"
+            elif field in ["type", "title", "file", "line", "exported"]:
+                return f"catalog.resources_exported.{field}"
+            elif field == "tag":
+                return "catalog.resources_exported.tags"
+            elif field == "certname":
+                return "id"
+            elif field == "environment":
+                return "environment"
+        elif isinstance(field, list) and len(field) == 2 and field[0] == "parameter":
+            return f"catalog.resources_exported.parameters.{field[1]}"
+        return None
+
+    def _cleanup(self, q: dict) -> dict:
+        if not isinstance(q, dict):
+            return q
+        cleaned = {}
+        for k, v in q.items():
+            if k in ("$and", "$or"):
+                valid = [self._cleanup(x) for x in v if self._cleanup(x) != {}]
+                if valid:
+                    if len(valid) == 1:
+                        return valid[0]
+                    else:
+                        cleaned[k] = valid
+            else:
+                cleaned[k] = v
+        return cleaned
+
+
 class CrudNodes(CrudMongo):
     def __init__(
         self,
@@ -40,6 +189,7 @@ class CrudNodes(CrudMongo):
             log=log,
             coll=coll,
         )
+        self._ast_parser = PuppetDBASTParser()
 
     async def index_create(self) -> None:
         self.log.info(f"creating {self.resource_type} indices")
@@ -77,6 +227,37 @@ class CrudNodes(CrudMongo):
             ]
         )
         self.log.info(f"creating {self.resource_type} indices, done")
+
+    def translate_resource_query(self, ast: list) -> typing.Optional[dict]:
+        return self._ast_parser.parse(ast)
+
+    async def query_exported_resources(self, query: dict) -> list:
+        self.log.debug(f"Executing aggregation pipeline with query: {query}")
+        pipeline = [
+            {"$match": query},
+            {"$unwind": "$catalog.resources_exported"},
+            {"$match": query},
+            {
+                "$project": {
+                    "_id": 0,
+                    "certname": "$id",
+                    "environment": "$environment",
+                    "exported": "$catalog.resources_exported.exported",
+                    "type": "$catalog.resources_exported.type",
+                    "title": "$catalog.resources_exported.title",
+                    "tags": "$catalog.resources_exported.tags",
+                    "parameters": "$catalog.resources_exported.parameters",
+                    "file": "$catalog.resources_exported.file",
+                    "line": "$catalog.resources_exported.line",
+                }
+            },
+        ]
+        cursor = self.coll.aggregate(pipeline)
+        result = []
+        async for doc in cursor:
+            result.append(doc)
+        self.log.debug(f"Aggregation result: {len(result)} resources")
+        return result
 
     async def delete(
         self,
