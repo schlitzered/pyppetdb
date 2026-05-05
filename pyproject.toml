@@ -14,7 +14,8 @@ dynamic = ["dependencies"]
 license = {file = "LICENSE.txt"}
 keywords = []
 classifiers = [
-  "Programming Language :: Python"
+  "Programming Language :: Python",
+  "License :: OSI Approved :: Apache Software License"
 ]
 
 [project.scripts]
