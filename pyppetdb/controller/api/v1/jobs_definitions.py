@@ -9,6 +9,7 @@ from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
+from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.model.jobs_definitions import JobDefinitionGet
 from pyppetdb.model.jobs_definitions import JobDefinitionGetMulti
 from pyppetdb.model.jobs_definitions import JobDefinitionPost
@@ -22,9 +23,11 @@ class ControllerApiV1JobsDefinitions:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         crud_jobs_definitions: CrudJobsDefinitions,
+        crud_teams: CrudTeams,
     ):
         self._authorize = authorize
         self._crud_jobs_definitions = crud_jobs_definitions
+        self._crud_teams = crud_teams
         self._log = log
         self._router = APIRouter(
             prefix="/jobs/definitions",
@@ -100,7 +103,9 @@ class ControllerApiV1JobsDefinitions:
         return await self.crud_jobs_definitions.get(_id=definition_id, fields=[])
 
     async def create(self, request: Request, data: JobDefinitionPost):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="JOBS:DEFINITION::CREATE"
+        )
 
         self._validate_params_template(
             params_template=data.params_template,
@@ -115,7 +120,9 @@ class ControllerApiV1JobsDefinitions:
     async def update(
         self, request: Request, definition_id: str, data: JobDefinitionPut
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="JOBS:DEFINITION::UPDATE"
+        )
 
         if data.params_template is not None or data.params is not None:
             existing = await self.crud_jobs_definitions.get(
@@ -143,8 +150,14 @@ class ControllerApiV1JobsDefinitions:
         )
 
     async def delete(self, request: Request, definition_id: str):
-        await self.authorize.require_admin(request=request)
-        return await self.crud_jobs_definitions.delete(_id=definition_id)
+        await self.authorize.require_perm(
+            request=request, permission="JOBS:DEFINITION::DELETE"
+        )
+        result = await self.crud_jobs_definitions.delete(_id=definition_id)
+        await self._crud_teams.drop_permissions_by_pattern(
+            pattern=f"^JOBS:JOB:{definition_id}:CREATE$"
+        )
+        return result
 
     def _validate_params_template(self, params_template: List[str], params: dict):
         placeholders = set()

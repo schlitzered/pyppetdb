@@ -25,6 +25,10 @@ class CrudJobsDefinitions(CrudMongo):
         result = await self._get(query=query, fields=fields)
         return JobDefinitionGet(**result)
 
+    async def resource_exists(self, _id: str) -> str:
+        query = {"id": _id}
+        return await self._resource_exists(query=query)
+
     async def update(
         self, _id: str, payload: JobDefinitionPut, fields: list
     ) -> JobDefinitionGet:

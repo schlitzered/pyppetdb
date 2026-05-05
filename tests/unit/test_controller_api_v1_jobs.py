@@ -31,7 +31,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
 
         # Mock definition
         mock_def = JobDefinitionGet(
@@ -94,7 +94,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
 
         # Mock definition
         mock_def = JobDefinitionGet(
@@ -153,22 +153,29 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
         self.mock_crud_node_jobs.cancel_node_jobs = AsyncMock()
+
+        mock_job = MagicMock()
+        mock_job.definition_id = "def1"
+        self.mock_crud_jobs.get = AsyncMock(return_value=mock_job)
 
         await self.controller.cancel(
             request=mock_request,
             job_id="job1",
         )
 
-        self.mock_authorize.require_admin.assert_called_once()
+        self.mock_crud_jobs.get.assert_called_once_with(
+            _id="job1", fields=["definition_id"]
+        )
+        self.mock_authorize.require_perm.assert_called_once()
         self.mock_crud_node_jobs.cancel_node_jobs.assert_called_once_with(job_id="job1")
 
     async def test_jobs_create_too_many_nodes(self):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
         self.mock_config.jobs.maxNodesPerJob = 2
 
         # Mock definition
@@ -202,7 +209,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
 
         # Mock definition with 'path' required
         mock_def = JobDefinitionGet(
@@ -232,7 +239,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
 
         mock_def = JobDefinitionGet(
             id="def1",
@@ -260,7 +267,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
-        self.mock_authorize.require_admin = AsyncMock(return_value=mock_user)
+        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
 
         mock_def = JobDefinitionGet(
             id="def1",

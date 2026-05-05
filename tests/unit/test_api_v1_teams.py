@@ -15,6 +15,7 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_ldap = MagicMock()
         self.mock_crud_ca_spaces = MagicMock()
         self.mock_crud_ca_authorities = MagicMock()
+        self.mock_crud_jobs_definitions = MagicMock()
 
         self.controller = ControllerApiV1Teams(
             log=self.log,
@@ -24,7 +25,24 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
             crud_ldap=self.mock_crud_ldap,
             crud_ca_spaces=self.mock_crud_ca_spaces,
             crud_ca_authorities=self.mock_crud_ca_authorities,
+            crud_jobs_definitions=self.mock_crud_jobs_definitions,
         )
+
+    async def test_validate_permissions_jobs_success(self):
+        # Test simple job permissions
+        await self.controller._validate_permissions(
+            [
+                "JOBS:JOB::CREATE",
+                "JOBS:DEFINITION::CREATE",
+                "JOBS:DEFINITION::UPDATE",
+                "JOBS:DEFINITION::DELETE",
+            ]
+        )
+
+        # Test granular job permission with lookup
+        self.mock_crud_jobs_definitions.resource_exists = AsyncMock(return_value="job1")
+        await self.controller._validate_permissions(["JOBS:JOB:job1:CREATE"])
+        self.mock_crud_jobs_definitions.resource_exists.assert_called_once_with("job1")
 
     async def test_create_team_with_ldap(self):
         self.mock_authorize.require_admin = AsyncMock()
@@ -130,19 +148,15 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         # Test granular permissions with resource lookup
-        self.mock_crud_ca_spaces.get = AsyncMock(return_value=MagicMock(id="space1"))
-        self.mock_crud_ca_authorities.get = AsyncMock(
-            return_value=MagicMock(id="auth1")
-        )
+        self.mock_crud_ca_spaces.resource_exists = AsyncMock(return_value="space1")
+        self.mock_crud_ca_authorities.resource_exists = AsyncMock(return_value="auth1")
 
         await self.controller._validate_permissions(
             ["CA:SPACES:space1:CERTS:UPDATE", "CA:AUTHORITIES:auth1:CERTS:UPDATE"]
         )
 
-        self.mock_crud_ca_spaces.get.assert_called_once_with("space1", fields=["id"])
-        self.mock_crud_ca_authorities.get.assert_called_once_with(
-            "auth1", fields=["id"]
-        )
+        self.mock_crud_ca_spaces.resource_exists.assert_called_once_with("space1")
+        self.mock_crud_ca_authorities.resource_exists.assert_called_once_with("auth1")
 
     async def test_validate_permissions_invalid_format(self):
         with self.assertRaises(QueryParamValidationError) as cm:
@@ -152,14 +166,16 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Invalid permission format", str(cm.exception.detail))
 
     async def test_validate_permissions_resource_not_found(self):
-        self.mock_crud_ca_spaces.get = AsyncMock(side_effect=ResourceNotFound("space1"))
+        self.mock_crud_ca_spaces.resource_exists = AsyncMock(
+            side_effect=ResourceNotFound("space1")
+        )
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.controller._validate_permissions(
                 ["CA:SPACES:space1:CERTS:UPDATE"]
             )
         self.assertIn("CA Space 'space1' does not exist", str(cm.exception.detail))
 
-        self.mock_crud_ca_authorities.get = AsyncMock(
+        self.mock_crud_ca_authorities.resource_exists = AsyncMock(
             side_effect=ResourceNotFound("auth1")
         )
         with self.assertRaises(QueryParamValidationError) as cm:

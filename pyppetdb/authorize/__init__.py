@@ -1,4 +1,5 @@
 import logging
+import re
 import typing
 
 from fastapi import Request
@@ -196,15 +197,22 @@ class AuthorizePyppetDB:
         return user
 
     async def require_perm(
-        self, request: Request, permission: str, user=None
+        self, request: Request, permission: str | list[str], user=None
     ) -> UserGet:
         if not user:
             user = await self.get_user(request=request)
         if user.admin:
             return user
 
+        if isinstance(permission, str):
+            permissions = [permission]
+        else:
+            permissions = permission
+
+        perm_regex = "^(" + "|".join([re.escape(p) for p in permissions]) + ")$"
+
         teams = await self.crud_teams.search(
-            users=f"^{user.id}$", permissions=f"^{permission}$", fields=["id"]
+            users=f"^{user.id}$", permissions=perm_regex, fields=["id"]
         )
         if teams.meta.result_size > 0:
             return user

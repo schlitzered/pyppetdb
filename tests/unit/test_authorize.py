@@ -125,7 +125,45 @@ class TestAuthorizeUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, user)
         # Verify that search was called with both users and permissions filters
         mock_teams.search.assert_called_once_with(
-            users="^user1$", permissions="^CA:SPACES:VIEW$", fields=["id"]
+            users="^user1$", permissions="^(CA:SPACES:VIEW)$", fields=["id"]
+        )
+
+    async def test_require_perm_multi_success(self):
+        mock_teams = MagicMock()
+        auth = AuthorizePyppetDB(
+            self.log, MagicMock(), mock_teams, MagicMock(), MagicMock()
+        )
+        user = UserGet(id="user1", admin=False)
+
+        mock_teams.search = AsyncMock(
+            return_value=TeamGetMulti(
+                result=[TeamGet(id="team1", permissions=["P2"])],
+                meta=MetaMulti(result_size=1),
+            )
+        )
+
+        result = await auth.require_perm(None, ["P1", "P2"], user=user)
+        self.assertEqual(result, user)
+        # Verify that search was called with a regex matching both permissions
+        mock_teams.search.assert_called_once_with(
+            users="^user1$", permissions="^(P1|P2)$", fields=["id"]
+        )
+
+    async def test_require_perm_multi_failure(self):
+        mock_teams = MagicMock()
+        auth = AuthorizePyppetDB(
+            self.log, MagicMock(), mock_teams, MagicMock(), MagicMock()
+        )
+        user = UserGet(id="user1", admin=False)
+
+        mock_teams.search = AsyncMock(
+            return_value=TeamGetMulti(result=[], meta=MetaMulti(result_size=0))
+        )
+
+        with self.assertRaises(PermissionError):
+            await auth.require_perm(None, ["P1", "P2"], user=user)
+        mock_teams.search.assert_called_once_with(
+            users="^user1$", permissions="^(P1|P2)$", fields=["id"]
         )
 
     async def test_require_perm_regular_failure(self):
@@ -142,5 +180,5 @@ class TestAuthorizeUnit(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(PermissionError):
             await auth.require_perm(None, "CA:SPACES:VIEW", user=user)
         mock_teams.search.assert_called_once_with(
-            users="^user1$", permissions="^CA:SPACES:VIEW$", fields=["id"]
+            users="^user1$", permissions="^(CA:SPACES:VIEW)$", fields=["id"]
         )
