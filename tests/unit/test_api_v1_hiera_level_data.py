@@ -32,7 +32,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_level_data_validation(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         # Mock key and level existence
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="static:test")
@@ -69,7 +69,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_invalid_data(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="static:test")
         )
@@ -94,7 +94,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIn("invalid data for key model", str(cm.exception))
 
     async def test_create_missing_key_model(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="static:unknown")
         )
@@ -121,7 +121,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIn("key model static:unknown not found", str(cm.exception))
 
     async def test_delete_level_data_clears_cache(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_level_data.get = AsyncMock(
             return_value=MagicMock(facts={"env": "prod"})
         )
@@ -139,7 +139,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_get(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_user = AsyncMock()
         self.mock_crud_level_data.get = AsyncMock(return_value=MagicMock())
 
         mock_request = MagicMock()
@@ -147,18 +147,19 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, level_id="l1", data_id="d1", key_id="k1", fields=set()
         )
 
+        self.mock_authorize.require_user.assert_called_once()
         self.mock_crud_level_data.get.assert_called_once()
 
     async def test_search(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_user = AsyncMock()
         self.mock_crud_level_data.search = AsyncMock(return_value=MagicMock())
 
         mock_request = MagicMock()
         await self.controller.search(
             request=mock_request,
             level_id="l1",
-            key_id=None,
-            data_id=None,
+            key_id="k1",
+            data_id="d1",
             fact=None,
             fields=set(),
             sort="id",
@@ -167,10 +168,11 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
+        self.mock_authorize.require_user.assert_called_once()
         self.mock_crud_level_data.search.assert_called_once()
 
     async def test_update(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="static:test")
         )

@@ -107,7 +107,9 @@ class ControllerApiV1HieraLevels:
         level_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:LEVELS::CREATE"
+        )
         result = await self.crud_hiera_levels.create(
             _id=level_id,
             payload=data,
@@ -126,7 +128,9 @@ class ControllerApiV1HieraLevels:
         request: Request,
         level_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:LEVELS::DELETE"
+        )
         result = await self.crud_hiera_levels.delete(_id=level_id)
         await self.crud_hiera_lookup_cache.clear_all()
         return result
@@ -137,7 +141,7 @@ class ControllerApiV1HieraLevels:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_hiera_levels.get(_id=level_id, fields=list(fields))
 
     async def search(
@@ -156,7 +160,7 @@ class ControllerApiV1HieraLevels:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_hiera_levels.search(
             _id=level_id,
             priority=priority,
@@ -174,7 +178,9 @@ class ControllerApiV1HieraLevels:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:LEVELS::UPDATE"
+        )
         result = await self.crud_hiera_levels.update(
             _id=level_id,
             payload=data,

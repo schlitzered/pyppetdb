@@ -90,7 +90,7 @@ class ControllerApiV1HieraLookup:
             default=None, description="fact filter: fact_name:fact_value"
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         facts = self._facts_from_query(fact)
         cached = await self.crud_hiera_lookup_cache.get_cached(
             key_id=key_id,

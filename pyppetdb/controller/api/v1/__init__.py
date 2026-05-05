@@ -158,6 +158,7 @@ class ControllerApiV1:
                 crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
                 crud_hiera_keys=crud_hiera_keys,
                 crud_hiera_level_data=crud_hiera_level_data,
+                crud_teams=crud_teams,
                 pyhiera=pyhiera,
             ).router,
             responses={404: {"description": "Not found"}},
@@ -267,6 +268,7 @@ class ControllerApiV1:
                 crud_ca_spaces=crud_ca_spaces,
                 crud_ca_authorities=crud_ca_authorities,
                 crud_jobs_definitions=crud_job_definitions,
+                crud_hiera_keys=crud_hiera_keys,
             ).router,
             responses={404: {"description": "Not found"}},
         )
