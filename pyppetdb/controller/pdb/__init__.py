@@ -45,6 +45,7 @@ class ControllerPdb:
             ControllerPdbQuery(
                 log=log,
                 config=config,
+                crud_nodes=crud_nodes,
                 authorize_client_cert=authorize_client_cert,
             ).router,
             prefix="/query",

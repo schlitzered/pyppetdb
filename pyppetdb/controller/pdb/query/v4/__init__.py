@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from pyppetdb.config import Config
 from pyppetdb.authorize import AuthorizeClientCert
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.controller.pdb.query.v4.resources import ControllerPdbQueryV4Resources
 
 
@@ -12,6 +13,7 @@ class ControllerPdbQueryV4:
         self,
         log: logging.Logger,
         config: Config,
+        crud_nodes: CrudNodes,
         authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
@@ -22,6 +24,7 @@ class ControllerPdbQueryV4:
             ControllerPdbQueryV4Resources(
                 log=log,
                 config=config,
+                crud_nodes=crud_nodes,
                 authorize_client_cert=authorize_client_cert,
             ).router
         )

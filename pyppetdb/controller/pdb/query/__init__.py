@@ -7,11 +7,15 @@ from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.query.v4 import ControllerPdbQueryV4
 
 
+from pyppetdb.crud.nodes import CrudNodes
+
+
 class ControllerPdbQuery:
     def __init__(
         self,
         log: logging.Logger,
         config: Config,
+        crud_nodes: CrudNodes,
         authorize_client_cert: AuthorizeClientCert,
     ):
         self._log = log
@@ -22,6 +26,7 @@ class ControllerPdbQuery:
             ControllerPdbQueryV4(
                 log=log,
                 config=config,
+                crud_nodes=crud_nodes,
                 authorize_client_cert=authorize_client_cert,
             ).router,
             prefix="/v4",
