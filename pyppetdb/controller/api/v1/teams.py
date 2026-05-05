@@ -11,6 +11,7 @@ from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.ldap import CrudLdap
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.teams import filter_list
@@ -34,6 +35,7 @@ class ControllerApiV1Teams:
         crud_ca_spaces: CrudCASpaces,
         crud_ca_authorities: CrudCAAuthorities,
         crud_jobs_definitions: CrudJobsDefinitions,
+        crud_hiera_keys: CrudHieraKeys,
     ):
         self._authorize = authorize
         self._crud_nodes_groups = crud_nodes_groups
@@ -42,6 +44,7 @@ class ControllerApiV1Teams:
         self._crud_ca_spaces = crud_ca_spaces
         self._crud_ca_authorities = crud_ca_authorities
         self._crud_jobs_definitions = crud_jobs_definitions
+        self._crud_hiera_keys = crud_hiera_keys
         self._log = log
 
         self._router = APIRouter(
@@ -131,6 +134,20 @@ class ControllerApiV1Teams:
             r"^JOBS:DEFINITION::CREATE$": None,
             r"^JOBS:DEFINITION::UPDATE$": None,
             r"^JOBS:DEFINITION::DELETE$": None,
+            r"^HIERA:KEY_MODELS_DYNAMIC::CREATE$": None,
+            r"^HIERA:KEY_MODELS_DYNAMIC::DELETE$": None,
+            r"^HIERA:KEY_MODELS::CREATE$": None,
+            r"^HIERA:KEY_MODELS::UPDATE$": None,
+            r"^HIERA:KEY_MODELS::DELETE$": None,
+            r"^HIERA:LEVELS::CREATE$": None,
+            r"^HIERA:LEVELS::UPDATE$": None,
+            r"^HIERA:LEVELS::DELETE$": None,
+            r"^HIERA:LEVEL_DATA::CREATE$": None,
+            r"^HIERA:LEVEL_DATA::UPDATE$": None,
+            r"^HIERA:LEVEL_DATA::DELETE$": None,
+            r"^HIERA:LEVEL_DATA:([^:]+):CREATE$": "hiera_key",
+            r"^HIERA:LEVEL_DATA:([^:]+):UPDATE$": "hiera_key",
+            r"^HIERA:LEVEL_DATA:([^:]+):DELETE$": "hiera_key",
         }
 
         for perm in permissions:
@@ -164,6 +181,14 @@ class ControllerApiV1Teams:
                         except ResourceNotFound:
                             raise QueryParamValidationError(
                                 msg=f"Job Definition '{resource_id}' does not exist (referenced in permission '{perm}')"
+                            )
+                    elif lookup_type == "hiera_key":
+                        resource_id = match.group(1)
+                        try:
+                            await self._crud_hiera_keys.resource_exists(resource_id)
+                        except ResourceNotFound:
+                            raise QueryParamValidationError(
+                                msg=f"Hiera Key '{resource_id}' does not exist (referenced in permission '{perm}')"
                             )
                     break
 

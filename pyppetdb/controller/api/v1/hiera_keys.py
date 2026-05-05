@@ -10,6 +10,7 @@ from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
+from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.hiera.key_model_utils import KEY_MODEL_DYNAMIC_PREFIX
 from pyppetdb.model.common import DataDelete
@@ -33,6 +34,7 @@ class ControllerApiV1HieraKeys:
         crud_hiera_key_models_dynamic: CrudHieraKeyModelsDynamic,
         crud_hiera_keys: CrudHieraKeys,
         crud_hiera_level_data: CrudHieraLevelData,
+        crud_teams: CrudTeams,
         pyhiera: PyHiera,
     ):
         self._authorize = authorize
@@ -40,6 +42,7 @@ class ControllerApiV1HieraKeys:
         self._crud_hiera_key_models_dynamic = crud_hiera_key_models_dynamic
         self._crud_hiera_keys = crud_hiera_keys
         self._crud_hiera_level_data = crud_hiera_level_data
+        self._crud_teams = crud_teams
         self._pyhiera = pyhiera
         self._log = log
         self._router = APIRouter(
@@ -142,7 +145,9 @@ class ControllerApiV1HieraKeys:
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:KEY_MODELS::CREATE"
+        )
         await self._key_model_exists(data.key_model_id)
         return await self.crud_hiera_keys.create(
             _id=key_id,
@@ -155,8 +160,14 @@ class ControllerApiV1HieraKeys:
         request: Request,
         key_id: str,
     ):
-        await self.authorize.require_admin(request=request)
-        return await self.crud_hiera_keys.delete(_id=key_id)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:KEY_MODELS::DELETE"
+        )
+        result = await self.crud_hiera_keys.delete(_id=key_id)
+        await self._crud_teams.drop_permissions_by_pattern(
+            pattern=f"^HIERA:LEVEL_DATA:{key_id}:(CREATE|UPDATE|DELETE)$"
+        )
+        return result
 
     async def get(
         self,
@@ -164,7 +175,7 @@ class ControllerApiV1HieraKeys:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_hiera_keys.get(_id=key_id, fields=list(fields))
 
     async def search(
@@ -186,7 +197,7 @@ class ControllerApiV1HieraKeys:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_hiera_keys.search(
             _id=key_id,
             model=key_model_id,
@@ -205,7 +216,9 @@ class ControllerApiV1HieraKeys:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:KEY_MODELS::UPDATE"
+        )
         current = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         new_model = data.key_model_id
         current_model = current.key_model_id

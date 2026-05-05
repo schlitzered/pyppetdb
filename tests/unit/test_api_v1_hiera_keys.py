@@ -13,6 +13,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_dynamic = MagicMock()
         self.mock_crud_keys = MagicMock()
         self.mock_crud_level_data = MagicMock()
+        self.mock_crud_teams = MagicMock()
         self.mock_pyhiera = MagicMock()
 
         self.controller = ControllerApiV1HieraKeys(
@@ -22,6 +23,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             crud_hiera_key_models_dynamic=self.mock_crud_dynamic,
             crud_hiera_keys=self.mock_crud_keys,
             crud_hiera_level_data=self.mock_crud_level_data,
+            crud_teams=self.mock_crud_teams,
             pyhiera=self.mock_pyhiera,
         )
 
@@ -40,7 +42,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_key(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_dynamic.get = AsyncMock()  # For _key_model_exists
         self.mock_crud_keys.create = AsyncMock()
 
@@ -50,11 +52,11 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, data=data, key_id="key1", fields=set()
         )
 
-        self.mock_authorize.require_admin.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once()
         self.mock_crud_keys.create.assert_called_once()
 
     async def test_update_key_with_validation(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         # Mock current key
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="dynamic:old")
@@ -77,29 +79,34 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, data=data, key_id="key1", fields=set()
         )
 
+        self.mock_authorize.require_perm.assert_called_once()
         self.mock_crud_level_data.search.assert_called_once()
         self.mock_crud_keys.update.assert_called_once()
 
     async def test_delete_key(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.delete = AsyncMock()
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
 
         mock_request = MagicMock()
         await self.controller.delete(request=mock_request, key_id="key1")
 
+        self.mock_authorize.require_perm.assert_called_once()
         self.mock_crud_keys.delete.assert_called_once_with(_id="key1")
+        self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once()
 
     async def test_get_key(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_user = AsyncMock()
         self.mock_crud_keys.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.controller.get(request=mock_request, key_id="key1", fields=set())
 
+        self.mock_authorize.require_user.assert_called_once()
         self.mock_crud_keys.get.assert_called_once()
 
     async def test_search_keys(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_user = AsyncMock()
         self.mock_crud_keys.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -115,4 +122,5 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
+        self.mock_authorize.require_user.assert_called_once()
         self.mock_crud_keys.search.assert_called_once()

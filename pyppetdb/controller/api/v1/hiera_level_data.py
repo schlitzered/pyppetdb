@@ -156,7 +156,13 @@ class ControllerApiV1HieraLevelData:
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request,
+            permission=[
+                "HIERA:LEVEL_DATA::CREATE",
+                f"HIERA:LEVEL_DATA:{key_id}:CREATE",
+            ],
+        )
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         level = await self.crud_hiera_levels.get(_id=level_id, fields=["priority"])
         model_type, key_model_id = await self._get_model_type(key.key_model_id)
@@ -186,7 +192,13 @@ class ControllerApiV1HieraLevelData:
         data_id: str,
         key_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request,
+            permission=[
+                "HIERA:LEVEL_DATA::DELETE",
+                f"HIERA:LEVEL_DATA:{key_id}:DELETE",
+            ],
+        )
         existing = await self.crud_hiera_level_data.get(
             _id=data_id,
             key_id=key_id,
@@ -211,7 +223,7 @@ class ControllerApiV1HieraLevelData:
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         level_data = await self.crud_hiera_level_data.get(
             _id=data_id,
             key_id=key_id,
@@ -238,7 +250,7 @@ class ControllerApiV1HieraLevelData:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self.crud_hiera_level_data.search(
             _id=data_id,
             key_id=key_id,
@@ -260,7 +272,13 @@ class ControllerApiV1HieraLevelData:
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request,
+            permission=[
+                "HIERA:LEVEL_DATA::UPDATE",
+                f"HIERA:LEVEL_DATA:{key_id}:UPDATE",
+            ],
+        )
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         await self.crud_hiera_levels.get(_id=level_id, fields=["id"])
         if data.data is not None:

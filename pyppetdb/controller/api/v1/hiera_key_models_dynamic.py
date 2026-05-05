@@ -104,7 +104,7 @@ class ControllerApiV1HieraKeyModelsDynamic:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         result = await self.crud_hiera_key_models_dynamic.search(
             _id=key_model_id,
             fields=list(fields),
@@ -121,7 +121,7 @@ class ControllerApiV1HieraKeyModelsDynamic:
         key_model_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         result = await self.crud_hiera_key_models_dynamic.get(
             _id=key_model_id,
             fields=list(fields),
@@ -135,7 +135,9 @@ class ControllerApiV1HieraKeyModelsDynamic:
         key_model_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:KEY_MODELS_DYNAMIC::CREATE"
+        )
         if not key_model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             raise QueryParamValidationError(
                 msg=f"invalid key model id {key_model_id}, expected dynamic prefix"
@@ -152,7 +154,9 @@ class ControllerApiV1HieraKeyModelsDynamic:
         request: Request,
         key_model_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="HIERA:KEY_MODELS_DYNAMIC::DELETE"
+        )
         keys = await self.crud_hiera_keys.search(
             model_id=key_model_id,
             fields=["id"],

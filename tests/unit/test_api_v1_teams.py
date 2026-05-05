@@ -16,6 +16,7 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_ca_spaces = MagicMock()
         self.mock_crud_ca_authorities = MagicMock()
         self.mock_crud_jobs_definitions = MagicMock()
+        self.mock_crud_hiera_keys = MagicMock()
 
         self.controller = ControllerApiV1Teams(
             log=self.log,
@@ -26,7 +27,38 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
             crud_ca_spaces=self.mock_crud_ca_spaces,
             crud_ca_authorities=self.mock_crud_ca_authorities,
             crud_jobs_definitions=self.mock_crud_jobs_definitions,
+            crud_hiera_keys=self.mock_crud_hiera_keys,
         )
+
+    async def test_validate_permissions_hiera_success(self):
+        # Test simple Hiera permissions
+        await self.controller._validate_permissions(
+            [
+                "HIERA:KEY_MODELS_DYNAMIC::CREATE",
+                "HIERA:KEY_MODELS_DYNAMIC::DELETE",
+                "HIERA:KEY_MODELS::CREATE",
+                "HIERA:KEY_MODELS::UPDATE",
+                "HIERA:KEY_MODELS::DELETE",
+                "HIERA:LEVELS::CREATE",
+                "HIERA:LEVELS::UPDATE",
+                "HIERA:LEVELS::DELETE",
+                "HIERA:LEVEL_DATA::CREATE",
+                "HIERA:LEVEL_DATA::UPDATE",
+                "HIERA:LEVEL_DATA::DELETE",
+            ]
+        )
+
+        # Test granular Hiera permission with lookup
+        self.mock_crud_hiera_keys.resource_exists = AsyncMock(return_value="key1")
+        await self.controller._validate_permissions(
+            [
+                "HIERA:LEVEL_DATA:key1:CREATE",
+                "HIERA:LEVEL_DATA:key1:UPDATE",
+                "HIERA:LEVEL_DATA:key1:DELETE",
+            ]
+        )
+        self.assertEqual(self.mock_crud_hiera_keys.resource_exists.call_count, 3)
+        self.mock_crud_hiera_keys.resource_exists.assert_called_with("key1")
 
     async def test_validate_permissions_jobs_success(self):
         # Test simple job permissions
