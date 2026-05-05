@@ -2,6 +2,8 @@ import asyncio
 import hashlib
 import logging
 import typing
+from datetime import datetime
+from datetime import timezone
 
 import ahocorasick
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -258,8 +260,9 @@ class CrudNodesSecretsRedactor(CrudMongo):
         data = {
             "id": fingerprint,
             "value_encrypted": encrypted,
+            "created_at": datetime.now(timezone.utc),
         }
-        result = await self._create(payload=data, fields=["id"])
+        result = await self._create(payload=data, fields=["id", "created_at"])
         return NodesSecretsRedactorGet(**result)
 
     async def delete(self, _id: str) -> DataDelete:
@@ -270,6 +273,9 @@ class CrudNodesSecretsRedactor(CrudMongo):
     async def search(
         self,
         _id: typing.Optional[str] = None,
+        fields: typing.Optional[typing.List[str]] = None,
+        sort: typing.Optional[str] = "id",
+        sort_order: typing.Optional[str] = "ascending",
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
     ) -> NodesSecretsRedactorGetMulti:
@@ -277,7 +283,9 @@ class CrudNodesSecretsRedactor(CrudMongo):
         self._filter_re(query, "id", _id)
         result = await self._search(
             query=query,
-            fields=["id"],
+            fields=fields or ["id", "created_at"],
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )

@@ -148,6 +148,8 @@ class ControllerApiV1Teams:
             r"^HIERA:LEVEL_DATA:([^:]+):CREATE$": "hiera_key",
             r"^HIERA:LEVEL_DATA:([^:]+):UPDATE$": "hiera_key",
             r"^HIERA:LEVEL_DATA:([^:]+):DELETE$": "hiera_key",
+            r"^NODES:SECRETS_REDACTOR::CREATE$": None,
+            r"^NODES:SECRETS_REDACTOR::DELETE$": None,
         }
 
         for perm in permissions:

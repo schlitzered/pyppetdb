@@ -60,6 +60,14 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.mock_crud_hiera_keys.resource_exists.call_count, 3)
         self.mock_crud_hiera_keys.resource_exists.assert_called_with("key1")
 
+    async def test_validate_permissions_nodes_secrets_redactor_success(self):
+        await self.controller._validate_permissions(
+            [
+                "NODES:SECRETS_REDACTOR::CREATE",
+                "NODES:SECRETS_REDACTOR::DELETE",
+            ]
+        )
+
     async def test_validate_permissions_jobs_success(self):
         # Test simple job permissions
         await self.controller._validate_permissions(

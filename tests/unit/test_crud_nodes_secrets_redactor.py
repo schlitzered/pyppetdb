@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime
+from datetime import timezone
 from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
@@ -22,13 +24,17 @@ class TestCrudNodesSecretsRedactorUnit(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_create(self):
-        self.crud._create = AsyncMock(return_value={"id": "fingerprint"})
+        now = datetime.now(timezone.utc)
+        self.crud._create = AsyncMock(
+            return_value={"id": "fingerprint", "created_at": now}
+        )
         self.mock_redactor.encrypt.return_value = "encrypted"
 
         payload = NodesSecretsRedactorPost(value="secret123")
         result = await self.crud.create(payload=payload)
 
         self.assertEqual(result.id, "fingerprint")
+        self.assertEqual(result.created_at, now)
         self.mock_redactor.encrypt.assert_called_once_with("secret123")
 
     async def test_delete(self):

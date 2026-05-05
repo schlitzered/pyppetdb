@@ -1,4 +1,5 @@
 import logging
+from typing import Set
 
 from fastapi import APIRouter
 from fastapi import Request
@@ -7,9 +8,13 @@ from fastapi import Query
 from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGet
 from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGetMulti
 from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorPost
+from pyppetdb.model.nodes_secrets_redactor import filter_list
+from pyppetdb.model.nodes_secrets_redactor import filter_literal
+from pyppetdb.model.nodes_secrets_redactor import sort_literal
 
 
 class ControllerApiV1NodesSecretsRedactor:
@@ -58,23 +63,33 @@ class ControllerApiV1NodesSecretsRedactor:
         return self._router
 
     async def create(self, request: Request, payload: NodesSecretsRedactorPost):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="NODES:SECRETS_REDACTOR::CREATE"
+        )
         return await self._crud_nodes_secrets_redactor.create(payload=payload)
 
     async def delete(self, request: Request, secret_id: str):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission="NODES:SECRETS_REDACTOR::DELETE"
+        )
         return await self._crud_nodes_secrets_redactor.delete(_id=secret_id)
 
     async def search(
         self,
         request: Request,
         secret_id: str = Query(description="filter: regular_expressions", default=None),
+        fields: Set[filter_literal] = Query(default=filter_list),
+        sort: sort_literal = Query(default="id"),
+        sort_order: sort_order_literal = Query(default="ascending"),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_user(request=request)
         return await self._crud_nodes_secrets_redactor.search(
             _id=secret_id,
+            fields=list(fields),
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )
