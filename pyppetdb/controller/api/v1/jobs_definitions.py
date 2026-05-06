@@ -14,7 +14,7 @@
 
 import logging
 import re
-from typing import List
+from typing import List, Set
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -22,12 +22,19 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_JOBS_GET
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_CREATE
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_UPDATE
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_DELETE
+from pyppetdb.authorize import PATTERN_JOBS_JOB
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.model.jobs_definitions import JobDefinitionGet
 from pyppetdb.model.jobs_definitions import JobDefinitionGetMulti
 from pyppetdb.model.jobs_definitions import JobDefinitionPost
 from pyppetdb.model.jobs_definitions import JobDefinitionPut
+from pyppetdb.model.jobs_definitions import filter_list
+from pyppetdb.model.jobs_definitions import filter_literal
 from pyppetdb.model.common import DataDelete
 
 
@@ -101,24 +108,32 @@ class ControllerApiV1JobsDefinitions:
         self,
         request: Request,
         _id: str = Query(default=None),
+        fields: Set[filter_literal] = Query(default=filter_list),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
-        await self.authorize.require_user(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         return await self.crud_jobs_definitions.search(
             _id=_id,
-            fields=[],
+            fields=list(fields),
             page=page,
             limit=limit,
         )
 
-    async def get(self, request: Request, definition_id: str):
-        await self.authorize.require_user(request=request)
-        return await self.crud_jobs_definitions.get(_id=definition_id, fields=[])
+    async def get(
+        self,
+        request: Request,
+        definition_id: str,
+        fields: Set[filter_literal] = Query(default=filter_list),
+    ):
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
+        return await self.crud_jobs_definitions.get(
+            _id=definition_id, fields=list(fields)
+        )
 
     async def create(self, request: Request, data: JobDefinitionPost):
         await self.authorize.require_perm(
-            request=request, permission="JOBS:DEFINITION::CREATE"
+            request=request, permission=PERM_JOBS_DEFINITION_CREATE
         )
 
         self._validate_params_template(
@@ -135,7 +150,7 @@ class ControllerApiV1JobsDefinitions:
         self, request: Request, definition_id: str, data: JobDefinitionPut
     ):
         await self.authorize.require_perm(
-            request=request, permission="JOBS:DEFINITION::UPDATE"
+            request=request, permission=PERM_JOBS_DEFINITION_UPDATE
         )
 
         if data.params_template is not None or data.params is not None:
@@ -165,11 +180,11 @@ class ControllerApiV1JobsDefinitions:
 
     async def delete(self, request: Request, definition_id: str):
         await self.authorize.require_perm(
-            request=request, permission="JOBS:DEFINITION::DELETE"
+            request=request, permission=PERM_JOBS_DEFINITION_DELETE
         )
         result = await self.crud_jobs_definitions.delete(_id=definition_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            pattern=f"^JOBS:JOB:{definition_id}:CREATE$"
+            pattern=f"{PATTERN_JOBS_JOB.format(definition_id=definition_id)}CREATE$"
         )
         return result
 

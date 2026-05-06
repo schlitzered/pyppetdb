@@ -19,6 +19,8 @@ from fastapi import Request
 from fastapi import Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_CERTS_UPDATE
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
@@ -112,7 +114,7 @@ class ControllerApiV1CAAuthoritiesCerts:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -145,7 +147,7 @@ class ControllerApiV1CAAuthoritiesCerts:
         cert_id: str,
         fields: Set[cert_filter_literal] = Query(default=cert_filter_list),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -176,7 +178,8 @@ class ControllerApiV1CAAuthoritiesCerts:
         fields: Set[cert_filter_literal] = Query(default=cert_filter_list),
     ):
         await self._authorize.require_perm(
-            request=request, permission=f"CA:AUTHORITIES:{ca_id}:CERTS:UPDATE"
+            request=request,
+            permission=PERM_CA_AUTHORITIES_CERTS_UPDATE.format(ca_id=ca_id),
         )
 
         fetch_fields = list(fields)

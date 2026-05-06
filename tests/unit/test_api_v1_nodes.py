@@ -15,6 +15,12 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+from pyppetdb.authorize import (
+    PERM_NODES_CREATE,
+    PERM_NODES_UPDATE,
+    PERM_NODES_DELETE,
+    PERM_NODES_CATALOG_CACHE_DELETE,
+)
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
 from pyppetdb.model.nodes import NodePut
 
@@ -63,7 +69,7 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_delete_node_cascades(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_ca_service.update_certificate_status = AsyncMock()
         self.mock_crud_groups.delete_node_from_nodes_groups = AsyncMock()
         self.mock_crud_catalogs.delete_all_from_node = AsyncMock()
@@ -75,7 +81,9 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.delete(node_id="node1", request=mock_request)
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_DELETE
+        )
         self.mock_ca_service.update_certificate_status.assert_called_once()
         self.mock_crud_groups.delete_node_from_nodes_groups.assert_called_once_with(
             node_id="node1"
@@ -92,8 +100,8 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_node_jobs.delete_by_node.assert_called_once_with(node_id="node1")
         self.mock_crud_nodes.delete.assert_called_once_with(_id="node1")
 
-    async def test_update_node_admin_required(self):
-        self.mock_authorize.require_admin = AsyncMock()
+    async def test_update_node_perm_required(self):
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_nodes.update = AsyncMock()
 
         data = NodePut(disabled=True)
@@ -102,14 +110,16 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1", request=mock_request, data=data, fields=set()
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_UPDATE
+        )
         self.mock_crud_nodes.update.assert_called_once()
         args = self.mock_crud_nodes.update.call_args[1]
         self.assertEqual(args["_id"], "node1")
         self.assertEqual(args["payload"].disabled, True)
 
-    async def test_create_node_admin_required(self):
-        self.mock_authorize.require_admin = AsyncMock()
+    async def test_create_node_perm_required(self):
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_nodes.create = AsyncMock()
 
         data = NodePut(disabled=True)
@@ -118,8 +128,26 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node2", request=mock_request, data=data, fields=set()
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_CREATE
+        )
         self.mock_crud_nodes.create.assert_called_once()
         args = self.mock_crud_nodes.create.call_args[1]
         self.assertEqual(args["_id"], "node2")
         self.assertEqual(args["payload"].disabled, True)
+
+    async def test_catalog_cache_wipe_perm_required(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_catalog_cache.delete_many_by_filter = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.catalog_cache_wipe(
+            request=mock_request, node_id="node1", environment="prod", fact=set()
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_CATALOG_CACHE_DELETE
+        )
+        self.mock_crud_catalog_cache.delete_many_by_filter.assert_called_once_with(
+            node_id="node1", environment="prod", fact=set()
+        )

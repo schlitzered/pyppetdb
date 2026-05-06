@@ -19,6 +19,11 @@ from fastapi import Request
 from fastapi import Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_CREATE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_UPDATE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_DELETE
+from pyppetdb.authorize import PATTERN_CA_AUTHORITIES
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.ca.service import CAService
@@ -95,7 +100,7 @@ class ControllerApiV1CAAuthorities:
         data: CAAuthorityPut,
     ):
         await self._authorize.require_perm(
-            request=request, permission="CA:AUTHORITIES:UPDATE"
+            request=request, permission=PERM_CA_AUTHORITIES_UPDATE
         )
         if data.status == "revoked":
             return await self._ca_service.revoke_authority(ca_id)
@@ -107,10 +112,12 @@ class ControllerApiV1CAAuthorities:
         ca_id: str,
     ):
         await self._authorize.require_perm(
-            request=request, permission="CA:AUTHORITIES:DELETE"
+            request=request, permission=PERM_CA_AUTHORITIES_DELETE
         )
         await self._ca_service.delete_authority(ca_id)
-        await self._crud_teams.drop_permissions_by_pattern(f"^CA:AUTHORITIES:{ca_id}:")
+        await self._crud_teams.drop_permissions_by_pattern(
+            PATTERN_CA_AUTHORITIES.format(ca_id=ca_id)
+        )
         return {}
 
     async def create(
@@ -121,7 +128,7 @@ class ControllerApiV1CAAuthorities:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self._authorize.require_perm(
-            request=request, permission="CA:AUTHORITIES:CREATE"
+            request=request, permission=PERM_CA_AUTHORITIES_CREATE
         )
         return await self._ca_service.create_authority(
             _id=ca_id, payload=data, fields=list(fields)
@@ -133,7 +140,7 @@ class ControllerApiV1CAAuthorities:
         ca_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
         return await self._crud_authorities.get(_id=ca_id, fields=list(fields))
 
     async def search(
@@ -157,7 +164,7 @@ class ControllerApiV1CAAuthorities:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
         return await self._crud_authorities.search(
             _id=ca_id,
             parent_id=parent_id,

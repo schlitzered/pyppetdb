@@ -20,6 +20,10 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_USERS_CREATE
+from pyppetdb.authorize import PERM_USERS_DELETE
+from pyppetdb.authorize import PERM_USERS_GET
+from pyppetdb.authorize import PERM_USERS_UPDATE
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
@@ -121,13 +125,13 @@ class ControllerApiV1Users:
         user_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_USERS_CREATE)
         return await self.crud_users.create(
             _id=user_id, payload=data, fields=list(fields)
         )
 
     async def delete(self, request: Request, user_id: str):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_USERS_DELETE)
         await self.crud_users_credentials.delete_all_from_owner(owner=user_id)
         await self.crud_teams.delete_user_from_teams(user_id=user_id)
         return await self.crud_users.delete(_id=user_id)
@@ -139,16 +143,32 @@ class ControllerApiV1Users:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         if user_id == "_self":
-            user_id = await self.authorize.get_user(request=request)
-            user_id = user_id.id
+            user_info = await self.authorize.get_user(request=request)
+            user_id = user_info.id
         else:
-            await self.authorize.require_admin(request=request)
-        return await self.crud_users.get(_id=user_id, fields=list(fields))
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_GET
+            )
+
+        user = await self.crud_users.get(_id=user_id, fields=list(fields))
+
+        teams = await self.crud_teams.search(
+            users=f"^{user_id}$", fields=["permissions"]
+        )
+        all_permissions = set()
+        for team in teams.result:
+            if team.permissions:
+                all_permissions.update(team.permissions)
+
+        user.permissions = sorted(list(all_permissions))
+
+        return user
 
     async def search(
         self,
         request: Request,
         user_id: str = Query(description="filter: regular_expressions", default=None),
+        admin: bool = Query(default=None),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="id"),
         sort_order: sort_order_literal = Query(default="ascending"),
@@ -160,7 +180,8 @@ class ControllerApiV1Users:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_USERS_GET)
+
         return await self.crud_users.search(
             _id=user_id,
             fields=list(fields),
@@ -182,7 +203,9 @@ class ControllerApiV1Users:
             user_id = user_id.id
             data.admin = None
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_UPDATE
+            )
         return await self.crud_users.update(
             _id=user_id, payload=data, fields=list(fields)
         )

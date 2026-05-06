@@ -20,6 +20,10 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_NODES_GROUPS_CREATE
+from pyppetdb.authorize import PERM_NODES_GROUPS_DELETE
+from pyppetdb.authorize import PERM_NODES_GROUPS_GET
+from pyppetdb.authorize import PERM_NODES_GROUPS_UPDATE
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.teams import CrudTeams
@@ -138,7 +142,9 @@ class ControllerApiV1NodesGroups:
         node_group_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission=PERM_NODES_GROUPS_CREATE
+        )
         data = await self._upsert_data(node_group_id=node_group_id, data=data)
 
         result = await self.crud_nodes_groups.create(
@@ -153,7 +159,9 @@ class ControllerApiV1NodesGroups:
         request: Request,
         node_group_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission=PERM_NODES_GROUPS_DELETE
+        )
         await self.crud_nodes.delete_node_group_from_all(node_group_id=node_group_id)
         return await self.crud_nodes_groups.delete(
             _id=node_group_id,
@@ -181,7 +189,9 @@ class ControllerApiV1NodesGroups:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission=PERM_NODES_GROUPS_GET
+        )
         result = await self.crud_nodes_groups.get(
             _id=node_group_id, fields=list(fields)
         )
@@ -206,7 +216,9 @@ class ControllerApiV1NodesGroups:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission=PERM_NODES_GROUPS_GET
+        )
         return await self.crud_nodes_groups.search(
             _id=node_group_id,
             nodes=nodes,
@@ -225,7 +237,9 @@ class ControllerApiV1NodesGroups:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(
+            request=request, permission=PERM_NODES_GROUPS_UPDATE
+        )
         data = await self._upsert_data(node_group_id=node_group_id, data=data)
         result = await self.crud_nodes_groups.update(
             _id=node_group_id,

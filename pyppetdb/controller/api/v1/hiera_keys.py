@@ -20,6 +20,11 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_UPDATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DELETE
+from pyppetdb.authorize import PATTERN_HIERA_LEVEL_DATA
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
@@ -160,7 +165,7 @@ class ControllerApiV1HieraKeys:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:KEY_MODELS::CREATE"
+            request=request, permission=PERM_HIERA_KEY_MODELS_CREATE
         )
         await self._key_model_exists(data.key_model_id)
         return await self.crud_hiera_keys.create(
@@ -175,11 +180,11 @@ class ControllerApiV1HieraKeys:
         key_id: str,
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:KEY_MODELS::DELETE"
+            request=request, permission=PERM_HIERA_KEY_MODELS_DELETE
         )
         result = await self.crud_hiera_keys.delete(_id=key_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            pattern=f"^HIERA:LEVEL_DATA:{key_id}:(CREATE|UPDATE|DELETE)$"
+            pattern=f"{PATTERN_HIERA_LEVEL_DATA.format(key_id=key_id)}(CREATE|UPDATE|DELETE)$"
         )
         return result
 
@@ -189,7 +194,8 @@ class ControllerApiV1HieraKeys:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         return await self.crud_hiera_keys.get(_id=key_id, fields=list(fields))
 
     async def search(
@@ -211,7 +217,8 @@ class ControllerApiV1HieraKeys:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         return await self.crud_hiera_keys.search(
             _id=key_id,
             model=key_model_id,
@@ -231,7 +238,7 @@ class ControllerApiV1HieraKeys:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:KEY_MODELS::UPDATE"
+            request=request, permission=PERM_HIERA_KEY_MODELS_UPDATE
         )
         current = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
         new_model = data.key_model_id

@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.hiera_keys import ControllerApiV1HieraKeys
 from pyppetdb.model.hiera_keys import HieraKeyPost, HieraKeyPut
+from pyppetdb.authorize import PERM_HIERA_GET
 
 
 class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
@@ -110,17 +111,19 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once()
 
     async def test_get_key(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.controller.get(request=mock_request, key_id="key1", fields=set())
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_keys.get.assert_called_once()
 
     async def test_search_keys(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_keys.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -136,5 +139,7 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_keys.search.assert_called_once()

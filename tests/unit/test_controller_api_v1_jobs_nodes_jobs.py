@@ -19,6 +19,7 @@ import logging
 from fastapi import Request
 from pyppetdb.controller.api.v1.jobs_nodes_jobs import ControllerApiV1JobsNodesJobs
 from pyppetdb.model.jobs_nodes_jobs import NodeJobGet, JobsNodeJobGetMulti
+from pyppetdb.authorize import PERM_JOBS_GET
 
 
 class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
@@ -36,7 +37,7 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_success(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         mock_job = NodeJobGet(
             id="job1:node1",
             job_id="job1",
@@ -53,9 +54,12 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
         result = await self.controller.get(
             request=mock_request,
             node_job_id="job1:node1",
+            fields=set(),
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
         self.mock_crud.get.assert_called_once_with(
             _id="job1:node1",
             fields=[],
@@ -68,7 +72,7 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_search_success(self):
         mock_request = MagicMock(spec=Request)
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         mock_job = NodeJobGet(
             id="job1:node1",
             job_id="job1",
@@ -91,11 +95,14 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             job_id="job1",
             node_id="node1",
             status="scheduled",
+            fields=set(),
             page=0,
             limit=10,
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
         self.mock_crud.search.assert_called_once_with(
             job_id="job1",
             node_id="node1",

@@ -22,6 +22,7 @@ from fastapi import Request
 from pyhiera.errors import PyHieraBackendError
 from pyhiera.errors import PyHieraError
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.errors import QueryParamValidationError
@@ -104,7 +105,8 @@ class ControllerApiV1HieraLookup:
             default=None, description="fact filter: fact_name:fact_value"
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         facts = self._facts_from_query(fact)
         cached = await self.crud_hiera_lookup_cache.get_cached(
             key_id=key_id,

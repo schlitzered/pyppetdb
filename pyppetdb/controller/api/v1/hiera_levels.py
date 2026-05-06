@@ -20,6 +20,10 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PERM_HIERA_LEVELS_CREATE
+from pyppetdb.authorize import PERM_HIERA_LEVELS_UPDATE
+from pyppetdb.authorize import PERM_HIERA_LEVELS_DELETE
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
 from pyppetdb.crud.hiera_level_data import CrudHieraLevelData
 from pyppetdb.crud.hiera_levels import CrudHieraLevels
@@ -122,7 +126,7 @@ class ControllerApiV1HieraLevels:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:LEVELS::CREATE"
+            request=request, permission=PERM_HIERA_LEVELS_CREATE
         )
         result = await self.crud_hiera_levels.create(
             _id=level_id,
@@ -143,7 +147,7 @@ class ControllerApiV1HieraLevels:
         level_id: str,
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:LEVELS::DELETE"
+            request=request, permission=PERM_HIERA_LEVELS_DELETE
         )
         result = await self.crud_hiera_levels.delete(_id=level_id)
         await self.crud_hiera_lookup_cache.clear_all()
@@ -155,7 +159,8 @@ class ControllerApiV1HieraLevels:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         return await self.crud_hiera_levels.get(_id=level_id, fields=list(fields))
 
     async def search(
@@ -174,7 +179,8 @@ class ControllerApiV1HieraLevels:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         return await self.crud_hiera_levels.search(
             _id=level_id,
             priority=priority,
@@ -193,7 +199,7 @@ class ControllerApiV1HieraLevels:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:LEVELS::UPDATE"
+            request=request, permission=PERM_HIERA_LEVELS_UPDATE
         )
         result = await self.crud_hiera_levels.update(
             _id=level_id,

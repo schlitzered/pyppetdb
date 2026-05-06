@@ -18,6 +18,7 @@ from fastapi import APIRouter
 from fastapi import Request, HTTPException
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_JOBS_GET
 from pyppetdb.model.jobs_nodes_jobs_logs import LogBlobGet
 
 
@@ -57,7 +58,7 @@ class ControllerApiV1JobsNodesJobsLogs:
         request: Request,
         log_id: str,
     ):
-        await self.authorize.require_user(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
 
         try:
             job_run_id, chunk_id = log_id.rsplit(

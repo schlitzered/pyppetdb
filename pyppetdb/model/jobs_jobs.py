@@ -17,6 +17,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Literal
+from typing import Optional
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
 from pyppetdb.model.common import MetaMulti, filter_complex_search
@@ -39,14 +40,14 @@ sort_literal = Literal[
 
 
 class JobGet(BaseModel):
-    id: str
-    definition_id: str
-    parameters: Dict[str, Any]
-    env_vars: Dict[str, Any]
-    node_filter: filter_complex_search
-    nodes: List[str]
-    created_by: str
-    created_at: datetime
+    id: Optional[str] = None
+    definition_id: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    env_vars: Optional[Dict[str, Any]] = None
+    node_filter: Optional[filter_complex_search] = None
+    nodes: Optional[List[str]] = None
+    created_by: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class JobPost(BaseModel):

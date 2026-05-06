@@ -20,6 +20,8 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_GET
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_DELETE
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGet
 from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGetMulti
@@ -86,7 +88,9 @@ class ControllerApiV1PyppetDBNodes:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_perm(
+            request=request, permission=PERM_PYPPETDB_NODES_GET
+        )
         return await self._crud_pyppetdb_nodes.search(
             _id=_id,
             fields=list(fields),
@@ -97,7 +101,9 @@ class ControllerApiV1PyppetDBNodes:
         )
 
     async def delete(self, request: Request, node_id: str):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_perm(
+            request=request, permission=PERM_PYPPETDB_NODES_DELETE
+        )
         return await self._crud_pyppetdb_nodes.delete(_id=node_id)
 
     async def get(
@@ -106,7 +112,9 @@ class ControllerApiV1PyppetDBNodes:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self._authorize.require_admin(request=request)
+        await self._authorize.require_perm(
+            request=request, permission=PERM_PYPPETDB_NODES_GET
+        )
         return await self._crud_pyppetdb_nodes.get(
             _id=node_id,
             fields=list(fields),

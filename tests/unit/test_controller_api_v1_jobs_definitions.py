@@ -22,6 +22,11 @@ from pyppetdb.model.jobs_definitions import (
     JobDefinitionPut,
     JobParamDefinition,
 )
+from pyppetdb.authorize import (
+    PERM_JOBS_GET,
+    PERM_JOBS_DEFINITION_CREATE,
+    PERM_JOBS_DEFINITION_UPDATE,
+)
 
 
 class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
@@ -55,6 +60,9 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud.create = AsyncMock(return_value={"id": "def1"})
 
         await self.controller.create(request=mock_request, data=payload)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_DEFINITION_CREATE
+        )
         self.mock_crud.create.assert_called_once()
 
     async def test_create_validation_missing_param(self):
@@ -113,6 +121,9 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.update(
             request=mock_request, definition_id="def1", data=payload
         )
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_DEFINITION_UPDATE
+        )
         self.mock_crud.update.assert_called_once()
 
     async def test_update_validation_failure_partial_template(self):
@@ -134,3 +145,36 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(cm.exception.status_code, 400)
         self.assertIn("Missing parameters for template: new_one", cm.exception.detail)
+
+    async def test_search_success(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.search = AsyncMock(
+            return_value=MagicMock(result=[], meta={"result_size": 0})
+        )
+
+        await self.controller.search(
+            request=mock_request,
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
+        self.mock_crud.search.assert_called_once()
+
+    async def test_get_success(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.get = AsyncMock()
+
+        await self.controller.get(
+            request=mock_request,
+            definition_id="def1",
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
+        self.mock_crud.get.assert_called_once_with(_id="def1", fields=[])

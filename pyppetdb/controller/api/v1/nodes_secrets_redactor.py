@@ -20,6 +20,8 @@ from fastapi import Request
 from fastapi import Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_CREATE
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_DELETE
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
@@ -78,13 +80,13 @@ class ControllerApiV1NodesSecretsRedactor:
 
     async def create(self, request: Request, payload: NodesSecretsRedactorPost):
         await self.authorize.require_perm(
-            request=request, permission="NODES:SECRETS_REDACTOR::CREATE"
+            request=request, permission=PERM_NODES_SECRETS_REDACTOR_CREATE
         )
         return await self._crud_nodes_secrets_redactor.create(payload=payload)
 
     async def delete(self, request: Request, secret_id: str):
         await self.authorize.require_perm(
-            request=request, permission="NODES:SECRETS_REDACTOR::DELETE"
+            request=request, permission=PERM_NODES_SECRETS_REDACTOR_DELETE
         )
         return await self._crud_nodes_secrets_redactor.delete(_id=secret_id)
 
