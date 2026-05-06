@@ -368,6 +368,11 @@ class CrudNodes(CrudMongo):
         environment: typing.Optional[str] = None,
         report_status: typing.Optional[str] = None,
     ) -> NodeGetDistinctFactValues:
+        if not fact_id or fact_id.endswith("."):
+            return NodeGetDistinctFactValues(
+                **{"result": [], "meta": {"result_size": 0}}
+            )
+
         query = {
             f"facts.{fact_id}": {
                 "$type": [

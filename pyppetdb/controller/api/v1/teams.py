@@ -20,6 +20,60 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_TEAMS_CREATE
+from pyppetdb.authorize import PERM_TEAMS_DELETE
+from pyppetdb.authorize import PERM_TEAMS_GET
+from pyppetdb.authorize import PERM_TEAMS_UPDATE
+from pyppetdb.authorize import PERM_CA_SPACES_CREATE
+from pyppetdb.authorize import PERM_CA_SPACES_UPDATE
+from pyppetdb.authorize import PERM_CA_SPACES_DELETE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_CREATE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_UPDATE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_DELETE
+from pyppetdb.authorize import PERM_JOBS_JOB_CREATE
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_CREATE
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_UPDATE
+from pyppetdb.authorize import PERM_JOBS_DEFINITION_DELETE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_UPDATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DELETE
+from pyppetdb.authorize import PERM_HIERA_LEVELS_CREATE
+from pyppetdb.authorize import PERM_HIERA_LEVELS_UPDATE
+from pyppetdb.authorize import PERM_HIERA_LEVELS_DELETE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_CREATE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_UPDATE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_DELETE
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_CREATE
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_DELETE
+from pyppetdb.authorize import PERM_NODES_CREATE
+from pyppetdb.authorize import PERM_NODES_UPDATE
+from pyppetdb.authorize import PERM_NODES_DELETE
+from pyppetdb.authorize import PERM_NODES_CATALOG_CACHE_DELETE
+from pyppetdb.authorize import PERM_NODES_GROUPS_CREATE
+from pyppetdb.authorize import PERM_NODES_GROUPS_UPDATE
+from pyppetdb.authorize import PERM_NODES_GROUPS_DELETE
+from pyppetdb.authorize import PERM_NODES_GROUPS_GET
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_GET
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_DELETE
+from pyppetdb.authorize import PERM_USERS_CREATE
+from pyppetdb.authorize import PERM_USERS_UPDATE
+from pyppetdb.authorize import PERM_USERS_DELETE
+from pyppetdb.authorize import PERM_USERS_GET
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_CREATE
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_UPDATE
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_DELETE
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_GET
+from pyppetdb.authorize import PERM_JOBS_GET
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PATTERN_CA_SPACES
+from pyppetdb.authorize import PATTERN_CA_AUTHORITIES
+from pyppetdb.authorize import PATTERN_JOBS_JOB
+from pyppetdb.authorize import PATTERN_HIERA_LEVEL_DATA
+
+
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.ldap import CrudLdap
@@ -135,35 +189,60 @@ class ControllerApiV1Teams:
         from pyppetdb.errors import QueryParamValidationError, ResourceNotFound
 
         patterns = {
-            r"^CA:SPACES:CREATE$": None,
-            r"^CA:SPACES:UPDATE$": None,
-            r"^CA:SPACES:DELETE$": None,
-            r"^CA:AUTHORITIES:CREATE$": None,
-            r"^CA:AUTHORITIES:UPDATE$": None,
-            r"^CA:AUTHORITIES:DELETE$": None,
-            r"^CA:SPACES:([^:]+):CERTS:UPDATE$": "space",
-            r"^CA:AUTHORITIES:([^:]+):CERTS:UPDATE$": "authority",
-            r"^JOBS:JOB::CREATE$": None,
-            r"^JOBS:JOB:([^:]+):CREATE$": "job_definition",
-            r"^JOBS:DEFINITION::CREATE$": None,
-            r"^JOBS:DEFINITION::UPDATE$": None,
-            r"^JOBS:DEFINITION::DELETE$": None,
-            r"^HIERA:KEY_MODELS_DYNAMIC::CREATE$": None,
-            r"^HIERA:KEY_MODELS_DYNAMIC::DELETE$": None,
-            r"^HIERA:KEY_MODELS::CREATE$": None,
-            r"^HIERA:KEY_MODELS::UPDATE$": None,
-            r"^HIERA:KEY_MODELS::DELETE$": None,
-            r"^HIERA:LEVELS::CREATE$": None,
-            r"^HIERA:LEVELS::UPDATE$": None,
-            r"^HIERA:LEVELS::DELETE$": None,
-            r"^HIERA:LEVEL_DATA::CREATE$": None,
-            r"^HIERA:LEVEL_DATA::UPDATE$": None,
-            r"^HIERA:LEVEL_DATA::DELETE$": None,
-            r"^HIERA:LEVEL_DATA:([^:]+):CREATE$": "hiera_key",
-            r"^HIERA:LEVEL_DATA:([^:]+):UPDATE$": "hiera_key",
-            r"^HIERA:LEVEL_DATA:([^:]+):DELETE$": "hiera_key",
-            r"^NODES:SECRETS_REDACTOR::CREATE$": None,
-            r"^NODES:SECRETS_REDACTOR::DELETE$": None,
+            rf"^{PERM_CA_SPACES_CREATE}$": None,
+            rf"^{PERM_CA_SPACES_UPDATE}$": None,
+            rf"^{PERM_CA_SPACES_DELETE}$": None,
+            rf"^{PERM_CA_AUTHORITIES_CREATE}$": None,
+            rf"^{PERM_CA_AUTHORITIES_UPDATE}$": None,
+            rf"^{PERM_CA_AUTHORITIES_DELETE}$": None,
+            rf"^{PATTERN_CA_SPACES.replace('{space_id}', '([^:]+)')}CERTS:UPDATE$": "space",
+            rf"^{PATTERN_CA_AUTHORITIES.replace('{ca_id}', '([^:]+)')}CERTS:UPDATE$": "authority",
+            rf"^{PERM_JOBS_JOB_CREATE}$": None,
+            rf"^{PATTERN_JOBS_JOB.replace('{definition_id}', '([^:]+)')}CREATE$": "job_definition",
+            rf"^{PERM_JOBS_DEFINITION_CREATE}$": None,
+            rf"^{PERM_JOBS_DEFINITION_UPDATE}$": None,
+            rf"^{PERM_JOBS_DEFINITION_DELETE}$": None,
+            rf"^{PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE}$": None,
+            rf"^{PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE}$": None,
+            rf"^{PERM_HIERA_KEY_MODELS_CREATE}$": None,
+            rf"^{PERM_HIERA_KEY_MODELS_UPDATE}$": None,
+            rf"^{PERM_HIERA_KEY_MODELS_DELETE}$": None,
+            rf"^{PERM_HIERA_LEVELS_CREATE}$": None,
+            rf"^{PERM_HIERA_LEVELS_UPDATE}$": None,
+            rf"^{PERM_HIERA_LEVELS_DELETE}$": None,
+            rf"^{PERM_HIERA_LEVEL_DATA_CREATE}$": None,
+            rf"^{PERM_HIERA_LEVEL_DATA_UPDATE}$": None,
+            rf"^{PERM_HIERA_LEVEL_DATA_DELETE}$": None,
+            rf"^{PATTERN_HIERA_LEVEL_DATA.replace('{key_id}', '([^:]+)')}CREATE$": "hiera_key",
+            rf"^{PATTERN_HIERA_LEVEL_DATA.replace('{key_id}', '([^:]+)')}UPDATE$": "hiera_key",
+            rf"^{PATTERN_HIERA_LEVEL_DATA.replace('{key_id}', '([^:]+)')}DELETE$": "hiera_key",
+            rf"^{PERM_NODES_SECRETS_REDACTOR_CREATE}$": None,
+            rf"^{PERM_NODES_SECRETS_REDACTOR_DELETE}$": None,
+            rf"^{PERM_NODES_CREATE}$": None,
+            rf"^{PERM_NODES_UPDATE}$": None,
+            rf"^{PERM_NODES_DELETE}$": None,
+            rf"^{PERM_NODES_CATALOG_CACHE_DELETE}$": None,
+            rf"^{PERM_NODES_GROUPS_CREATE}$": None,
+            rf"^{PERM_NODES_GROUPS_UPDATE}$": None,
+            rf"^{PERM_NODES_GROUPS_DELETE}$": None,
+            rf"^{PERM_NODES_GROUPS_GET}$": None,
+            rf"^{PERM_PYPPETDB_NODES_GET}$": None,
+            rf"^{PERM_PYPPETDB_NODES_DELETE}$": None,
+            rf"^{PERM_TEAMS_CREATE}$": None,
+            rf"^{PERM_TEAMS_UPDATE}$": None,
+            rf"^{PERM_TEAMS_DELETE}$": None,
+            rf"^{PERM_TEAMS_GET}$": None,
+            rf"^{PERM_USERS_CREATE}$": None,
+            rf"^{PERM_USERS_UPDATE}$": None,
+            rf"^{PERM_USERS_DELETE}$": None,
+            rf"^{PERM_USERS_GET}$": None,
+            rf"^{PERM_USERS_CREDENTIALS_CREATE}$": None,
+            rf"^{PERM_USERS_CREDENTIALS_UPDATE}$": None,
+            rf"^{PERM_USERS_CREDENTIALS_DELETE}$": None,
+            rf"^{PERM_USERS_CREDENTIALS_GET}$": None,
+            rf"^{PERM_JOBS_GET}$": None,
+            rf"^{PERM_CA_GET}$": None,
+            rf"^{PERM_HIERA_GET}$": None,
         }
 
         for perm in permissions:
@@ -220,7 +299,7 @@ class ControllerApiV1Teams:
         team_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_TEAMS_CREATE)
         if data.ldap_group:
             data.users = await self.crud_ldap.get_logins_from_group(
                 group=data.ldap_group
@@ -239,7 +318,7 @@ class ControllerApiV1Teams:
         request: Request,
         team_id: str,
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_TEAMS_DELETE)
         await self.crud_nodes_groups.delete_team_from_nodes_groups(team_id=team_id)
         return await self.crud_teams.delete(
             _id=team_id,
@@ -251,7 +330,8 @@ class ControllerApiV1Teams:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_TEAMS_GET)
+
         return await self.crud_teams.get(_id=team_id, fields=list(fields))
 
     async def search(
@@ -276,7 +356,7 @@ class ControllerApiV1Teams:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_TEAMS_GET)
         return await self.crud_teams.search(
             _id=team_id,
             ldap_group=ldap_group,
@@ -296,7 +376,7 @@ class ControllerApiV1Teams:
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_admin(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_TEAMS_UPDATE)
         current_group = await self.crud_teams.get(
             _id=team_id,
             fields=["ldap_group", "users", "permissions"],

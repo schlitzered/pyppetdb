@@ -17,8 +17,13 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from fastapi import HTTPException, Request
 from pyppetdb.controller.api.v1.jobs_jobs import ControllerApiV1JobsJobs
-from pyppetdb.model.jobs_jobs import JobPost
+from pyppetdb.model.jobs_jobs import JobPost, JobGetMulti
 from pyppetdb.model.jobs_definitions import JobDefinitionGet
+from pyppetdb.authorize import (
+    PERM_JOBS_GET,
+    PERM_JOBS_JOB_CREATE,
+    PERM_JOBS_JOB_CREATE_DYNAMIC,
+)
 
 
 class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
@@ -84,6 +89,14 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.create(
             request=mock_request,
             data=payload,
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=[
+                PERM_JOBS_JOB_CREATE,
+                PERM_JOBS_JOB_CREATE_DYNAMIC.format(definition_id="def1"),
+            ],
         )
 
         self.mock_crud_nodes.search.assert_called_once()
@@ -182,7 +195,13 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_jobs.get.assert_called_once_with(
             _id="job1", fields=["definition_id"]
         )
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=[
+                PERM_JOBS_JOB_CREATE,
+                PERM_JOBS_JOB_CREATE_DYNAMIC.format(definition_id="def1"),
+            ],
+        )
         self.mock_crud_node_jobs.cancel_node_jobs.assert_called_once_with(job_id="job1")
 
     async def test_jobs_create_too_many_nodes(self):
@@ -304,3 +323,36 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             await self.controller.create(request=mock_request, data=payload)
         self.assertEqual(cm.exception.status_code, 400)
         self.assertIn("must be at most 5", cm.exception.detail)
+
+    async def test_jobs_search_success(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_jobs.search = AsyncMock(
+            return_value=JobGetMulti(result=[], meta={"result_size": 0})
+        )
+
+        await self.controller.search(
+            request=mock_request,
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
+        self.mock_crud_jobs.search.assert_called_once()
+
+    async def test_jobs_get_success(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_jobs.get = AsyncMock()
+
+        await self.controller.get(
+            request=mock_request,
+            job_id="job1",
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_GET
+        )
+        self.mock_crud_jobs.get.assert_called_once_with(_id="job1", fields=[])

@@ -16,7 +16,13 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
-from pyppetdb.model.users import UserPost, UserPut
+from pyppetdb.model.users import UserPost, UserPut, UserGet
+from pyppetdb.authorize import (
+    PERM_USERS_CREATE,
+    PERM_USERS_DELETE,
+    PERM_USERS_GET,
+    PERM_USERS_UPDATE,
+)
 
 
 class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
@@ -39,23 +45,49 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
         mock_user = MagicMock()
         mock_user.id = "real-id"
         self.mock_authorize.get_user = AsyncMock(return_value=mock_user)
-        self.mock_crud_users.get = AsyncMock()
+        self.mock_crud_users.get = AsyncMock(
+            return_value=UserGet(id="real-id", name="Real User")
+        )
+        self.mock_crud_teams.search = AsyncMock(
+            return_value=MagicMock(
+                result=[
+                    MagicMock(permissions=["P1", "P2"]),
+                    MagicMock(permissions=["P2", "P3"]),
+                ]
+            )
+        )
 
         mock_request = MagicMock()
-        await self.controller.get(user_id="_self", request=mock_request, fields=set())
+        result = await self.controller.get(
+            user_id="_self", request=mock_request, fields=set()
+        )
 
         self.mock_authorize.get_user.assert_called_once_with(request=mock_request)
         self.mock_crud_users.get.assert_called_once_with(_id="real-id", fields=[])
+        self.mock_crud_teams.search.assert_called_once_with(
+            users="^real-id$", fields=["permissions"]
+        )
+        self.assertEqual(result.permissions, ["P1", "P2", "P3"])
 
     async def test_get_user_other_admin(self):
-        self.mock_authorize.require_admin = AsyncMock()
-        self.mock_crud_users.get = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_users.get = AsyncMock(
+            return_value=UserGet(id="other", name="Other User")
+        )
+        self.mock_crud_teams.search = AsyncMock(
+            return_value=MagicMock(result=[MagicMock(permissions=["P4"])])
+        )
 
         mock_request = MagicMock()
-        await self.controller.get(user_id="other", request=mock_request, fields=set())
+        result = await self.controller.get(
+            user_id="other", request=mock_request, fields=set()
+        )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_GET
+        )
         self.mock_crud_users.get.assert_called_once_with(_id="other", fields=[])
+        self.assertEqual(result.permissions, ["P4"])
 
     async def test_update_user_self_no_admin_change(self):
         mock_user = MagicMock()
@@ -79,7 +111,7 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_create_user_admin_required(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_users.create = AsyncMock()
 
         data = UserPost(name="New User", email="test@ex.com", password="pwd")
@@ -88,13 +120,15 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
             user_id="newuser", request=mock_request, data=data, fields=set()
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREATE
+        )
         self.mock_crud_users.create.assert_called_once_with(
             _id="newuser", payload=data, fields=[]
         )
 
     async def test_delete_user(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_users.delete = AsyncMock()
         self.mock_crud_creds.delete_all_from_owner = AsyncMock()
         self.mock_crud_teams.delete_user_from_teams = AsyncMock()
@@ -102,7 +136,9 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.delete(user_id="user1", request=mock_request)
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_DELETE
+        )
         self.mock_crud_users.delete.assert_called_once_with(_id="user1")
         self.mock_crud_creds.delete_all_from_owner.assert_called_once_with(
             owner="user1"
@@ -112,7 +148,7 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_search_users(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_users.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -126,11 +162,13 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_GET
+        )
         self.mock_crud_users.search.assert_called_once()
 
     async def test_update_user_admin(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_users.update = AsyncMock()
 
         data = UserPut(admin=True)
@@ -139,7 +177,9 @@ class TestApiV1UsersUnit(unittest.IsolatedAsyncioTestCase):
             user_id="user1", request=mock_request, data=data, fields=set()
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_UPDATE
+        )
         self.mock_crud_users.update.assert_called_once_with(
             _id="user1", payload=data, fields=[]
         )

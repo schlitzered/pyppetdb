@@ -47,6 +47,7 @@ class UserGet(BaseModel):
     name: Optional[StrictStr] = None
     id: Optional[StrictStr] = None
     backend: Optional[StrictStr] = None
+    permissions: Optional[List[StrictStr]] = None
 
 
 class UserGetMulti(BaseModel):

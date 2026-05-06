@@ -19,6 +19,8 @@ from fastapi import Request
 from fastapi import Query
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_SPACES_CERTS_UPDATE
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
@@ -115,7 +117,7 @@ class ControllerApiV1CASpacesCerts:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -148,7 +150,7 @@ class ControllerApiV1CASpacesCerts:
         cert_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self._authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
 
         fetch_fields = list(fields)
         if ("ca" in fields or "ca_chain" in fields) and "ca_id" not in fetch_fields:
@@ -179,7 +181,8 @@ class ControllerApiV1CASpacesCerts:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self._authorize.require_perm(
-            request=request, permission=f"CA:SPACES:{space_id}:CERTS:UPDATE"
+            request=request,
+            permission=PERM_CA_SPACES_CERTS_UPDATE.format(space_id=space_id),
         )
         try:
 

@@ -19,6 +19,13 @@ from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthoriti
 from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.model.ca_authorities import CAAuthorityPut
 from pyppetdb.model.ca_spaces import CASpacePost
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_UPDATE
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_DELETE
+from pyppetdb.authorize import PATTERN_CA_AUTHORITIES
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_SPACES_CREATE
+from pyppetdb.authorize import PERM_CA_SPACES_DELETE
+from pyppetdb.authorize import PATTERN_CA_SPACES
 
 
 class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
@@ -47,7 +54,8 @@ class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.update(request=mock_request, ca_id="ca1", data=data)
 
         self.mock_authorize.require_perm.assert_called_once_with(
-            request=mock_request, permission="CA:AUTHORITIES:UPDATE"
+            request=mock_request,
+            permission=PERM_CA_AUTHORITIES_UPDATE,
         )
         self.mock_ca_service.revoke_authority.assert_called_once_with("ca1")
 
@@ -60,12 +68,39 @@ class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.delete(request=mock_request, ca_id="ca1")
 
         self.mock_authorize.require_perm.assert_called_once_with(
-            request=mock_request, permission="CA:AUTHORITIES:DELETE"
+            request=mock_request,
+            permission=PERM_CA_AUTHORITIES_DELETE,
         )
         self.mock_ca_service.delete_authority.assert_called_once_with("ca1")
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with(
-            "^CA:AUTHORITIES:ca1:"
+            PATTERN_CA_AUTHORITIES.format(ca_id="ca1"),
         )
+
+    async def test_get_authority_permission(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_authorities.get = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.get(request=mock_request, ca_id="ca1", fields=set())
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=PERM_CA_GET,
+        )
+        self.mock_crud_authorities.get.assert_called_once()
+
+    async def test_search_authorities_permission(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_authorities.search = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.search(request=mock_request, fields=set())
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=PERM_CA_GET,
+        )
+        self.mock_crud_authorities.search.assert_called_once()
 
 
 class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
@@ -100,7 +135,8 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.mock_authorize.require_perm.assert_called_once_with(
-            request=mock_request, permission="CA:SPACES:CREATE"
+            request=mock_request,
+            permission=PERM_CA_SPACES_CREATE,
         )
         self.mock_ca_service.create_space.assert_called_once()
 
@@ -114,9 +150,36 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
         await self.controller.delete(request=mock_request, space_id="space1")
 
         self.mock_authorize.require_perm.assert_called_once_with(
-            request=mock_request, permission="CA:SPACES:DELETE"
+            request=mock_request,
+            permission=PERM_CA_SPACES_DELETE,
         )
         self.mock_ca_service.delete_space.assert_called_once_with(_id="space1")
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with(
-            "^CA:SPACES:space1:"
+            PATTERN_CA_SPACES.format(space_id="space1"),
         )
+
+    async def test_get_space_permission(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_ca_spaces.get = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.get(request=mock_request, space_id="space1", fields=set())
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=PERM_CA_GET,
+        )
+        self.mock_crud_ca_spaces.get.assert_called_once()
+
+    async def test_search_spaces_permission(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_ca_spaces.search = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.search(request=mock_request, fields=set())
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request,
+            permission=PERM_CA_GET,
+        )
+        self.mock_crud_ca_spaces.search.assert_called_once()

@@ -17,6 +17,10 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
 from pyppetdb.model.credentials import CredentialPost
+from pyppetdb.authorize import (
+    PERM_USERS_CREDENTIALS_CREATE,
+    PERM_USERS_CREDENTIALS_DELETE,
+)
 
 
 class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
@@ -57,7 +61,7 @@ class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_credential_other_admin(self):
         # Mocking auth
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
 
         # Mocking CRUD
         self.mock_crud_users.resource_exists = AsyncMock()
@@ -70,7 +74,9 @@ class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
             data=payload, user_id="other-user", request=mock_request
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREDENTIALS_CREATE
+        )
         self.mock_crud_creds.create.assert_called_once_with(
             owner="other-user", payload=payload
         )
@@ -89,7 +95,7 @@ class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_creds.delete.assert_called_once_with(_id="cred1", owner="my-id")
 
     async def test_delete_credential_other_admin(self):
-        self.mock_authorize.require_admin = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_creds.delete = AsyncMock()
 
         mock_request = MagicMock()
@@ -97,7 +103,9 @@ class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
             user_id="other", credential_id="cred1", request=mock_request
         )
 
-        self.mock_authorize.require_admin.assert_called_once_with(request=mock_request)
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREDENTIALS_DELETE
+        )
         self.mock_crud_creds.delete.assert_called_once_with(_id="cred1", owner="other")
 
     async def test_get_credential_self(self):

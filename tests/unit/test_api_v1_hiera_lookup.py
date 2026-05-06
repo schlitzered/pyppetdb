@@ -15,6 +15,7 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+from pyppetdb.authorize import PERM_HIERA_GET
 from pyppetdb.controller.api.v1.hiera_lookup import ControllerApiV1HieraLookup
 from pyppetdb.errors import QueryParamValidationError
 
@@ -51,7 +52,7 @@ class TestApiV1HieraLookupUnit(unittest.IsolatedAsyncioTestCase):
             self.controller._facts_from_query({"os:"})
 
     async def test_lookup_cached(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_cache.get_cached = AsyncMock(
             return_value={"result": {"data": "cached-value"}}
         )
@@ -62,11 +63,13 @@ class TestApiV1HieraLookupUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.data, "cached-value")
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_pyhiera.hiera.key_data_get.assert_not_called()
 
     async def test_lookup_no_cache(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_cache.get_cached = AsyncMock(return_value=None)
         self.mock_cache.set_cached = AsyncMock()
 
@@ -80,6 +83,8 @@ class TestApiV1HieraLookupUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(result.data, "fresh-value")
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_pyhiera.hiera.key_data_get.assert_called_once()
         self.mock_cache.set_cached.assert_called_once()

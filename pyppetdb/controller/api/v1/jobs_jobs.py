@@ -14,9 +14,7 @@
 
 import logging
 import re
-from typing import Any
-from typing import Dict
-from typing import Optional
+from typing import Any, Dict, Optional, Set
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -24,6 +22,9 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_JOBS_GET
+from pyppetdb.authorize import PERM_JOBS_JOB_CREATE
+from pyppetdb.authorize import PERM_JOBS_JOB_CREATE_DYNAMIC
 from pyppetdb.config import Config
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
@@ -35,6 +36,8 @@ from pyppetdb.model.jobs_jobs import JobGet
 from pyppetdb.model.jobs_jobs import JobGetMulti
 from pyppetdb.model.jobs_jobs import JobPost
 from pyppetdb.model.jobs_jobs import sort_literal
+from pyppetdb.model.jobs_jobs import filter_list
+from pyppetdb.model.jobs_jobs import filter_literal
 
 
 class ControllerApiV1JobsJobs:
@@ -112,36 +115,42 @@ class ControllerApiV1JobsJobs:
         _id: Optional[str] = Query(default=None),
         definition_id: Optional[str] = Query(default=None),
         created_by: Optional[str] = Query(default=None),
+        fields: Set[filter_literal] = Query(default=filter_list),
         sort: Optional[sort_literal] = Query(default=None),
         sort_order: Optional[sort_order_literal] = Query(default=None),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
-        await self.authorize.require_user(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         return await self.crud_jobs.search(
             _id=_id,
             definition_id=definition_id,
             created_by=created_by,
-            fields=[],
+            fields=list(fields),
             sort=sort,
             sort_order=sort_order,
             page=page,
             limit=limit,
         )
 
-    async def get(self, request: Request, job_id: str):
-        await self.authorize.require_user(request=request)
+    async def get(
+        self,
+        request: Request,
+        job_id: str,
+        fields: Set[filter_literal] = Query(default=filter_list),
+    ):
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         return await self.crud_jobs.get(
             _id=job_id,
-            fields=[],
+            fields=list(fields),
         )
 
     async def create(self, request: Request, data: JobPost):
         user = await self.authorize.require_perm(
             request=request,
             permission=[
-                "JOBS:JOB::CREATE",
-                f"JOBS:JOB:{data.definition_id}:CREATE",
+                PERM_JOBS_JOB_CREATE,
+                PERM_JOBS_JOB_CREATE_DYNAMIC.format(definition_id=data.definition_id),
             ],
         )
 
@@ -216,8 +225,8 @@ class ControllerApiV1JobsJobs:
         await self.authorize.require_perm(
             request=request,
             permission=[
-                "JOBS:JOB::CREATE",
-                f"JOBS:JOB:{job.definition_id}:CREATE",
+                PERM_JOBS_JOB_CREATE,
+                PERM_JOBS_JOB_CREATE_DYNAMIC.format(definition_id=job.definition_id),
             ],
         )
 

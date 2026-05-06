@@ -20,6 +20,9 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.errors import QueryParamValidationError
@@ -118,7 +121,8 @@ class ControllerApiV1HieraKeyModelsDynamic:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         result = await self.crud_hiera_key_models_dynamic.search(
             _id=key_model_id,
             fields=list(fields),
@@ -135,7 +139,8 @@ class ControllerApiV1HieraKeyModelsDynamic:
         key_model_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         result = await self.crud_hiera_key_models_dynamic.get(
             _id=key_model_id,
             fields=list(fields),
@@ -150,7 +155,7 @@ class ControllerApiV1HieraKeyModelsDynamic:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:KEY_MODELS_DYNAMIC::CREATE"
+            request=request, permission=PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE
         )
         if not key_model_id.startswith(KEY_MODEL_DYNAMIC_PREFIX):
             raise QueryParamValidationError(
@@ -169,7 +174,7 @@ class ControllerApiV1HieraKeyModelsDynamic:
         key_model_id: str,
     ):
         await self.authorize.require_perm(
-            request=request, permission="HIERA:KEY_MODELS_DYNAMIC::DELETE"
+            request=request, permission=PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE
         )
         keys = await self.crud_hiera_keys.search(
             model_id=key_model_id,

@@ -15,18 +15,34 @@
 import datetime
 from typing import List
 from typing import Literal
+from typing import Optional
+from typing import get_args as typing_get_args
 from pydantic import BaseModel
 from pyppetdb.model.common import MetaMulti
 
+filter_literal = Literal[
+    "id",
+    "job_id",
+    "definition_id",
+    "node_id",
+    "status",
+    "created_by",
+    "created_at",
+]
+
+filter_list = set(typing_get_args(filter_literal))
+
 
 class NodeJobGet(BaseModel):
-    id: str
-    job_id: str
+    id: Optional[str] = None
+    job_id: Optional[str] = None
     definition_id: str = ""
-    node_id: str
-    status: Literal["scheduled", "running", "success", "failed", "canceled"]
+    node_id: Optional[str] = None
+    status: Optional[
+        Literal["scheduled", "running", "success", "failed", "canceled"]
+    ] = None
     created_by: str = ""
-    created_at: datetime.datetime
+    created_at: Optional[datetime.datetime] = None
     log_blobs: List[str] = []
 
 

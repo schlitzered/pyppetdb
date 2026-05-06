@@ -15,6 +15,12 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+from pyppetdb.authorize import (
+    PERM_HIERA_GET,
+    PERM_HIERA_LEVELS_CREATE,
+    PERM_HIERA_LEVELS_UPDATE,
+    PERM_HIERA_LEVELS_DELETE,
+)
 from pyppetdb.controller.api.v1.hiera_levels import ControllerApiV1HieraLevels
 from pyppetdb.model.hiera_levels import HieraLevelPost, HieraLevelPut
 
@@ -50,7 +56,9 @@ class TestApiV1HieraLevelsUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, data=data, level_id="level1", fields=set()
         )
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_LEVELS_CREATE
+        )
         self.mock_crud_level_data.update_priority_by_level.assert_called_once_with(
             level_id="level1", priority=10
         )
@@ -64,7 +72,9 @@ class TestApiV1HieraLevelsUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.delete(request=mock_request, level_id="level1")
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_LEVELS_DELETE
+        )
         self.mock_cache.clear_all.assert_called_once()
         self.mock_crud_levels.delete.assert_called_once_with(_id="level1")
 
@@ -80,24 +90,28 @@ class TestApiV1HieraLevelsUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, data=data, level_id="level1", fields=set()
         )
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_LEVELS_UPDATE
+        )
         self.mock_crud_level_data.update_priority_by_level.assert_called_once_with(
             level_id="level1", priority=20
         )
         self.mock_cache.clear_all.assert_called_once()
 
     async def test_get_level(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_levels.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.controller.get(request=mock_request, level_id="level1", fields=set())
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_levels.get.assert_called_once()
 
     async def test_search_levels(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_levels.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -112,5 +126,7 @@ class TestApiV1HieraLevelsUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_levels.search.assert_called_once()

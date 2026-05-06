@@ -20,6 +20,10 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_CREATE
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_DELETE
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_GET
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_UPDATE
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.model.common import DataDelete
@@ -118,7 +122,9 @@ class ControllerApiV1UsersCredentials:
             user = await self.authorize.get_user(request=request)
             user_id = user.id
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_CREDENTIALS_CREATE
+            )
         await self.crud_users.resource_exists(_id=user_id)
         return await self.crud_users_credentials.create(
             owner=user_id,
@@ -135,7 +141,9 @@ class ControllerApiV1UsersCredentials:
             user = await self.authorize.get_user(request=request)
             user_id = user.id
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_CREDENTIALS_DELETE
+            )
         return await self.crud_users_credentials.delete(
             _id=credential_id, owner=user_id
         )
@@ -151,7 +159,9 @@ class ControllerApiV1UsersCredentials:
             user = await self.authorize.get_user(request=request)
             user_id = user.id
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_CREDENTIALS_GET
+            )
         return await self.crud_users_credentials.get(
             owner=user_id, _id=credential_id, fields=list(fields)
         )
@@ -175,7 +185,9 @@ class ControllerApiV1UsersCredentials:
             user = await self.authorize.get_user(request=request)
             user_id = user.id
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_CREDENTIALS_GET
+            )
         result = await self._crud_users_credentials.search(
             owner=user_id,
             fields=list(fields),
@@ -198,7 +210,9 @@ class ControllerApiV1UsersCredentials:
             user = await self.authorize.get_user(request=request)
             user_id = user.id
         else:
-            await self.authorize.require_admin(request=request)
+            await self.authorize.require_perm(
+                request=request, permission=PERM_USERS_CREDENTIALS_UPDATE
+            )
         return await self.crud_users_credentials.update(
             _id=credential_id, owner=user_id, payload=data, fields=list(fields)
         )

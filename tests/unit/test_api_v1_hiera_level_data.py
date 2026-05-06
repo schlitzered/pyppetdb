@@ -18,6 +18,7 @@ import logging
 from pyppetdb.controller.api.v1.hiera_level_data import ControllerApiV1HieraLevelData
 from pyppetdb.model.hiera_level_data import HieraLevelDataPost, HieraLevelDataPut
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.authorize import PERM_HIERA_GET
 
 
 class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
@@ -153,7 +154,7 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_get(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_level_data.get = AsyncMock(return_value=MagicMock())
 
         mock_request = MagicMock()
@@ -161,11 +162,13 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, level_id="l1", data_id="d1", key_id="k1", fields=set()
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_level_data.get.assert_called_once()
 
     async def test_search(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_level_data.search = AsyncMock(return_value=MagicMock())
 
         mock_request = MagicMock()
@@ -182,7 +185,9 @@ class TestApiV1HieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
             limit=10,
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_level_data.search.assert_called_once()
 
     async def test_update(self):

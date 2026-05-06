@@ -23,6 +23,7 @@ from pyppetdb.controller.api.v1.hiera_key_models_static import (
 )
 from pyppetdb.model.hiera_key_models_dynamic import HieraKeyModelDynamicPost
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.authorize import PERM_HIERA_GET
 
 
 class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
@@ -118,18 +119,20 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_dynamic.delete.assert_not_called()
 
     async def test_dynamic_get(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_dynamic.get = AsyncMock()
 
         mock_request = MagicMock()
         await self.dynamic_controller.get(
             request=mock_request, key_model_id="dynamic:test", fields=set()
         )
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_dynamic.get.assert_called_once()
 
     async def test_dynamic_search(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_dynamic.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -142,11 +145,13 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
             page=0,
             limit=10,
         )
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_dynamic.search.assert_called_once()
 
     async def test_static_get(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_static.get = AsyncMock()
 
         mock_request = MagicMock()
@@ -154,11 +159,13 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, key_model_id="static:test", fields=set()
         )
 
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_static.get.assert_called_once()
 
     async def test_static_search(self):
-        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.require_perm = AsyncMock()
         self.mock_crud_static.search = AsyncMock()
 
         mock_request = MagicMock()
@@ -171,5 +178,7 @@ class TestApiV1HieraKeyModelsUnit(unittest.IsolatedAsyncioTestCase):
             page=0,
             limit=10,
         )
-        self.mock_authorize.require_user.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_GET
+        )
         self.mock_crud_static.search.assert_called_once()

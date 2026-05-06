@@ -13,8 +13,21 @@
 # limitations under the License.
 
 from typing import Dict, List, Literal, Optional, Union
+from typing import get_args as typing_get_args
 from pydantic import BaseModel
 from pyppetdb.model.common import MetaMulti
+
+filter_literal = Literal[
+    "id",
+    "executable",
+    "user",
+    "group",
+    "params_template",
+    "params",
+    "environment_variables",
+]
+
+filter_list = set(typing_get_args(filter_literal))
 
 
 class JobParamDefinition(BaseModel):
@@ -26,13 +39,13 @@ class JobParamDefinition(BaseModel):
 
 
 class JobDefinitionGet(BaseModel):
-    id: str
-    executable: str
-    user: str
-    group: str
-    params_template: List[str]
-    params: Dict[str, JobParamDefinition]
-    environment_variables: Dict[str, JobParamDefinition]
+    id: Optional[str] = None
+    executable: Optional[str] = None
+    user: Optional[str] = None
+    group: Optional[str] = None
+    params_template: Optional[List[str]] = None
+    params: Optional[Dict[str, JobParamDefinition]] = None
+    environment_variables: Optional[Dict[str, JobParamDefinition]] = None
 
 
 class JobDefinitionPost(BaseModel):

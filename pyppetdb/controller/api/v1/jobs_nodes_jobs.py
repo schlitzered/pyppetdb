@@ -13,16 +13,19 @@
 # limitations under the License.
 
 import logging
-from typing import Any
+from typing import Any, Set
 from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_JOBS_GET
 from pyppetdb.crud.jobs_nodes_jobs import CrudJobsNodeJobs
 
 from pyppetdb.model.jobs_nodes_jobs import NodeJobGet
 from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
+from pyppetdb.model.jobs_nodes_jobs import filter_list
+from pyppetdb.model.jobs_nodes_jobs import filter_literal
 
 
 class ControllerApiV1JobsNodesJobs:
@@ -75,15 +78,16 @@ class ControllerApiV1JobsNodesJobs:
         job_id: str = Query(default=None),
         node_id: str = Query(default=None),
         status: str = Query(default=None),
+        fields: Set[filter_literal] = Query(default=filter_list),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
-        await self.authorize.require_user(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         result = await self.crud_jobs_nodes_jobs.search(
             job_id=job_id,
             node_id=node_id,
             status=status,
-            fields=[],
+            fields=list(fields),
             page=page,
             limit=limit,
         )
@@ -100,11 +104,12 @@ class ControllerApiV1JobsNodesJobs:
         self,
         request: Request,
         node_job_id: str,
+        fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         job = await self.crud_jobs_nodes_jobs.get(
             _id=node_job_id,
-            fields=[],
+            fields=list(fields),
         )
 
         chunks = await self._manager.get_log_chunks(

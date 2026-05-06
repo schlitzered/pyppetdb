@@ -117,6 +117,15 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.result[0].value, "RedHat")
         self.assertEqual(result.result[0].count, 5)
 
+    async def test_distinct_fact_values_invalid_id(self):
+        result = await self.crud.distinct_fact_values(fact_id="invalid.")
+        self.assertEqual(len(result.result), 0)
+        self.assertEqual(result.meta.result_size, 0)
+
+        result = await self.crud.distinct_fact_values(fact_id="")
+        self.assertEqual(len(result.result), 0)
+        self.assertEqual(result.meta.result_size, 0)
+
     async def test_exported_resources(self):
         mock_cursor = MagicMock()
         mock_cursor.to_list = AsyncMock(

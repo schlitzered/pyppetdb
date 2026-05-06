@@ -20,6 +20,13 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_CREATE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_UPDATE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_DELETE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_UPDATE_DYNAMIC
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_DELETE_DYNAMIC
 
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
@@ -173,8 +180,8 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_perm(
             request=request,
             permission=[
-                "HIERA:LEVEL_DATA::CREATE",
-                f"HIERA:LEVEL_DATA:{key_id}:CREATE",
+                PERM_HIERA_LEVEL_DATA_CREATE,
+                PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC.format(key_id=key_id),
             ],
         )
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])
@@ -209,8 +216,8 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_perm(
             request=request,
             permission=[
-                "HIERA:LEVEL_DATA::DELETE",
-                f"HIERA:LEVEL_DATA:{key_id}:DELETE",
+                PERM_HIERA_LEVEL_DATA_DELETE,
+                PERM_HIERA_LEVEL_DATA_DELETE_DYNAMIC.format(key_id=key_id),
             ],
         )
         existing = await self.crud_hiera_level_data.get(
@@ -237,7 +244,8 @@ class ControllerApiV1HieraLevelData:
         key_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         level_data = await self.crud_hiera_level_data.get(
             _id=data_id,
             key_id=key_id,
@@ -264,7 +272,8 @@ class ControllerApiV1HieraLevelData:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         return await self.crud_hiera_level_data.search(
             _id=data_id,
             key_id=key_id,
@@ -289,8 +298,8 @@ class ControllerApiV1HieraLevelData:
         await self.authorize.require_perm(
             request=request,
             permission=[
-                "HIERA:LEVEL_DATA::UPDATE",
-                f"HIERA:LEVEL_DATA:{key_id}:UPDATE",
+                PERM_HIERA_LEVEL_DATA_UPDATE,
+                PERM_HIERA_LEVEL_DATA_UPDATE_DYNAMIC.format(key_id=key_id),
             ],
         )
         key = await self.crud_hiera_keys.get(_id=key_id, fields=["key_model_id"])

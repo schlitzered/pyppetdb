@@ -20,6 +20,7 @@ from fastapi import Query
 from fastapi import Request
 
 from pyppetdb.authorize import AuthorizePyppetDB
+from pyppetdb.authorize import PERM_HIERA_GET
 from pyppetdb.crud.hiera_key_models_static import CrudHieraKeyModelsStatic
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import filter_list
@@ -92,7 +93,8 @@ class ControllerApiV1HieraKeyModelsStatic:
             description="pagination limit, min value 10, max value 1000",
         ),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         result = await self.crud_hiera_key_models_static.search(
             _id=key_model_id,
             fields=list(fields),
@@ -109,7 +111,8 @@ class ControllerApiV1HieraKeyModelsStatic:
         key_model_id: str,
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
-        await self.authorize.require_user(request=request)
+        await self._authorize.require_perm(request=request, permission=PERM_HIERA_GET)
+
         result = await self.crud_hiera_key_models_static.get(
             _id=key_model_id,
             fields=list(fields),
