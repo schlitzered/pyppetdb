@@ -27,7 +27,7 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_ws = AsyncMock()
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.get = AsyncMock()
-        self.mock_crud_nodes.update_remote_agent_busy = AsyncMock()
+        self.mock_crud_nodes.update_remote_agent_current_job_id = AsyncMock()
 
         self.mock_crud_jobs = MagicMock()
         self.mock_crud_jobs.get = AsyncMock()
@@ -36,8 +36,8 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_job_definitions.get = AsyncMock()
 
         self.mock_crud_node_jobs = MagicMock()
+        self.mock_crud_node_jobs.get = AsyncMock()
         self.mock_crud_node_jobs.update_status = AsyncMock()
-        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock()
         self.mock_crud_node_jobs.search = AsyncMock()
         self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
 
@@ -74,19 +74,18 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIn(123, self.protocol._pending_acks)
 
     async def test_handle_log_message(self):
-        self.protocol._job_manager.current_job_id = "job1"
         self.mock_redactor.redact.side_effect = lambda text: text
 
         mock_log_entry = MagicMock()
         mock_log_entry.model_dump.return_value = {"line_nr": 1, "msg": "test log"}
 
         mock_body = MagicMock()
+        mock_body.job_id = "job1"
         mock_body.logs = [mock_log_entry]
 
         await asyncio.wait_for(
             self.protocol._log_handler.handle_log_message(
                 body=mock_body,
-                current_job_id="job1",
             ),
             timeout=1.0,
         )
@@ -94,10 +93,8 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_manager.broadcast_local_log.assert_called_once()
 
     async def test_handle_finish(self):
-        self.protocol._job_manager.current_job_id = "job1"
-        self.protocol._job_manager.busy = True
-
         body = MagicMock()
+        body.job_id = "job1"
         body.exit_code = 0
         await asyncio.wait_for(
             self.protocol._job_manager.handle_finish(body),
@@ -109,22 +106,10 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1",
             status="success",
         )
-        self.mock_crud_nodes.update_remote_agent_busy.assert_called_once_with(
-            node_id="node1",
-            busy=False,
-            current_job_id=None,
-        )
+        self.mock_crud_nodes.update_remote_agent_current_job_id.assert_called_once()
         self.mock_manager.job_finished.assert_called_once()
-        self.assertFalse(self.protocol._job_manager.busy)
-        self.assertIsNone(self.protocol._job_manager.current_job_id)
 
-    async def test_trigger_job_check(self):
-        # Mock finding a job
-        mock_node_job = MagicMock()
-        mock_node_job.job_id = "job1"
-
-        self.mock_crud_node_jobs.get_oldest_scheduled.return_value = mock_node_job
-
+    async def test_dispatch_job(self):
         # Mock job and definition
         mock_job = MagicMock()
         mock_job.definition_id = "def1"
@@ -142,11 +127,8 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
 
         self.protocol._send_message = AsyncMock()
 
-        await self.protocol.trigger_job_check()
+        await self.protocol.dispatch_job(job_id="job1")
 
-        self.mock_crud_node_jobs.get_oldest_scheduled.assert_called_with(
-            node_id="node1"
-        )
         self.protocol._send_message.assert_called_once()
         args = self.protocol._send_message.call_args[1]
         self.assertEqual(args["msg_type"], "start_job")
@@ -159,8 +141,9 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
     )
     async def test_run_disconnect(self, mock_sleep):
         self.mock_ws.receive_text.side_effect = WebSocketDisconnect()
-        self.protocol.trigger_job_check = AsyncMock()
+        self.protocol.dispatch_job = AsyncMock()
         self.protocol._heartbeat = AsyncMock()
+        self.protocol._dispatch_scheduled_jobs = AsyncMock()
 
         self.mock_crud_nodes.get.return_value = MagicMock(remote_agent=None)
 

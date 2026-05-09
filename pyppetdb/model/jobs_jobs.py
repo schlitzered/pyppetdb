@@ -20,11 +20,15 @@ from typing import Literal
 from typing import Optional
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, filter_complex_search
+from pyppetdb.model.common import MetaMulti
 
 filter_literal = Literal[
     "id",
     "definition_id",
+    "parameters",
+    "env_vars",
+    "node_filter",
+    "nodes",
     "created_by",
     "created_at",
 ]
@@ -44,7 +48,7 @@ class JobGet(BaseModel):
     definition_id: Optional[str] = None
     parameters: Optional[Dict[str, Any]] = None
     env_vars: Optional[Dict[str, Any]] = None
-    node_filter: Optional[filter_complex_search] = None
+    node_filter: Optional[List[str]] = None
     nodes: Optional[List[str]] = None
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -54,7 +58,7 @@ class JobPost(BaseModel):
     definition_id: str
     parameters: Dict[str, Any] = {}
     env_vars: Dict[str, Any] = {}
-    node_filter: filter_complex_search
+    node_filter: List[str]
 
 
 class JobGetMulti(BaseModel):

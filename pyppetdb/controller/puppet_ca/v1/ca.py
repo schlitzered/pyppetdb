@@ -72,6 +72,11 @@ class ControllerPuppetCaV1CA:
             methods=["PUT"],
         )
         self._router.add_api_route(
+            "/certificate_status/{nodename}",
+            self.delete_certificate,
+            methods=["DELETE"],
+        )
+        self._router.add_api_route(
             "/certificate_revocation_list/ca", self.get_crl, methods=["GET"]
         )
         self._router.add_api_route(
@@ -248,6 +253,15 @@ class ControllerPuppetCaV1CA:
             raise
         except Exception as e:
             self.log.error(f"Failed to update certificate status: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def delete_certificate(self, nodename: str, request: Request):
+        await self.authorize_client_cert.require_cn_trusted(request)
+        try:
+            await self._ca_service.delete_certificate("puppet-ca", nodename)
+            return Response(status_code=204)
+        except Exception as e:
+            self.log.error(f"Failed to delete certificate {nodename}: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
     async def get_crl(

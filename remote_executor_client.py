@@ -186,18 +186,15 @@ class RemoteExecutorClient:
         self.pending_acks: Dict[int, asyncio.Event] = {}
 
         # Persistent state
-        self.busy = False
-        self.current_job_id: Optional[str] = None
-        self.log_buffer: List[RemoteExecutorLogEntry] = []
+        self.current_job_ids: set[str] = set()
+        self.log_buffers: Dict[str, List[RemoteExecutorLogEntry]] = {}
         self.unacked_log_batches: List[List[RemoteExecutorLogEntry]] = []
 
         self.running = True
         self.last_activity = time.time()
         self.heartbeat_interval = 30
-        self.last_log_send = time.time()
         self._log_chunk_counter: Dict[str, int] = {}
         self._log_subscribers: Set[str] = set()
-        self._disk_buffer: List[RemoteExecutorLogEntry] = []
 
     async def _send_message(self, msg_type: str, body: BaseModel):
         if not self.ws:
@@ -255,6 +252,25 @@ class RemoteExecutorClient:
                 print("Retrying in 5 seconds...")
                 await asyncio.sleep(delay=5)
 
+    @property
+    def busy(self) -> bool:
+        return len(self.current_job_ids) > 0
+
+    @property
+    def current_job_id(self) -> Optional[str]:
+        return list(self.current_job_ids)[0] if self.current_job_ids else None
+
+    async def _send_status(self):
+        try:
+            await self._send_message(
+                msg_type="status",
+                body=RemoteExecutorMsgBodyStatus(
+                    busy=self.busy, current_job_id=self.current_job_id
+                ),
+            )
+        except Exception as e:
+            print(f"Failed to send status: {e}")
+
     async def _handle_connection(self):
         receiver_task = asyncio.create_task(coro=self._receiver())
         heartbeat_task = asyncio.create_task(coro=self._heartbeat())
@@ -268,16 +284,7 @@ class RemoteExecutorClient:
                 )
 
         # 2. Initial status
-        try:
-            await self._send_message(
-                msg_type="status",
-                body=RemoteExecutorMsgBodyStatus(
-                    busy=self.busy, current_job_id=self.current_job_id
-                ),
-            )
-        except Exception as e:
-            print(f"Failed to send initial status: {e}")
-            return
+        await self._send_status()
 
         try:
             await receiver_task
@@ -318,12 +325,7 @@ class RemoteExecutorClient:
             if msg.msg_type == "start_job" and isinstance(
                 msg.msg_body, RemoteExecutorMsgBodyStartJob
             ):
-                if self.busy:
-                    print(f"Already busy, ignoring job {msg.msg_body.job_id}")
-                else:
-                    self.busy = True
-                    self.current_job_id = msg.msg_body.job_id
-                    asyncio.create_task(coro=self._run_job(job_body=msg.msg_body))
+                asyncio.create_task(coro=self._run_job(job_body=msg.msg_body))
             elif msg.msg_type == "get_log_chunks" and isinstance(
                 msg.msg_body, RemoteExecutorMsgBodyGetLogChunks
             ):
@@ -437,27 +439,21 @@ class RemoteExecutorClient:
 
     async def _log_flusher(self):
         while self.running:
-            # 1. Real-time streaming (fast as possible)
-            if (
-                self.log_buffer
-                and self.ws
-                and self.current_job_id in self._log_subscribers
-            ):
-                # We send in batches of up to 100 to avoid massive messages
-                batch = self.log_buffer[:100]
-                self.log_buffer = self.log_buffer[100:]
-                asyncio.create_task(coro=self._send_log_batch(batch=batch))
-            elif self.log_buffer and self.current_job_id not in self._log_subscribers:
-                # If no one is listening, we just empty the buffer
-                # because logs are already in _disk_buffer
-                self.log_buffer.clear()
-
-            # 2. Disk chunking (1000 lines)
-            if len(self._disk_buffer) >= 1000:
-                batch = self._disk_buffer[:1000]
-                self._disk_buffer = self._disk_buffer[1000:]
-                if self.current_job_id:
-                    self._save_log_chunk(job_id=self.current_job_id, batch=batch)
+            # 1. Real-time streaming for all jobs with active subscribers
+            for job_id in list(self.log_buffers.keys()):
+                if (
+                    self.log_buffers[job_id]
+                    and self.ws
+                    and job_id in self._log_subscribers
+                ):
+                    # We send in batches of up to 100 to avoid massive messages
+                    batch = self.log_buffers[job_id][:100]
+                    self.log_buffers[job_id] = self.log_buffers[job_id][100:]
+                    asyncio.create_task(coro=self._send_log_batch(batch=batch))
+                elif self.log_buffers.get(job_id) and job_id not in self._log_subscribers:
+                    # If no one is listening, we just empty the buffer
+                    # because logs are already in job's disk_buffer (local to _run_job)
+                    self.log_buffers[job_id].clear()
 
             await asyncio.sleep(delay=0.1)
 
@@ -499,11 +495,18 @@ class RemoteExecutorClient:
                     await asyncio.sleep(delay=5)
 
     async def _run_job(self, job_body: RemoteExecutorMsgBodyStartJob):
+        self.current_job_ids.add(job_body.job_id)
+        self.log_buffers[job_body.job_id] = []
+        await self._send_status()
+
         print(f"Starting job {job_body.job_id}: {job_body.executable}")
         print(f"[{job_body.job_id}] Parameters: {job_body.parameters}")
 
         # Reset chunk counter for new job
         self._log_chunk_counter[job_body.job_id] = 0
+
+        # Create a local disk buffer for this job
+        disk_buffer: List[RemoteExecutorLogEntry] = []
 
         try:
             # Prepare command tokens safely
@@ -539,23 +542,26 @@ class RemoteExecutorClient:
                 # print(f"[{job_body.job_id}] {line}")
 
                 log_entry = RemoteExecutorLogEntry(
-                    line_nr=line_nr, timestamp=datetime.now(), msg=line
+                    job_id=job_body.job_id,
+                    line_nr=line_nr,
+                    timestamp=datetime.now(),
+                    msg=line,
                 )
-                self.log_buffer.append(log_entry)
-                self._disk_buffer.append(log_entry)
+                self.log_buffers[job_body.job_id].append(log_entry)
+                disk_buffer.append(log_entry)
                 line_nr += 1
 
             exit_code = await process.wait()
 
             # 1. Flush remaining disk buffer as a final chunk (regardless of size)
-            if self._disk_buffer:
+            if disk_buffer:
                 self._save_log_chunk(
-                    job_id=job_body.job_id, batch=list(self._disk_buffer)
+                    job_id=job_body.job_id, batch=list(disk_buffer)
                 )
-                self._disk_buffer.clear()
+                disk_buffer.clear()
 
             # 2. Wait for real-time log_buffer to be emptied by log_flusher if subscribers exist
-            while self.log_buffer and job_body.job_id in self._log_subscribers:
+            while self.log_buffers.get(job_body.job_id) and job_body.job_id in self._log_subscribers:
                 await asyncio.sleep(delay=0.5)
 
             # 3. Keep trying to send finish until successful or no longer running
@@ -563,34 +569,32 @@ class RemoteExecutorClient:
                 try:
                     await self._send_message(
                         msg_type="finish",
-                        body=RemoteExecutorMsgBodyFinish(exit_code=exit_code),
+                        body=RemoteExecutorMsgBodyFinish(
+                            job_id=job_body.job_id, exit_code=exit_code
+                        ),
                     )
                     break
                 except Exception as e:
-                    print(f"Failed to send finish: {e}")
+                    print(f"Failed to send finish for {job_body.job_id}: {e}")
                     await asyncio.sleep(delay=5)
 
         except Exception as e:
-            print(f"Error running job: {e}")
+            print(f"Error running job {job_body.job_id}: {e}")
             while self.running:
                 try:
                     await self._send_message(
-                        msg_type="finish", body=RemoteExecutorMsgBodyFinish(exit_code=1)
+                        msg_type="finish",
+                        body=RemoteExecutorMsgBodyFinish(
+                            job_id=job_body.job_id, exit_code=1
+                        ),
                     )
                     break
                 except Exception:
                     await asyncio.sleep(delay=5)
         finally:
-            self.busy = False
-            self.current_job_id = None
-            while self.running:
-                try:
-                    await self._send_message(
-                        msg_type="status", body=RemoteExecutorMsgBodyStatus(busy=False)
-                    )
-                    break
-                except Exception:
-                    await asyncio.sleep(delay=5)
+            self.current_job_ids.discard(job_body.job_id)
+            self.log_buffers.pop(job_body.job_id, None)
+            await self._send_status()
 
 
 def get_puppet_ssl_context():

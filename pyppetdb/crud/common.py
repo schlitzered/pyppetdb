@@ -148,6 +148,14 @@ class CrudMongo(
             raise ResourceNotFound
         return {}
 
+    async def _delete_many(self, query: dict) -> dict:
+        try:
+            await self._coll.delete_many(filter=query)
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        return {}
+
     async def _get(self, query: dict, fields: list) -> dict:
         try:
             result = await self._coll.find_one(

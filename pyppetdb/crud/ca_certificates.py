@@ -95,7 +95,7 @@ class CrudCACertificates(CrudMongo):
         query = {"space_id": space_id, "cn": cn}
         if status:
             query["status"] = status
-        await self._delete(query=query)
+        await self._delete_many(query=query)
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)

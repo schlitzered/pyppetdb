@@ -80,20 +80,6 @@ class CrudJobsNodeJobs(CrudMongo):
 
         return expired_jobs
 
-    async def get_busy_nodes_for_definition(
-        self, definition_id: str, node_ids: list[str]
-    ) -> list[str]:
-        cursor = self.coll.find(
-            filter={
-                "definition_id": definition_id,
-                "node_id": {"$in": node_ids},
-                "status": {"$in": ["scheduled", "running"]},
-            },
-            projection=["node_id"],
-        )
-        result = await cursor.to_list(length=None)
-        return [doc["node_id"] for doc in result]
-
     async def cancel_node_jobs(self, job_id: str):
         await self.coll.update_many(
             filter={"job_id": job_id, "status": "scheduled"},
