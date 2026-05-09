@@ -100,6 +100,10 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.mock_crud_nodes.search.assert_called_once()
+        self.mock_crud_node_jobs.get_busy_nodes_for_definition.assert_called_once_with(
+            definition_id="def1",
+            node_ids=["node1"],
+        )
         self.mock_crud_jobs.create.assert_called_once_with(
             payload=payload,
             node_ids=["node1"],
@@ -113,7 +117,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             created_by="admin",
         )
 
-    async def test_jobs_create_no_filters_busy_nodes(self):
+    async def test_jobs_create_filters_busy_nodes(self):
         mock_request = MagicMock(spec=Request)
         mock_user = MagicMock()
         mock_user.id = "admin"
@@ -141,6 +145,11 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         nodes_result.result = [mock_node1, mock_node2]
         self.mock_crud_nodes.search = AsyncMock(return_value=nodes_result)
 
+        # Mock node1 as busy
+        self.mock_crud_node_jobs.get_busy_nodes_for_definition = AsyncMock(
+            return_value=["node1"]
+        )
+
         mock_job = MagicMock()
         mock_job.id = "job1"
         self.mock_crud_jobs.create = AsyncMock(return_value=mock_job)
@@ -153,17 +162,17 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
 
         await self.controller.create(request=mock_request, data=payload)
 
-        # All nodes should be in the job targets even if some are busy (no more filtering)
+        # Only node2 should be in the job targets
         self.mock_crud_jobs.create.assert_called_once_with(
             payload=payload,
-            node_ids=["node1", "node2"],
+            node_ids=["node2"],
             created_by="admin",
             fields=[],
         )
         self.mock_crud_node_jobs.create_node_jobs.assert_called_once_with(
             job_id="job1",
             definition_id="def1",
-            node_ids=["node1", "node2"],
+            node_ids=["node2"],
             created_by="admin",
         )
 

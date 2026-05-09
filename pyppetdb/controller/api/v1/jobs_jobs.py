@@ -191,6 +191,15 @@ class ControllerApiV1JobsJobs:
         )
         node_ids = [node.id for node in nodes_result.result if node.id]
 
+        if node_ids:
+            busy_node_ids = (
+                await self._crud_jobs_node_jobs.get_busy_nodes_for_definition(
+                    definition_id=data.definition_id,
+                    node_ids=node_ids,
+                )
+            )
+            node_ids = [nid for nid in node_ids if nid not in busy_node_ids]
+
         job = await self._crud_jobs.create(
             payload=data,
             node_ids=node_ids,
