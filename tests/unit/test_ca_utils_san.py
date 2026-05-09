@@ -28,8 +28,8 @@ class TestCAUtilsSANInjection(unittest.TestCase):
 
         signed_cert_pem = CAUtils.sign_csr(
             csr_pem=csr_pem,
-            ca_cert_pem=self.ca_cert_pem,
-            ca_key_pem=self.ca_key_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -46,8 +46,8 @@ class TestCAUtilsSANInjection(unittest.TestCase):
 
         signed_cert_pem = CAUtils.sign_csr(
             csr_pem=csr_pem,
-            ca_cert_pem=self.ca_cert_pem,
-            ca_key_pem=self.ca_key_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -66,8 +66,8 @@ class TestCAUtilsSANInjection(unittest.TestCase):
 
         signed_cert_pem = CAUtils.sign_csr(
             csr_pem=csr_pem,
-            ca_cert_pem=self.ca_cert_pem,
-            ca_key_pem=self.ca_key_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -88,14 +88,14 @@ class TestCAUtilsSANInjection(unittest.TestCase):
 
         signed_cert_pem = CAUtils.sign_csr(
             csr_pem=csr_pem,
-            ca_cert_pem=self.ca_cert_pem,
-            ca_key_pem=self.ca_key_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
         )
 
         renewed_cert_pem = CAUtils.renew_cert(
             cert_pem=signed_cert_pem,
-            ca_cert_pem=self.ca_cert_pem,
-            ca_key_pem=self.ca_key_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
         )
 
         cert = x509.load_pem_x509_certificate(renewed_cert_pem)

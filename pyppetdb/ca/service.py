@@ -15,8 +15,11 @@
 import logging
 import asyncio
 import datetime
+import time
 import uuid
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
@@ -50,20 +53,45 @@ class CAService:
         self._crud_authorities = crud_authorities
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
-        self._executor = ProcessPoolExecutor(
+        self._executor = ThreadPoolExecutor(
             max_workers=self._config.ca.concurrentWorkers
         )
+        self._cache = {}
+        self._cache_ttl = 3600  # 1 hour
 
     @property
     def log(self):
         return self._log
+
+    async def _get_ca_resources(self, ca_id: str):
+        """Load CA key and cert from cache or DB and return cryptography objects."""
+        now = time.time()
+        cached = self._cache.get(ca_id)
+
+        if cached and (now - cached["timestamp"] < self._cache_ttl):
+            return cached["cert"], cached["key"]
+
+        # Cache miss or expired
+        ca = await self._crud_authorities.get(ca_id, fields=["certificate"])
+        key_pem = await self._crud_authorities.get_private_key(ca_id)
+
+        cert_obj = x509.load_pem_x509_certificate(ca.certificate.encode())
+        key_obj = serialization.load_pem_private_key(key_pem, password=None)
+
+        self._cache[ca_id] = {
+            "cert": cert_obj,
+            "key": key_obj,
+            "timestamp": now,
+        }
+
+        return cert_obj, key_obj
 
     async def refresh_crl(self, ca_id: str) -> None:
         ca = await self._crud_authorities.get(ca_id, fields=["internal", "certificate"])
         if not ca.internal:
             return
 
-        ca_key = await self._crud_authorities.get_private_key(ca_id)
+        ca_cert_obj, ca_key_obj = await self._get_ca_resources(ca_id)
 
         revoked_cas = await self._crud_authorities.get_revoked(parent_id=ca_id)
 
@@ -72,8 +100,8 @@ class CAService:
         crl_pem, next_update = await asyncio.get_running_loop().run_in_executor(
             self._executor,
             CAUtils.generate_crl,
-            ca.certificate.encode(),
-            ca_key,
+            ca_cert_obj,
+            ca_key_obj,
             revoked_cas + revoked_certs,
         )
 
@@ -364,15 +392,14 @@ class CAService:
             )
 
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
-        ca_cert = await self._crud_authorities.get(space.ca_id, fields=["certificate"])
-        ca_key = await self._crud_authorities.get_private_key(space.ca_id)
+        ca_cert_obj, ca_key_obj = await self._get_ca_resources(space.ca_id)
 
         cert_pem = await asyncio.get_running_loop().run_in_executor(
             self._executor,
             CAUtils.sign_csr,
             cert_data.csr.encode(),
-            ca_cert.certificate.encode(),
-            ca_key,
+            ca_cert_obj,
+            ca_key_obj,
             self._config.ca.certificateValidityDays,
             int(cert_data.id),
         )
@@ -429,8 +456,7 @@ class CAService:
             )
 
         space = await self._crud_spaces.get(space_id, fields=["ca_id"])
-        ca_cert = await self._crud_authorities.get(space.ca_id, fields=["certificate"])
-        ca_key = await self._crud_authorities.get_private_key(space.ca_id)
+        ca_cert_obj, ca_key_obj = await self._get_ca_resources(space.ca_id)
 
         new_serial = uuid.uuid4().int
 
@@ -438,8 +464,8 @@ class CAService:
             self._executor,
             CAUtils.renew_cert,
             cert_data.certificate.encode(),
-            ca_cert.certificate.encode(),
-            ca_key,
+            ca_cert_obj,
+            ca_key_obj,
             self._config.ca.certificateValidityDays,
             new_serial,
         )

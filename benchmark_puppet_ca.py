@@ -21,6 +21,8 @@ import time
 import logging
 import ssl
 import httpx
+import statistics
+import math
 from collections import Counter
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -223,40 +225,57 @@ class PuppetCABenchmark:
 
     def print_summary(self):
         total_duration = self.end_time - self.start_time
-        avg_sub = (
-            sum(self.submission_times) / len(self.submission_times)
-            if self.submission_times
-            else 0
-        )
-        avg_rev = (
-            sum(self.revocation_times) / len(self.revocation_times)
-            if self.revocation_times
-            else 0
-        )
-        avg_del = (
-            sum(self.deletion_times) / len(self.deletion_times)
-            if self.deletion_times
-            else 0
-        )
 
-        print("\n" + "=" * 40)
+        def get_stats(data):
+            if not data:
+                return "N/A"
+            avg = sum(data) / len(data)
+            p50 = statistics.median(data)
+            p95 = statistics.quantiles(data, n=20)[18] if len(data) >= 20 else max(data)
+            p99 = statistics.quantiles(data, n=100)[98] if len(data) >= 100 else max(data)
+            return {
+                "avg": avg * 1000,
+                "min": min(data) * 1000,
+                "max": max(data) * 1000,
+                "p50": p50 * 1000,
+                "p95": p95 * 1000,
+                "p99": p99 * 1000,
+            }
+
+        sub_stats = get_stats(self.submission_times)
+        rev_stats = get_stats(self.revocation_times)
+        del_stats = get_stats(self.deletion_times)
+
+        print("\n" + "=" * 60)
         print("PUPPET CA BENCHMARK SUMMARY")
-        print("=" * 40)
+        print("=" * 60)
         print(f"Total Requests:      {self.max_requests}")
         print(f"Concurrency:         {self.concurrency}")
         print(f"Total Duration:      {total_duration:.2f} seconds")
         print(f"Requests Per Second: {self.max_requests / total_duration:.2f}")
-        print("-" * 40)
-        print(f"Avg Submission Time: {avg_sub * 1000:.2f} ms")
-        print(f"Avg Revocation Time: {avg_rev * 1000:.2f} ms")
-        print(f"Avg Deletion Time:   {avg_del * 1000:.2f} ms")
-        print("-" * 40)
+        print("-" * 60)
+        print(f"{'Operation':<15} | {'Avg':>8} | {'Min':>8} | {'Max':>8} | {'P95':>8} | {'P99':>8}")
+        print("-" * 60)
+
+        for label, stats in [
+            ("Submission", sub_stats),
+            ("Revocation", rev_stats),
+            ("Deletion", del_stats),
+        ]:
+            if isinstance(stats, str):
+                print(f"{label:<15} | {'N/A':>39}")
+            else:
+                print(
+                    f"{label:<15} | {stats['avg']:8.2f} | {stats['min']:8.2f} | {stats['max']:8.2f} | {stats['p95']:8.2f} | {stats['p99']:8.2f} ms"
+                )
+
+        print("-" * 60)
         print("HTTP Status Codes:")
         for code, count in sorted(self.response_codes.items()):
             print(f"  {code}: {count}")
-        print("-" * 40)
+        print("-" * 60)
         print(f"Total Retries:       {self.retries}")
-        print("=" * 40 + "\n")
+        print("=" * 60 + "\n")
 
     def stop(self):
         self.running = False
