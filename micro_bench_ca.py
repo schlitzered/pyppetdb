@@ -87,15 +87,15 @@ def micro_bench():
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
         .sign(loaded_ca_key, hashes.SHA256())
     )
-    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+    _ = cert.public_bytes(serialization.Encoding.PEM)
     duration_sign = time.perf_counter() - start
     print(f"4. Sign CSR (Pure Math):       {duration_sign*1000:8.2f} ms")
 
     # 6. Calculate Fingerprints (MD5, SHA1, SHA256)
     start = time.perf_counter()
-    f_sha256 = cert.fingerprint(hashes.SHA256()).hex()
-    f_sha1 = cert.fingerprint(hashes.SHA1()).hex()
-    f_md5 = cert.fingerprint(hashes.MD5()).hex()
+    _ = cert.fingerprint(hashes.SHA256()).hex()
+    _ = cert.fingerprint(hashes.SHA1()).hex()
+    _ = cert.fingerprint(hashes.MD5()).hex()
     duration_fp = time.perf_counter() - start
     print(f"5. Calculate 3 Fingerprints:   {duration_fp*1000:8.2f} ms")
 
