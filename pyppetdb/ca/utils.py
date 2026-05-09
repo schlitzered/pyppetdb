@@ -14,7 +14,7 @@
 
 import datetime
 import uuid
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Union
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -190,15 +190,19 @@ class CAUtils:
     @staticmethod
     def sign_csr(
         csr_pem: bytes,
-        ca_cert_pem: bytes,
-        ca_key_pem: bytes,
+        ca_cert: Union[bytes, x509.Certificate],
+        ca_key: Union[bytes, rsa.RSAPrivateKey],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
     ) -> bytes:
         """Sign a CSR with the CA certificate and key."""
         csr = x509.load_pem_x509_csr(csr_pem)
-        ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
-        ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+
+        if isinstance(ca_cert, bytes):
+            ca_cert = x509.load_pem_x509_certificate(ca_cert)
+
+        if isinstance(ca_key, bytes):
+            ca_key = serialization.load_pem_private_key(ca_key, password=None)
 
         if serial_number is None:
             serial_number = uuid.uuid4().int
@@ -257,15 +261,19 @@ class CAUtils:
     @staticmethod
     def renew_cert(
         cert_pem: bytes,
-        ca_cert_pem: bytes,
-        ca_key_pem: bytes,
+        ca_cert: Union[bytes, x509.Certificate],
+        ca_key: Union[bytes, rsa.RSAPrivateKey],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
     ) -> bytes:
         """Renew a certificate with the CA certificate and key."""
         old_cert = x509.load_pem_x509_certificate(cert_pem)
-        ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
-        ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+
+        if isinstance(ca_cert, bytes):
+            ca_cert = x509.load_pem_x509_certificate(ca_cert)
+
+        if isinstance(ca_key, bytes):
+            ca_key = serialization.load_pem_private_key(ca_key, password=None)
 
         if serial_number is None:
             serial_number = uuid.uuid4().int
@@ -348,15 +356,18 @@ class CAUtils:
 
     @staticmethod
     def generate_crl(
-        ca_cert_pem: bytes,
-        ca_key_pem: bytes,
+        ca_cert: Union[bytes, x509.Certificate],
+        ca_key: Union[bytes, rsa.RSAPrivateKey],
         revoked_certs: List[
             dict
         ],  # List of {"serial_number": int, "revocation_date": datetime}
     ) -> Tuple[bytes, datetime.datetime]:
         """Generate a Certificate Revocation List (CRL)."""
-        ca_cert = x509.load_pem_x509_certificate(ca_cert_pem)
-        ca_key = serialization.load_pem_private_key(ca_key_pem, password=None)
+        if isinstance(ca_cert, bytes):
+            ca_cert = x509.load_pem_x509_certificate(ca_cert)
+
+        if isinstance(ca_key, bytes):
+            ca_key = serialization.load_pem_private_key(ca_key, password=None)
 
         last_update = datetime.datetime.now(datetime.timezone.utc)
         next_update = last_update + datetime.timedelta(days=1825)
