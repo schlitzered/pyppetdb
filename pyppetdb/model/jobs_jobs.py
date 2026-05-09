@@ -20,11 +20,16 @@ from typing import Literal
 from typing import Optional
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
-from pyppetdb.model.common import MetaMulti, filter_complex_search
+from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.common import filter_complex_search
 
 filter_literal = Literal[
     "id",
     "definition_id",
+    "parameters",
+    "env_vars",
+    "node_filter",
+    "nodes",
     "created_by",
     "created_at",
 ]

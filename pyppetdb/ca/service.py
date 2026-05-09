@@ -256,6 +256,9 @@ class CAService:
     async def delete_space(self, _id: str) -> None:
         await self._crud_spaces.delete(query={"id": _id})
 
+    async def delete_certificate(self, space_id: str, cn: str) -> None:
+        await self._crud_certificates.delete_by_cn(space_id=space_id, cn=cn)
+
     async def submit_certificate_request(
         self, space_id: str, csr_pem: str, fields: list = None, cn: str = None
     ) -> CACertificateGet:

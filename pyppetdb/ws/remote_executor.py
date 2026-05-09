@@ -14,7 +14,6 @@
 
 import asyncio
 import logging
-import random
 import time
 from typing import Dict, List, Optional, Any
 from fastapi import WebSocket, WebSocketDisconnect
@@ -32,9 +31,8 @@ from pyppetdb.model.remote_executor import RemoteExecutorMessage
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyAck
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogMessage
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyFinish
-from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyStatus
-from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyStartJob
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyHeartbeat
+from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyStartJob
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunks
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunks
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunk
@@ -57,17 +55,21 @@ class RemoteExecutorLogHandler:
     async def handle_log_message(
         self,
         body: RemoteExecutorMsgBodyLogMessage,
-        current_job_id: Optional[str],
     ):
+        if not body.job_id:
+            self._log.warning(
+                msg=f"Received log message without job_id from {self._node_id}"
+            )
+            return
+
         for log_entry in body.logs:
             entry_dict = log_entry.model_dump()
             entry_dict["msg"] = self._redactor.redact(entry_dict["msg"])
-            if current_job_id:
-                await self._manager.broadcast_local_log(
-                    node_id=self._node_id,
-                    job_id=current_job_id,
-                    log_entry=entry_dict,
-                )
+            await self._manager.broadcast_local_log(
+                node_id=self._node_id,
+                job_id=body.job_id,
+                log_entry=entry_dict,
+            )
 
 
 class RemoteExecutorJobManager:
@@ -89,18 +91,9 @@ class RemoteExecutorJobManager:
         self._crud_node_jobs = crud_node_jobs
         self._manager = manager
 
-        self.busy = False
-        self.current_job_id: Optional[str] = None
+        self.active_job_ids: set[str] = set()
 
     async def initialize(self):
-        node = await self._crud_nodes.get(
-            _id=self._node_id,
-            fields=["remote_agent"],
-        )
-        if node.remote_agent:
-            self.busy = node.remote_agent.busy
-            self.current_job_id = node.remote_agent.current_job_id
-
         await self._cleanup_stale_jobs()
 
     async def _cleanup_stale_jobs(self):
@@ -110,14 +103,13 @@ class RemoteExecutorJobManager:
                 status="running",
             )
             for job in running_jobs.result:
-                if job.job_id != self.current_job_id:
-                    self._log.warning(
-                        msg=f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed."
-                    )
-                    await self.mark_job_failed(
-                        job_id=job.job_id,
-                        reason="Stale job found during protocol startup",
-                    )
+                self._log.warning(
+                    msg=f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed."
+                )
+                await self.mark_job_failed(
+                    job_id=job.job_id,
+                    reason="Stale job found during protocol startup",
+                )
         except Exception as e:
             self._log.error(
                 msg=f"Error checking for stale jobs during startup for {self._node_id}: {e}"
@@ -129,51 +121,45 @@ class RemoteExecutorJobManager:
     ):
         exit_code = body.exit_code
         status = "success" if exit_code == 0 else "failed"
+        job_id = body.job_id
 
-        if self.current_job_id:
+        if job_id:
             await self._crud_node_jobs.update_status(
-                job_id=self.current_job_id,
+                job_id=job_id,
                 node_id=self._node_id,
                 status=status,
             )
             await self._manager.job_finished(
                 node_id=self._node_id,
-                job_id=self.current_job_id,
+                job_id=job_id,
                 status=status,
                 exit_code=exit_code,
             )
+            self.active_job_ids.discard(job_id)
+            await self._update_node_status()
 
-        await self.mark_node_not_busy()
-
-    async def handle_status(
-        self,
-        body: RemoteExecutorMsgBodyStatus,
-    ):
-        if not body.busy and self.current_job_id:
-            self._log.warning(
-                msg=f"Agent {self._node_id} reported NOT busy, but we thought it was running {self.current_job_id}. Marking job as failed."
-            )
-            await self.mark_current_job_failed(reason="Agent reported not busy")
-
-        self.busy = body.busy
-        self.current_job_id = body.current_job_id
-        await self._crud_nodes.update_remote_agent_busy(
+    async def _update_node_status(self):
+        await self._crud_nodes.update_remote_agent_current_job_id(
             node_id=self._node_id,
-            busy=self.busy,
-            current_job_id=self.current_job_id,
+            current_job_id=list(self.active_job_ids),
         )
 
-    async def mark_current_job_failed(
+    async def handle_heartbeat(
+        self,
+        body: RemoteExecutorMsgBodyHeartbeat,
+    ):
+        self.active_job_ids = set(body.running_job_ids)
+        await self._update_node_status()
+
+    async def mark_all_jobs_failed(
         self,
         reason: str,
     ):
-        if not self.current_job_id:
-            return
-        await self.mark_job_failed(
-            job_id=self.current_job_id,
-            reason=reason,
-        )
-        await self.mark_node_not_busy()
+        for job_id in list(self.active_job_ids):
+            await self.mark_job_failed(
+                job_id=job_id,
+                reason=reason,
+            )
 
     async def mark_job_failed(
         self,
@@ -195,22 +181,15 @@ class RemoteExecutorJobManager:
             status="failed",
             exit_code=1,
         )
-
-    async def mark_node_not_busy(self):
-        self.busy = False
-        self.current_job_id = None
-        await self._crud_nodes.update_remote_agent_busy(
-            node_id=self._node_id,
-            busy=False,
-            current_job_id=None,
-        )
+        self.active_job_ids.discard(job_id)
+        await self._update_node_status()
 
     async def start_job(
         self,
-        node_job,
+        job_id: str,
     ) -> RemoteExecutorMsgBodyStartJob:
         job = await self._crud_jobs.get(
-            _id=node_job.job_id,
+            _id=job_id,
             fields=[],
         )
         definition = await self._crud_job_definitions.get(
@@ -218,21 +197,16 @@ class RemoteExecutorJobManager:
             fields=[],
         )
 
-        self.busy = True
-        self.current_job_id = node_job.job_id
-        await self._crud_nodes.update_remote_agent_busy(
-            node_id=self._node_id,
-            busy=True,
-            current_job_id=self.current_job_id,
-        )
+        self.active_job_ids.add(job_id)
+        await self._update_node_status()
         await self._crud_node_jobs.update_status(
-            job_id=self.current_job_id,
+            job_id=job_id,
             node_id=self._node_id,
             status="running",
         )
 
         return RemoteExecutorMsgBodyStartJob(
-            job_id=node_job.job_id,
+            job_id=job_id,
             job_definition_id=definition.id,
             executable=definition.executable,
             user=definition.user,
@@ -296,11 +270,8 @@ class RemoteExecutorProtocol:
     async def run(self):
         await self._job_manager.initialize()
 
-        heartbeat_task = asyncio.create_task(coro=self._heartbeat())
-
         try:
-            # Initial catch-up: check for jobs immediately on connection
-            await self.trigger_job_check()
+            await self._dispatch_scheduled_jobs()
 
             while self._running:
                 data = await self._websocket.receive_text()
@@ -314,31 +285,26 @@ class RemoteExecutorProtocol:
             raise
         finally:
             self._running = False
-            heartbeat_task.cancel()
-            try:
-                await asyncio.gather(
-                    heartbeat_task,
-                    return_exceptions=True,
-                )
-            except Exception:
-                pass
 
-    async def trigger_job_check(self):
-        if not self._running or self._job_manager.busy:
+    async def _dispatch_scheduled_jobs(self):
+        cursor = self._crud_node_jobs.coll.find(
+            filter={"node_id": self._node_id, "status": "scheduled"}
+        )
+        async for doc in cursor:
+            await self.dispatch_job(job_id=doc["job_id"])
+
+    async def dispatch_job(self, job_id: str):
+        if not self._running:
             return
 
-        node_job = await self._crud_node_jobs.get_oldest_scheduled(
-            node_id=self._node_id
-        )
-        if node_job:
-            try:
-                msg_body = await self._job_manager.start_job(node_job=node_job)
-                await self._send_message(
-                    msg_type="start_job",
-                    body=msg_body,
-                )
-            except Exception as e:
-                self._log.error(f"Error triggering job for {self._node_id}: {e}")
+        try:
+            msg_body = await self._job_manager.start_job(job_id=job_id)
+            await self._send_message(
+                msg_type="start_job",
+                body=msg_body,
+            )
+        except Exception as e:
+            self._log.error(f"Error dispatching job {job_id} for {self._node_id}: {e}")
 
     async def _handle_message(
         self,
@@ -365,17 +331,13 @@ class RemoteExecutorProtocol:
             ):
                 await self._log_handler.handle_log_message(
                     body=body,
-                    current_job_id=self._job_manager.current_job_id,
                 )
             elif msg_type == "finish" and isinstance(body, RemoteExecutorMsgBodyFinish):
                 await self._job_manager.handle_finish(body=body)
-                # After finishing, check if there's another job waiting
-                await self.trigger_job_check()
-            elif msg_type == "status" and isinstance(body, RemoteExecutorMsgBodyStatus):
-                await self._job_manager.handle_status(body=body)
-                # If agent reported it became idle, check for jobs
-                if not body.busy:
-                    await self.trigger_job_check()
+            elif msg_type == "heartbeat" and isinstance(
+                body, RemoteExecutorMsgBodyHeartbeat
+            ):
+                await self._job_manager.handle_heartbeat(body=body)
             elif msg_type == "log_chunks" and isinstance(
                 body, RemoteExecutorMsgBodyLogChunks
             ):
@@ -384,11 +346,12 @@ class RemoteExecutorProtocol:
                 body, RemoteExecutorMsgBodyLogChunkData
             ):
                 await self._handle_log_chunk_data(body=body)
-            elif msg_type == "heartbeat":
+            elif msg_type == "ping":
+                # If agent sends ping, we reply with pong (not yet implemented in model/protocol)
                 pass
             else:
                 self._log.warning(
-                    msg=f"Unknown or malformed message type from {self._node_id}: {msg_type}"
+                    msg=f"Unknown message type from {self._node_id}: {msg_type}"
                 )
 
         except ValidationError as e:
@@ -445,30 +408,6 @@ class RemoteExecutorProtocol:
             msg_type="get_log_chunk",
             body=body,
         )
-
-    async def _heartbeat(self):
-        while self._running:
-            await asyncio.sleep(delay=self._heartbeat_interval)
-            if time.time() - self._last_activity >= self._heartbeat_interval:
-                await self._send_message(
-                    msg_type="heartbeat",
-                    body=RemoteExecutorMsgBodyHeartbeat(),
-                )
-
-    async def _poll_for_jobs(self):
-        while self._running:
-            if not self._job_manager.busy:
-                node_job = await self._crud_node_jobs.get_oldest_scheduled(
-                    node_id=self._node_id
-                )
-                if node_job:
-                    msg_body = await self._job_manager.start_job(node_job=node_job)
-                    await self._send_message(
-                        msg_type="start_job",
-                        body=msg_body,
-                    )
-
-            await asyncio.sleep(delay=random.randint(a=30, b=60))
 
     async def _send_message(
         self,
@@ -566,10 +505,10 @@ class WsRemoteExecutor:
                             continue
 
                         node_id = doc.get("node_id")
-                        if node_id in self._local_protocols:
+                        job_id = doc.get("job_id")
+                        if node_id in self._local_protocols and job_id:
                             protocol = self._local_protocols[node_id]
-                            # Schedule the job check in the background
-                            asyncio.create_task(protocol.trigger_job_check())
+                            asyncio.create_task(protocol.dispatch_job(job_id=job_id))
             except Exception as e:
                 self._log.error(f"Error in Change Stream watcher: {e}")
                 await asyncio.sleep(5)

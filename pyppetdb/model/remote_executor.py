@@ -25,6 +25,7 @@ class RemoteExecutorLogEntry(BaseModel):
 
 class RemoteExecutorMsgBodyLogMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    job_id: Optional[str] = None
     logs: List[RemoteExecutorLogEntry]
 
 
@@ -35,17 +36,13 @@ class RemoteExecutorMsgBodyAck(BaseModel):
 
 class RemoteExecutorMsgBodyFinish(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    job_id: Optional[str] = None
     exit_code: int
-
-
-class RemoteExecutorMsgBodyStatus(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    busy: bool
-    current_job_id: Optional[str] = None
 
 
 class RemoteExecutorMsgBodyHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    running_job_ids: List[str]
 
 
 class RemoteExecutorMsgBodyStartJob(BaseModel):
@@ -103,7 +100,6 @@ class RemoteExecutorMessage(BaseModel):
         "log_message",
         "ack",
         "finish",
-        "status",
         "heartbeat",
         "start_job",
         "get_log_chunks",
@@ -117,7 +113,6 @@ class RemoteExecutorMessage(BaseModel):
         RemoteExecutorMsgBodyLogMessage,
         RemoteExecutorMsgBodyAck,
         RemoteExecutorMsgBodyFinish,
-        RemoteExecutorMsgBodyStatus,
         RemoteExecutorMsgBodyHeartbeat,
         RemoteExecutorMsgBodyStartJob,
         RemoteExecutorMsgBodyGetLogChunks,
@@ -133,7 +128,6 @@ class RemoteExecutorMessage(BaseModel):
             "log_message": RemoteExecutorMsgBodyLogMessage,
             "ack": RemoteExecutorMsgBodyAck,
             "finish": RemoteExecutorMsgBodyFinish,
-            "status": RemoteExecutorMsgBodyStatus,
             "heartbeat": RemoteExecutorMsgBodyHeartbeat,
             "start_job": RemoteExecutorMsgBodyStartJob,
             "get_log_chunks": RemoteExecutorMsgBodyGetLogChunks,

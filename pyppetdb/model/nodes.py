@@ -22,6 +22,7 @@ from typing import Literal
 from typing import Optional
 from pydantic import BaseModel
 from pydantic import StrictStr
+from pydantic import field_validator
 
 from pyppetdb.model.common import MetaMulti
 
@@ -50,6 +51,7 @@ filter_literal = Literal[
     "report.resources",
     "remote_agent.connected",
     "remote_agent.via",
+    "remote_agent.current_job_id",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -63,6 +65,7 @@ sort_literal = Literal[
     "report.status",
     "remote_agent.connected",
     "remote_agent.via",
+    "remote_agent.current_job_id",
 ]
 
 
@@ -140,8 +143,16 @@ class NodeGetReport(BaseModel):
 class NodeRemoteAgent(BaseModel):
     connected: bool = False
     via: Optional[str] = None
-    busy: bool = False
-    current_job_id: Optional[str] = None
+    current_job_id: Optional[List[str]] = []
+
+    @field_validator("current_job_id", mode="before")
+    @classmethod
+    def validate_current_job_id(cls, v):
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class NodeGet(BaseModel):
