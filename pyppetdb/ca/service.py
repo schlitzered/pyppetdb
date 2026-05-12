@@ -91,24 +91,58 @@ class CAService:
         space_id: str,
     ):
         # 1. Cryptographic Integrity
-        if not CAUtils.verify_csr_signature(csr_pem.encode()):
-            raise QueryParamValidationError(msg="CSR signature is invalid")
+        self._validate_csr_integrity(csr_pem)
 
         csr = x509.load_pem_x509_csr(csr_pem.encode())
         cn = csr.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
 
         # Decrypt configurations for validation
-        if ca_config:
-            ca_config = self._validation_protector.decrypt_config(
-                ca_config.model_copy(deep=True)
-            )
-        if space_config:
-            space_config = self._validation_protector.decrypt_config(
-                space_config.model_copy(deep=True)
-            )
+        configs = self._decrypt_validation_configs(ca_config, space_config)
 
         # 2. Subject Name Validation
-        for config in [ca_config, space_config]:
+        self._validate_csr_subject_name(cn, configs)
+
+        # 3. SAN Validation
+        await self._validate_csr_sans(
+            csr=csr,
+            cn=cn,
+            configs=configs,
+            ca_id=ca_id,
+            space_id=space_id,
+        )
+
+    def _validate_csr_integrity(self, csr_pem: str):
+        if not CAUtils.verify_csr_signature(csr_pem.encode()):
+            raise QueryParamValidationError(msg="CSR signature is invalid")
+
+    def _decrypt_validation_configs(
+        self,
+        ca_config: CAValidationConfig,
+        space_config: CAValidationConfig,
+    ) -> list[CAValidationConfig]:
+        configs = []
+        if ca_config:
+            configs.append(
+                self._validation_protector.decrypt_config(
+                    ca_config.model_copy(deep=True)
+                )
+            )
+        else:
+            configs.append(None)
+
+        if space_config:
+            configs.append(
+                self._validation_protector.decrypt_config(
+                    space_config.model_copy(deep=True)
+                )
+            )
+        else:
+            configs.append(None)
+
+        return configs
+
+    def _validate_csr_subject_name(self, cn: str, configs: list[CAValidationConfig]):
+        for config in configs:
             if config and config.enforce_rfc1123:
                 # RFC 1123 hostname regex (lowercase only)
                 if not re.match(
@@ -119,7 +153,14 @@ class CAService:
                         msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
                     )
 
-        # 3. SAN Validation
+    async def _validate_csr_sans(
+        self,
+        csr: x509.CertificateSigningRequest,
+        cn: str,
+        configs: list[CAValidationConfig],
+        ca_id: str,
+        space_id: str,
+    ):
         san_ext = None
         try:
             san_ext = csr.extensions.get_extension_for_class(
@@ -132,47 +173,75 @@ class CAService:
         if san_ext:
             sans = san_ext.value.get_values_for_type(x509.DNSName)
 
-        for config in [ca_config, space_config]:
+        for config in configs:
             if not config or not config.san_validation:
                 continue
 
             san_val = config.san_validation
 
-            # Max SAN count
-            if len(sans) > san_val.max_san_count:
-                raise QueryParamValidationError(
-                    msg=f"Number of SANs ({len(sans)}) exceeds maximum allowed ({san_val.max_san_count})"
+            self._validate_sans_count(sans, san_val.max_san_count)
+            self._validate_sans_regex(sans, san_val.regex_list)
+
+            if san_val.http_checks:
+                await self._validate_sans_http(
+                    cn=cn,
+                    sans=sans,
+                    http_checks=san_val.http_checks,
+                    ca_id=ca_id,
+                    space_id=space_id,
                 )
 
-            # Regex list
-            if san_val.regex_list:
-                for san in sans:
-                    if not any(
-                        re.match(pattern, san) for pattern in san_val.regex_list
-                    ):
-                        raise QueryParamValidationError(
-                            msg=f"SAN '{san}' does not match any allowed patterns"
-                        )
-
-            # HTTP Checks
-            if san_val.http_checks:
-                for http_check in san_val.http_checks:
-                    await self._execute_http_validation(
-                        cn=cn,
-                        sans=sans,
-                        config=http_check,
-                        ca_id=ca_id,
-                        space_id=space_id,
-                    )
-
-            # Script Checks
             if san_val.script_checks:
-                for script_check in san_val.script_checks:
-                    await self._execute_script_validation(
-                        cn=cn,
-                        sans=sans,
-                        config=script_check,
-                    )
+                await self._validate_sans_script(
+                    cn=cn,
+                    sans=sans,
+                    script_checks=san_val.script_checks,
+                )
+
+    def _validate_sans_count(self, sans: list[str], max_count: int):
+        if len(sans) > max_count:
+            raise QueryParamValidationError(
+                msg=f"Number of SANs ({len(sans)}) exceeds maximum allowed ({max_count})"
+            )
+
+    def _validate_sans_regex(self, sans: list[str], regex_list: list[str] | None):
+        if not regex_list:
+            return
+        for san in sans:
+            if not any(re.match(pattern, san) for pattern in regex_list):
+                raise QueryParamValidationError(
+                    msg=f"SAN '{san}' does not match any allowed patterns"
+                )
+
+    async def _validate_sans_http(
+        self,
+        cn: str,
+        sans: list[str],
+        http_checks: list[CAHTTPValidation],
+        ca_id: str,
+        space_id: str,
+    ):
+        for http_check in http_checks:
+            await self._execute_http_validation(
+                cn=cn,
+                sans=sans,
+                config=http_check,
+                ca_id=ca_id,
+                space_id=space_id,
+            )
+
+    async def _validate_sans_script(
+        self,
+        cn: str,
+        sans: list[str],
+        script_checks: list[CAScriptValidation],
+    ):
+        for script_check in script_checks:
+            await self._execute_script_validation(
+                cn=cn,
+                sans=sans,
+                config=script_check,
+            )
 
     async def _execute_http_validation(
         self,
