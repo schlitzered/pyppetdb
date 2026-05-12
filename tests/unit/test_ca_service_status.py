@@ -53,11 +53,11 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.process_requested_certificate.assert_called_once_with(_id="123")
 
     async def test_update_certificate_status_already_signed(self):
-        # Mock NOT finding a requested cert, but finding a signed one
+        # Mock finding a signed cert in one call
         cert_signed = CACertificateGet(
             id="123", status="signed", cn="node1", space_id="space1"
         )
-        self.crud_certificates.get_by_cn.side_effect = [ResourceNotFound(), cert_signed]
+        self.crud_certificates.get_by_cn.return_value = cert_signed
 
         # Mock processing should NOT be called
         self.service.process_requested_certificate = AsyncMock()
@@ -70,11 +70,11 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.process_requested_certificate.assert_not_called()
 
     async def test_update_certificate_status_revoke_signed(self):
-        # Mock NOT finding a requested cert, but finding a signed one
+        # Mock finding a signed cert in one call
         cert_signed = CACertificateGet(
             id="123", status="signed", cn="node1", space_id="space1"
         )
-        self.crud_certificates.get_by_cn.side_effect = [ResourceNotFound(), cert_signed]
+        self.crud_certificates.get_by_cn.return_value = cert_signed
 
         # Mock revocation
         self.service.revoke_certificate = AsyncMock(return_value=cert_signed)
@@ -87,11 +87,8 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.revoke_certificate.assert_called_once_with(_id="123")
 
     async def test_update_certificate_status_not_found(self):
-        # Mock finding nothing
-        self.crud_certificates.get_by_cn.side_effect = [
-            ResourceNotFound(),
-            ResourceNotFound(),
-        ]
+        # Mock finding nothing in one call
+        self.crud_certificates.get_by_cn.side_effect = ResourceNotFound()
 
         with self.assertRaises(ResourceNotFound):
             await self.service.update_certificate_status(

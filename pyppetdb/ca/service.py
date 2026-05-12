@@ -676,37 +676,31 @@ class CAService:
         )
 
     async def revoke_certificate(self, _id: str) -> CACertificateGet:
-        cert = await self._crud_certificates.get(_id, fields=["status", "ca_id"])
-        if cert.status == "revoked":
-            return cert
-
         now = datetime.datetime.now(datetime.timezone.utc)
-        result = await self._crud_certificates.update(
-            query={"id": _id},
-            payload={
-                "status": "revoked",
-                "revocation_date": now,
-                "cert_uniqueness": f"revoked:{_id}",
-            },
-            fields=None,
-        )
-
-        return result
+        try:
+            result = await self._crud_certificates.update(
+                query={"id": _id, "status": {"$ne": "revoked"}},
+                payload={
+                    "status": "revoked",
+                    "revocation_date": now,
+                    "cert_uniqueness": f"revoked:{_id}",
+                },
+                fields=None,
+            )
+            return result
+        except ResourceNotFound:
+            # If not found with the $ne filter, it might already be revoked
+            return await self._crud_certificates.get(_id, fields=None)
 
     async def renew_certificate(self, space_id: str, cn: str) -> CACertificateGet:
         try:
             old_cert = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cn, status="signed"
+                space_id=space_id, cn=cn, status={"$ne": "revoked"}
             )
         except ResourceNotFound:
-            try:
-                old_cert = await self._crud_certificates.get_by_cn(
-                    space_id=space_id, cn=cn
-                )
-            except ResourceNotFound:
-                raise ResourceNotFound(
-                    details=f"Certificate for {cn} in space {space_id} not found"
-                )
+            raise ResourceNotFound(
+                details=f"Certificate for {cn} in space {space_id} not found"
+            )
 
         if not old_cert.csr:
             # Backtrack: try to find a CSR in any other record for this CN
@@ -800,18 +794,11 @@ class CAService:
         self, space_id: str, cn: str, payload: CACertificatePut, fields: list = None
     ) -> CACertificateGet:
         try:
-            cert = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cn, status="requested"
-            )
+            cert = await self._crud_certificates.get_by_cn(space_id=space_id, cn=cn)
         except ResourceNotFound:
-            try:
-                cert = await self._crud_certificates.get_by_cn(
-                    space_id=space_id, cn=cn, status="signed"
-                )
-            except ResourceNotFound:
-                raise ResourceNotFound(
-                    details=f"Certificate for {cn} in space {space_id} not found"
-                )
+            raise ResourceNotFound(
+                details=f"Certificate for {cn} in space {space_id} not found"
+            )
 
         if payload.status == "signed":
             if cert.status == "signed":
