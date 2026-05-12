@@ -92,10 +92,6 @@ class CrudCACertificates(CrudMongo):
         result = await self._get(query={"id": _id}, fields=fields)
         return CACertificateGet(**result)
 
-    async def get_by_serial(self, serial: str, fields: list) -> CACertificateGet:
-        result = await self._get(query={"serial_number": serial}, fields=fields)
-        return CACertificateGet(**result)
-
     async def get_by_cn(
         self,
         space_id: str,
