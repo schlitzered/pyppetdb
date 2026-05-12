@@ -24,8 +24,14 @@ from pyppetdb.model.common import DataDelete
 
 
 class CrudJobsDefinitions(CrudMongo):
-    async def index_create(self) -> None:
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._indices.append(
+            pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
+        )
+
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def create(
         self, payload: JobDefinitionPost, fields: list

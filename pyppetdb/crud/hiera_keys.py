@@ -63,7 +63,10 @@ class CrudHieraKeysAdapter:
         if not model_type:
             self.log.warning(f"key model {model_id} not found")
             return
-        self.pyhiera.hiera.key_add(key_id, model_id)
+        self.pyhiera.hiera.key_add(
+            key_id,
+            model_id,
+        )
 
     def _delete_key(self, key_id: str):
         try:
@@ -159,20 +162,32 @@ class CrudHieraKeys(CrudMongo):
         coll: AsyncIOMotorCollection,
         pyhiera: PyHiera,
     ):
-        super(CrudHieraKeys, self).__init__(
+        super().__init__(
             config=config,
             log=log,
             coll=coll,
         )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("id", pymongo.ASCENDING)],
+                unique=True,
+            )
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("key_model_id", pymongo.ASCENDING)],
+            )
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("deprecated", pymongo.ASCENDING)],
+            )
+        )
         self._keys_adapter = CrudHieraKeysAdapter(log=log, coll=coll, pyhiera=pyhiera)
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("key_model_id", pymongo.ASCENDING)])
-        await self.coll.create_index([("deprecated", pymongo.ASCENDING)])
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self._keys_adapter.run()
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
         self,

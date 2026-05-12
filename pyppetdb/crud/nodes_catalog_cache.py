@@ -71,8 +71,8 @@ class NodesDataProtector:
 class CrudNodesCatalogCache(CrudMongo):
     def __init__(
         self,
-        log: logging.Logger,
         config: Config,
+        log: logging.Logger,
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
     ):
@@ -82,18 +82,24 @@ class CrudNodesCatalogCache(CrudMongo):
             coll=coll,
         )
         self._protector = protector
-
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("placement", pymongo.ASCENDING)])
-
-        await self.coll.create_index(
-            [("ttl", pymongo.ASCENDING)],
-            expireAfterSeconds=0,
-            name="ttl_catalog_cache",
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel(
+                    [("placement", pymongo.ASCENDING)], name="idx_placement"
+                ),
+                pymongo.IndexModel(
+                    [("ttl", pymongo.ASCENDING)],
+                    expireAfterSeconds=0,
+                    name="ttl_catalog_cache",
+                ),
+            ]
         )
-        self.log.info(f"creating {self.resource_type} indices, done")
+
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def get(
         self,

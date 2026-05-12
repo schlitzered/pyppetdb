@@ -34,18 +34,20 @@ class CrudHieraLookupCache(CrudMongo):
             log=log,
             coll=coll,
         )
-
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
-            [
-                ("key_id", pymongo.ASCENDING),
-                ("merge", pymongo.ASCENDING),
-                ("facts.key", pymongo.ASCENDING),
-                ("facts.value", pymongo.ASCENDING),
-            ],
+        self._indices.append(
+            pymongo.IndexModel(
+                [
+                    ("key_id", pymongo.ASCENDING),
+                    ("merge", pymongo.ASCENDING),
+                    ("facts.key", pymongo.ASCENDING),
+                    ("facts.value", pymongo.ASCENDING),
+                ],
+                name="idx_lookup_cache",
+            )
         )
-        self.log.info(f"creating {self.resource_type} indices, done")
+
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     @staticmethod
     def _normalize_facts(facts: dict[str, str]) -> list[dict[str, str]]:

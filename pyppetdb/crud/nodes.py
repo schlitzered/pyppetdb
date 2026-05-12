@@ -204,43 +204,66 @@ class CrudNodes(CrudMongo):
             coll=coll,
         )
         self._ast_parser = PuppetDBASTParser()
-
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("disabled", pymongo.ASCENDING)])
-        await self.coll.create_index(
+        self._indices.extend(
             [
-                ("node_groups", pymongo.ASCENDING),
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel(
+                    [("disabled", pymongo.ASCENDING)], name="idx_disabled"
+                ),
+                pymongo.IndexModel(
+                    [("node_groups", pymongo.ASCENDING)], name="idx_node_groups"
+                ),
+                pymongo.IndexModel(
+                    [("change_catalog", pymongo.ASCENDING)], name="idx_change_catalog"
+                ),
+                pymongo.IndexModel(
+                    [("change_facts", pymongo.ASCENDING)], name="idx_change_facts"
+                ),
+                pymongo.IndexModel(
+                    [("change_last", pymongo.ASCENDING)], name="idx_change_last"
+                ),
+                pymongo.IndexModel(
+                    [("change_report", pymongo.ASCENDING)], name="idx_change_report"
+                ),
+                pymongo.IndexModel(
+                    [("report.status", pymongo.ASCENDING)], name="idx_report_status"
+                ),
+                pymongo.IndexModel(
+                    [("remote_agent.connected", pymongo.ASCENDING)],
+                    name="idx_remote_agent_connected",
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("catalog.resources_exported.type", pymongo.ASCENDING),
+                        ("catalog.resources_exported.title", pymongo.ASCENDING),
+                    ],
+                    name="idx_exported_resources_title",
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("catalog.resources_exported.type", pymongo.ASCENDING),
+                        ("catalog.resources_exported.tags", pymongo.ASCENDING),
+                    ],
+                    name="idx_exported_resources_tags",
+                ),
             ]
         )
-        await self.coll.create_index([("change_catalog", pymongo.ASCENDING)])
-        await self.coll.create_index([("change_facts", pymongo.ASCENDING)])
-        await self.coll.create_index([("change_last", pymongo.ASCENDING)])
-        await self.coll.create_index([("change_report", pymongo.ASCENDING)])
-        await self.coll.create_index([("report.status", pymongo.ASCENDING)])
-        await self.coll.create_index([("remote_agent.connected", pymongo.ASCENDING)])
+
+    async def _create_index(self) -> None:
+        await super()._create_index()
         if self.config.app.main.facts.index:
             for fact in self.config.app.main.facts.index:
-                await self.coll.create_index(
-                    [
-                        (f"facts.{fact}", pymongo.ASCENDING),
-                        ("node_groups", pymongo.ASCENDING),
-                    ]
+                await self._sync_index(
+                    pymongo.IndexModel(
+                        [
+                            (f"facts.{fact}", pymongo.ASCENDING),
+                            ("node_groups", pymongo.ASCENDING),
+                        ],
+                        name=f"idx_fact_{fact}",
+                    )
                 )
-        await self.coll.create_index(
-            [
-                ("catalog.resources_exported.type", pymongo.ASCENDING),
-                ("catalog.resources_exported.title", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [
-                ("catalog.resources_exported.type", pymongo.ASCENDING),
-                ("catalog.resources_exported.tags", pymongo.ASCENDING),
-            ]
-        )
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     def translate_resource_query(self, ast: list) -> typing.Optional[dict]:
         return self._ast_parser.parse(ast)

@@ -188,12 +188,22 @@ class CAUtils:
         return cert_pem, key_pem
 
     @staticmethod
+    def verify_csr_signature(csr_pem: bytes) -> bool:
+        """Verify the signature of a CSR."""
+        csr = x509.load_pem_x509_csr(csr_pem)
+        return csr.is_signature_valid
+
+    @staticmethod
     def sign_csr(
         csr_pem: bytes,
         ca_cert: Union[bytes, x509.Certificate],
         ca_key: Union[bytes, rsa.RSAPrivateKey],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
+        key_usages: Optional[List[str]] = None,
+        extended_key_usages: Optional[List[str]] = None,
+        allowed_extensions: Optional[List[str]] = None,
+        injected_sans: Optional[List[str]] = None,
     ) -> bytes:
         """Sign a CSR with the CA certificate and key."""
         csr = x509.load_pem_x509_csr(csr_pem)
@@ -224,6 +234,68 @@ class CAUtils:
             )
         )
 
+        # Add Key Usage if provided
+        if key_usages:
+            usage_kwargs = {
+                "digital_signature": False,
+                "content_commitment": False,
+                "key_encipherment": False,
+                "data_encipherment": False,
+                "key_agreement": False,
+                "key_cert_sign": False,
+                "crl_sign": False,
+                "encipher_only": False,
+                "decipher_only": False,
+            }
+            for usage in key_usages:
+                if usage in usage_kwargs:
+                    usage_kwargs[usage] = True
+
+            builder = builder.add_extension(
+                x509.KeyUsage(**usage_kwargs),
+                critical=True,
+            )
+        else:
+            # Default fallback
+            builder = builder.add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=True,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=False,
+                    crl_sign=False,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+
+        # Add Extended Key Usage if provided
+        if extended_key_usages:
+            ekus = []
+            for eku in extended_key_usages:
+                if hasattr(x509.ExtendedKeyUsageOID, eku):
+                    ekus.append(getattr(x509.ExtendedKeyUsageOID, eku))
+                else:
+                    ekus.append(x509.ObjectIdentifier(eku))
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage(ekus),
+                critical=False,
+            )
+        else:
+            # Default fallback
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage(
+                    [
+                        x509.ExtendedKeyUsageOID.SERVER_AUTH,
+                        x509.ExtendedKeyUsageOID.CLIENT_AUTH,
+                    ]
+                ),
+                critical=False,
+            )
+
         cn = csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
         san_extension = None
         try:
@@ -233,26 +305,40 @@ class CAUtils:
         except x509.ExtensionNotFound:
             pass
 
+        san_values = []
         if san_extension:
             san_values = list(san_extension.value)
             dns_names = san_extension.value.get_values_for_type(x509.DNSName)
             if cn not in dns_names:
                 san_values.append(x509.DNSName(cn))
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(san_values),
-                critical=san_extension.critical,
-            )
         else:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName([x509.DNSName(cn)]),
-                critical=False,
-            )
+            san_values = [x509.DNSName(cn)]
 
-        for extension in csr.extensions:
-            if isinstance(extension.value, x509.SubjectAlternativeName):
-                continue
-            # Future-proof: handle other allowed extensions if needed
-            pass
+        if injected_sans:
+            existing_dns_names = [
+                d.value for d in san_values if isinstance(d, x509.DNSName)
+            ]
+            for san in injected_sans:
+                if san not in existing_dns_names:
+                    san_values.append(x509.DNSName(san))
+                    existing_dns_names.append(san)
+
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(san_values),
+            critical=san_extension.critical if san_extension else False,
+        )
+
+        if allowed_extensions:
+            for extension in csr.extensions:
+                if isinstance(extension.value, x509.SubjectAlternativeName):
+                    continue
+                # Check if OID or Name is in allowed list
+                oid_str = extension.oid.dotted_string
+                # We could also check names but OID is safer
+                if oid_str in allowed_extensions:
+                    builder = builder.add_extension(
+                        extension.value, critical=extension.critical
+                    )
 
         cert = builder.sign(ca_key, hashes.SHA256())
 
@@ -265,6 +351,10 @@ class CAUtils:
         ca_key: Union[bytes, rsa.RSAPrivateKey],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
+        key_usages: Optional[List[str]] = None,
+        extended_key_usages: Optional[List[str]] = None,
+        allowed_extensions: Optional[List[str]] = None,
+        injected_sans: Optional[List[str]] = None,
     ) -> bytes:
         """Renew a certificate with the CA certificate and key."""
         old_cert = x509.load_pem_x509_certificate(cert_pem)
@@ -295,6 +385,68 @@ class CAUtils:
             )
         )
 
+        # Add Key Usage if provided
+        if key_usages:
+            usage_kwargs = {
+                "digital_signature": False,
+                "content_commitment": False,
+                "key_encipherment": False,
+                "data_encipherment": False,
+                "key_agreement": False,
+                "key_cert_sign": False,
+                "crl_sign": False,
+                "encipher_only": False,
+                "decipher_only": False,
+            }
+            for usage in key_usages:
+                if usage in usage_kwargs:
+                    usage_kwargs[usage] = True
+
+            builder = builder.add_extension(
+                x509.KeyUsage(**usage_kwargs),
+                critical=True,
+            )
+        else:
+            # Default fallback
+            builder = builder.add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=True,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=False,
+                    crl_sign=False,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+
+        # Add Extended Key Usage if provided
+        if extended_key_usages:
+            ekus = []
+            for eku in extended_key_usages:
+                if hasattr(x509.ExtendedKeyUsageOID, eku):
+                    ekus.append(getattr(x509.ExtendedKeyUsageOID, eku))
+                else:
+                    ekus.append(x509.ObjectIdentifier(eku))
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage(ekus),
+                critical=False,
+            )
+        else:
+            # Default fallback
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage(
+                    [
+                        x509.ExtendedKeyUsageOID.SERVER_AUTH,
+                        x509.ExtendedKeyUsageOID.CLIENT_AUTH,
+                    ]
+                ),
+                critical=False,
+            )
+
         cn = old_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
         san_extension = None
         try:
@@ -304,26 +456,39 @@ class CAUtils:
         except x509.ExtensionNotFound:
             pass
 
+        san_values = []
         if san_extension:
             san_values = list(san_extension.value)
             dns_names = san_extension.value.get_values_for_type(x509.DNSName)
             if cn not in dns_names:
                 san_values.append(x509.DNSName(cn))
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(san_values),
-                critical=san_extension.critical,
-            )
         else:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName([x509.DNSName(cn)]),
-                critical=False,
-            )
+            san_values = [x509.DNSName(cn)]
 
-        for extension in old_cert.extensions:
-            if isinstance(extension.value, x509.SubjectAlternativeName):
-                continue
-            # Future-proof: handle other allowed extensions if needed
-            pass
+        if injected_sans:
+            existing_dns_names = [
+                d.value for d in san_values if isinstance(d, x509.DNSName)
+            ]
+            for san in injected_sans:
+                if san not in existing_dns_names:
+                    san_values.append(x509.DNSName(san))
+                    existing_dns_names.append(san)
+
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(san_values),
+            critical=san_extension.critical if san_extension else False,
+        )
+
+        if allowed_extensions:
+            for extension in old_cert.extensions:
+                if isinstance(extension.value, x509.SubjectAlternativeName):
+                    continue
+                # Check if OID or Name is in allowed list
+                oid_str = extension.oid.dotted_string
+                if oid_str in allowed_extensions:
+                    builder = builder.add_extension(
+                        extension.value, critical=extension.critical
+                    )
 
         new_cert = builder.sign(ca_key, hashes.SHA256())
 
@@ -333,14 +498,35 @@ class CAUtils:
     def get_csr_info(csr_pem: bytes) -> dict:
         """Extract information from a CSR."""
         csr = x509.load_pem_x509_csr(csr_pem)
+
+        sans = []
+        try:
+            san_extension = csr.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+            sans = [str(name.value) for name in san_extension.value]
+        except x509.ExtensionNotFound:
+            pass
+
         return {
             "cn": csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
+            "sans": sans,
         }
 
     @staticmethod
     def get_cert_info(cert_pem: bytes) -> dict:
         """Extract information from a certificate."""
         cert = x509.load_pem_x509_certificate(cert_pem)
+
+        sans = []
+        try:
+            san_extension = cert.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+            sans = [str(name.value) for name in san_extension.value]
+        except x509.ExtensionNotFound:
+            pass
+
         return {
             "cn": cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
             "issuer": cert.issuer.rfc4514_string(),
@@ -352,6 +538,7 @@ class CAUtils:
                 "sha1": cert.fingerprint(hashes.SHA1()).hex(),
                 "md5": cert.fingerprint(hashes.MD5()).hex(),
             },
+            "sans": sans,
         }
 
     @staticmethod
@@ -361,6 +548,7 @@ class CAUtils:
         revoked_certs: List[
             dict
         ],  # List of {"serial_number": int, "revocation_date": datetime}
+        validity_days: int = 30,
     ) -> Tuple[bytes, datetime.datetime]:
         """Generate a Certificate Revocation List (CRL)."""
         if isinstance(ca_cert, bytes):
@@ -370,7 +558,7 @@ class CAUtils:
             ca_key = serialization.load_pem_private_key(ca_key, password=None)
 
         last_update = datetime.datetime.now(datetime.timezone.utc)
-        next_update = last_update + datetime.timedelta(days=1825)
+        next_update = last_update + datetime.timedelta(days=validity_days)
 
         builder = x509.CertificateRevocationListBuilder()
         builder = builder.issuer_name(ca_cert.subject)

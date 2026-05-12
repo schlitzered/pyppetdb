@@ -46,18 +46,23 @@ class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_authority_permission(self):
         self.mock_authorize.require_perm = AsyncMock()
+        self.mock_ca_service.update_authority = AsyncMock()
         self.mock_ca_service.revoke_authority = AsyncMock()
 
         mock_request = MagicMock()
         data = CAAuthorityPut(status="revoked")
 
-        await self.controller.update(request=mock_request, ca_id="ca1", data=data)
+        await self.controller.update(
+            request=mock_request, ca_id="ca1", data=data, fields=set()
+        )
 
         self.mock_authorize.require_perm.assert_called_once_with(
             request=mock_request,
             permission=PERM_CA_AUTHORITIES_UPDATE,
         )
-        self.mock_ca_service.revoke_authority.assert_called_once_with("ca1")
+        self.mock_ca_service.update_authority.assert_called_once_with(
+            ca_id="ca1", payload=data, fields=[]
+        )
 
     async def test_delete_authority_permission(self):
         self.mock_authorize.require_perm = AsyncMock()

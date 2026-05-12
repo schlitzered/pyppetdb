@@ -23,9 +23,13 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_coll = MagicMock()
+        self.mock_protector = MagicMock()
 
         self.crud = CrudCASpaces(
-            config=self.mock_config, log=self.log, coll=self.mock_coll
+            config=self.mock_config,
+            log=self.log,
+            coll=self.mock_coll,
+            protector=self.mock_protector,
         )
 
     async def test_delete_success(self):

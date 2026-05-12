@@ -41,25 +41,30 @@ class CrudHieraLevelData(CrudMongo):
         config: Config,
         coll: AsyncIOMotorCollection,
     ):
-        super(CrudHieraLevelData, self).__init__(
+        super().__init__(
             config=config,
             log=log,
             coll=coll,
         )
+        self._indices.append(
+            pymongo.IndexModel(
+                [
+                    ("key_id", pymongo.ASCENDING),
+                    ("id", pymongo.ASCENDING),
+                    ("level_id", pymongo.ASCENDING),
+                ],
+                unique=True,
+            )
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("key", pymongo.ASCENDING)],
+            )
+        )
         self._formatter = HieraLevelFormatter()
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
-            [
-                ("key_id", pymongo.ASCENDING),
-                ("id", pymongo.ASCENDING),
-                ("level_id", pymongo.ASCENDING),
-            ],
-            unique=True,
-        )
-        await self.coll.create_index([("key", pymongo.ASCENDING)])
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     def _normalize_facts(self, level_id: str, facts: dict[str, str]) -> dict[str, str]:
         fields = [fname for _, fname, _, _ in self._formatter.parse(level_id) if fname]
@@ -72,7 +77,10 @@ class CrudHieraLevelData(CrudMongo):
         facts: dict[str, str],
     ):
         try:
-            if not data_id == self._formatter.format(level_id, **facts):
+            if not data_id == self._formatter.format(
+                level_id,
+                **facts,
+            ):
                 raise QueryParamValidationError(
                     msg=f"invalid data_id {data_id}, not matching expanded level_id {level_id}"
                 )
@@ -89,13 +97,23 @@ class CrudHieraLevelData(CrudMongo):
         fields: list,
     ) -> HieraLevelDataGet:
         data = payload.model_dump()
-        self._validate_level_and_id(level_id, _id, data["facts"])
+        self._validate_level_and_id(
+            level_id=level_id,
+            data_id=_id,
+            facts=data["facts"],
+        )
         data["id"] = _id
         data["key_id"] = key_id
         data["level_id"] = level_id
         data["priority"] = priority
-        data["facts"] = self._normalize_facts(level_id, data["facts"])
-        result = await self._create(payload=data, fields=fields)
+        data["facts"] = self._normalize_facts(
+            level_id=level_id,
+            facts=data["facts"],
+        )
+        result = await self._create(
+            payload=data,
+            fields=fields,
+        )
         return HieraLevelDataGet(**result)
 
     async def delete(

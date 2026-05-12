@@ -39,6 +39,7 @@ filter_literal = Literal[
     "created",
     "ca",
     "ca_chain",
+    "sans",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -65,10 +66,12 @@ class CACertificateGet(BaseModel):
     csr: Optional[str] = None
     not_before: Optional[datetime] = None
     not_after: Optional[datetime] = None
+    serial_number: Optional[str] = None
     created: Optional[datetime] = None
     cert_uniqueness: Optional[str] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
+    sans: List[str] = []
 
 
 class CACertificateGetMulti(BaseModel):

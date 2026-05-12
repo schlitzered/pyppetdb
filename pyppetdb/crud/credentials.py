@@ -51,22 +51,23 @@ class CrudCredentials(CrudMongo):
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
     ):
-        super(CrudCredentials, self).__init__(
+        super().__init__(
             config=config,
             log=log,
             coll=coll,
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("id", pymongo.ASCENDING), ("owner", pymongo.ASCENDING)], unique=True
+            )
         )
 
     @classmethod
     def _create_secret(cls, token) -> str:
         return cls._ph.hash(str(token))
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
-            [("id", pymongo.ASCENDING), ("owner", pymongo.ASCENDING)], unique=True
-        )
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def check_credential(self, request: Request):
         x_secret = request.headers.get("x-secret", None)

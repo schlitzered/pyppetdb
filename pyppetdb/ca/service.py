@@ -17,6 +17,11 @@ import asyncio
 import datetime
 import time
 import uuid
+import os
+import re
+import json
+import httpx
+import functools
 from concurrent.futures import ThreadPoolExecutor
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -34,9 +39,16 @@ from pyppetdb.errors import (
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
     CAAuthorityGet,
+    CAAuthorityPut,
 )
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost, CASpacePut
+from pyppetdb.model.ca_validation import (
+    CAValidationConfig,
+    CAHTTPValidation,
+    CAScriptValidation,
+)
+from pyppetdb.ca.validation_protector import CAValidationProtector
 
 
 class CAService:
@@ -58,10 +70,234 @@ class CAService:
         )
         self._cache = {}
         self._cache_ttl = 3600  # 1 hour
+        self._validation_protector = CAValidationProtector(
+            protector=self._crud_authorities.protector
+        )
 
     @property
     def log(self):
         return self._log
+
+    @property
+    def config(self):
+        return self._config
+
+    async def _validate_csr(
+        self,
+        csr_pem: str,
+        ca_config: CAValidationConfig,
+        space_config: CAValidationConfig,
+        ca_id: str,
+        space_id: str,
+    ):
+        # 1. Cryptographic Integrity
+        if not CAUtils.verify_csr_signature(csr_pem.encode()):
+            raise QueryParamValidationError(msg="CSR signature is invalid")
+
+        csr = x509.load_pem_x509_csr(csr_pem.encode())
+        cn = csr.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+
+        # Decrypt configurations for validation
+        if ca_config:
+            ca_config = self._validation_protector.decrypt_config(
+                ca_config.model_copy(deep=True)
+            )
+        if space_config:
+            space_config = self._validation_protector.decrypt_config(
+                space_config.model_copy(deep=True)
+            )
+
+        # 2. Subject Name Validation
+        for config in [ca_config, space_config]:
+            if config and config.enforce_rfc1123:
+                # RFC 1123 hostname regex (lowercase only)
+                if not re.match(
+                    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
+                    cn,
+                ):
+                    raise QueryParamValidationError(
+                        msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
+                    )
+
+        # 3. SAN Validation
+        san_ext = None
+        try:
+            san_ext = csr.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+        except x509.ExtensionNotFound:
+            pass
+
+        sans = []
+        if san_ext:
+            sans = san_ext.value.get_values_for_type(x509.DNSName)
+
+        for config in [ca_config, space_config]:
+            if not config or not config.san_validation:
+                continue
+
+            san_val = config.san_validation
+
+            # Max SAN count
+            if len(sans) > san_val.max_san_count:
+                raise QueryParamValidationError(
+                    msg=f"Number of SANs ({len(sans)}) exceeds maximum allowed ({san_val.max_san_count})"
+                )
+
+            # Regex list
+            if san_val.regex_list:
+                for san in sans:
+                    if not any(
+                        re.match(pattern, san) for pattern in san_val.regex_list
+                    ):
+                        raise QueryParamValidationError(
+                            msg=f"SAN '{san}' does not match any allowed patterns"
+                        )
+
+            # HTTP Checks
+            if san_val.http_checks:
+                for http_check in san_val.http_checks:
+                    await self._execute_http_validation(
+                        cn=cn,
+                        sans=sans,
+                        config=http_check,
+                        ca_id=ca_id,
+                        space_id=space_id,
+                    )
+
+            # Script Checks
+            if san_val.script_checks:
+                for script_check in san_val.script_checks:
+                    await self._execute_script_validation(
+                        cn=cn,
+                        sans=sans,
+                        config=script_check,
+                    )
+
+    async def _execute_http_validation(
+        self,
+        cn: str,
+        sans: list[str],
+        config: CAHTTPValidation,
+        ca_id: str,
+        space_id: str,
+    ):
+        body = {"cn": cn, "sans": sans}
+        if config.body_template:
+            try:
+                # Basic template substitution
+                template_data = config.body_template.replace("{{cn}}", cn).replace(
+                    "{{sans}}", json.dumps(sans)
+                )
+                body = json.loads(template_data)
+            except Exception as e:
+                self.log.error(f"Failed to parse HTTP body template: {e}")
+                raise QueryParamValidationError(
+                    msg="Invalid HTTP validation configuration"
+                )
+
+        try:
+            url = config.url.format(
+                ca_id=ca_id,
+                space_id=space_id,
+                cert_cn=cn,
+            )
+        except Exception as e:
+            self.log.error(f"Failed to format HTTP validation URL '{config.url}': {e}")
+            raise QueryParamValidationError(
+                msg="Invalid HTTP validation configuration: URL format error"
+            )
+
+        client_kwargs = {
+            "verify": config.verify_ssl,
+            "timeout": config.timeout_seconds,
+        }
+
+        request_kwargs = {
+            "method": config.method,
+            "url": url,
+            "json": body,
+        }
+
+        if config.basic_auth_enabled and config.username and config.password:
+            request_kwargs["auth"] = (config.username, config.password)
+
+        headers = {}
+        if config.headers:
+            for header in config.headers:
+                headers[header.name] = header.value
+        request_kwargs["headers"] = headers
+
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            try:
+                resp = await client.request(**request_kwargs)
+                if resp.is_error:
+                    raise QueryParamValidationError(
+                        msg=f"External HTTP validation failed with status {resp.status_code}"
+                    )
+            except httpx.HTTPError as e:
+                self.log.error(f"External HTTP validation error: {e}")
+                raise QueryParamValidationError(
+                    msg=f"External HTTP validation error: {e}"
+                )
+
+    async def _execute_script_validation(
+        self, cn: str, sans: list[str], config: CAScriptValidation
+    ):
+
+        env = os.environ.copy()
+        env["CN"] = cn
+        for i, san in enumerate(sans):
+            env[f"SAN{i+1}"] = san
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                config.script_path,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=config.timeout_seconds
+                )
+                if proc.returncode != 0:
+                    error_msg = stderr.decode().strip() or stdout.decode().strip()
+                    raise QueryParamValidationError(
+                        msg=f"External script validation failed (exit {proc.returncode}): {error_msg}"
+                    )
+            except asyncio.TimeoutError:
+                proc.kill()
+                raise QueryParamValidationError(
+                    msg="External script validation timed out"
+                )
+        except Exception as e:
+            if isinstance(e, QueryParamValidationError):
+                raise
+            self.log.error(f"External script execution error: {e}")
+            raise QueryParamValidationError(msg=f"External script execution error: {e}")
+
+    def _get_injected_sans(
+        self, cn: str, configs: list[CAValidationConfig]
+    ) -> list[str]:
+        injected = set()
+        for config in configs:
+            if not config or not config.san_injection:
+                continue
+            for rule in config.san_injection:
+                match = re.match(rule.pattern, cn)
+                if match:
+                    groups = [match.group(0)] + list(match.groups())
+                    group_dict = match.groupdict()
+                    for template in rule.templates:
+                        try:
+                            san = template.format(*groups, **group_dict)
+                            injected.add(san)
+                        except Exception as e:
+                            self.log.error(
+                                f"Failed to format SAN injection template '{template}': {e}"
+                            )
+        return list(injected)
 
     async def _get_ca_resources(self, ca_id: str):
         """Load CA key and cert from cache or DB and return cryptography objects."""
@@ -71,23 +307,27 @@ class CAService:
         if cached and (now - cached["timestamp"] < self._cache_ttl):
             return cached["cert"], cached["key"]
 
-        # Cache miss or expired
-        ca = await self._crud_authorities.get(ca_id, fields=["certificate"])
-        key_pem = await self._crud_authorities.get_private_key(ca_id)
-
-        cert_obj = x509.load_pem_x509_certificate(ca.certificate.encode())
-        key_obj = serialization.load_pem_private_key(key_pem, password=None)
+        ca = await self._crud_authorities.get(
+            ca_id, fields=["certificate", "private_key_encrypted"]
+        )
+        ca_cert = x509.load_pem_x509_certificate(ca.certificate.encode())
+        ca_key = serialization.load_pem_private_key(
+            self._crud_authorities.protector.decrypt_string(
+                ca.private_key_encrypted
+            ).encode(),
+            password=None,
+        )
 
         self._cache[ca_id] = {
-            "cert": cert_obj,
-            "key": key_obj,
+            "cert": ca_cert,
+            "key": ca_key,
             "timestamp": now,
         }
-
-        return cert_obj, key_obj
+        return ca_cert, ca_key
 
     async def refresh_crl(self, ca_id: str) -> None:
-        ca = await self._crud_authorities.get(ca_id, fields=["internal", "certificate"])
+        """Regenerate CRL for an internal CA."""
+        ca = await self._crud_authorities.get(ca_id, fields=["internal", "id"])
         if not ca.internal:
             return
 
@@ -99,10 +339,13 @@ class CAService:
 
         crl_pem, next_update = await asyncio.get_running_loop().run_in_executor(
             self._executor,
-            CAUtils.generate_crl,
-            ca_cert_obj,
-            ca_key_obj,
-            revoked_cas + revoked_certs,
+            functools.partial(
+                CAUtils.generate_crl,
+                ca_cert=ca_cert_obj,
+                ca_key=ca_key_obj,
+                revoked_certs=revoked_cas + revoked_certs,
+                validity_days=self.config.ca.crlValidityDays,
+            ),
         )
 
         await self._crud_authorities.sync_crl_data(
@@ -113,9 +356,7 @@ class CAService:
 
     async def refresh_expiring_crls(self) -> None:
         self.log.info("Checking for expiring CRLs...")
-        ca_ids = await self._crud_authorities.find_expiring_crls(
-            threshold_hours=24 * 30
-        )
+        ca_ids = await self._crud_authorities.find_expiring_crls(threshold_hours=24)
 
         for ca_id in ca_ids:
             if await self._crud_authorities.lock_crl_acquire(ca_id):
@@ -156,37 +397,43 @@ class CAService:
             parent_key = await self._crud_authorities.get_private_key(payload.parent_id)
             cert_pem, key_pem = await asyncio.get_running_loop().run_in_executor(
                 self._executor,
-                CAUtils.sign_ca,
-                payload.cn,
-                parent_ca.certificate.encode(),
-                parent_key,
-                payload.organization,
-                payload.organizational_unit,
-                payload.country,
-                payload.state,
-                payload.locality,
-                payload.validity_days,
+                functools.partial(
+                    CAUtils.sign_ca,
+                    cn=payload.cn,
+                    ca_cert_pem=parent_ca.certificate.encode(),
+                    ca_key_pem=parent_key,
+                    organization=payload.organization,
+                    organizational_unit=payload.organizational_unit,
+                    country=payload.country,
+                    state=payload.state,
+                    locality=payload.locality,
+                    validity_days=payload.validity_days,
+                ),
             )
             chain = [parent_ca.certificate] + parent_ca.chain
         else:
             internal = True
             cert_pem, key_pem = await asyncio.get_running_loop().run_in_executor(
                 self._executor,
-                CAUtils.generate_ca,
-                payload.cn,
-                payload.organization,
-                payload.organizational_unit,
-                payload.country,
-                payload.state,
-                payload.locality,
-                payload.validity_days,
+                functools.partial(
+                    CAUtils.generate_ca,
+                    cn=payload.cn,
+                    organization=payload.organization,
+                    organizational_unit=payload.organizational_unit,
+                    country=payload.country,
+                    state=payload.state,
+                    locality=payload.locality,
+                    validity_days=payload.validity_days,
+                ),
             )
             chain = []
 
         info = await asyncio.get_running_loop().run_in_executor(
             self._executor,
-            CAUtils.get_cert_info,
-            cert_pem,
+            functools.partial(
+                CAUtils.get_cert_info,
+                cert_pem=cert_pem,
+            ),
         )
         encrypted_key = self._crud_authorities.protector.encrypt_string(
             key_pem.decode()
@@ -200,16 +447,24 @@ class CAService:
             "internal": internal,
             "chain": chain,
             "status": "active",
+            "validation_config": (
+                payload.validation_config.model_dump()
+                if payload.validation_config
+                else None
+            ),
             **info,
         }
 
         if internal:
             crl_pem, next_update = await asyncio.get_running_loop().run_in_executor(
                 self._executor,
-                CAUtils.generate_crl,
-                cert_pem,
-                key_pem,
-                [],
+                functools.partial(
+                    CAUtils.generate_crl,
+                    ca_cert=cert_pem,
+                    ca_key=key_pem,
+                    revoked_certs=[],
+                    validity_days=self.config.ca.crlValidityDays,
+                ),
             )
             now = datetime.datetime.now(datetime.timezone.utc)
             from pyppetdb.model.ca_authorities import CACRL
@@ -219,73 +474,9 @@ class CAService:
                 generation=1,
                 updated_at=now,
                 next_update=next_update,
-                locked_at=None,
             ).model_dump()
 
-        return await self._crud_authorities.insert(payload=data, fields=fields)
-
-    async def _validate_ca_usage(self, ca_id: str, operation: str) -> None:
-        spaces = await self._crud_spaces.search_by_ca(ca_id=ca_id)
-        if spaces:
-            space_ids = [s["id"] for s in spaces]
-            raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' cannot be {operation} because it is still in use by one or more spaces: {', '.join(space_ids)}"
-            )
-
-        count_cas = await self._crud_authorities.count(
-            {"parent_id": ca_id, "status": "active"}
-        )
-        if count_cas > 0:
-            raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' cannot be {operation} because it is still a parent of {count_cas} active CA Authority/ies"
-            )
-
-        count_certs = await self._crud_certificates.count(
-            {"ca_id": ca_id, "status": "signed"}
-        )
-        if count_certs > 0:
-            raise QueryParamValidationError(
-                msg=f"CA Authority '{ca_id}' cannot be {operation} because it still has {count_certs} active certificate(s) associated with it"
-            )
-
-    async def delete_authority(self, ca_id: str) -> None:
-        await self._validate_ca_usage(ca_id=ca_id, operation="deleted")
-        await self._crud_authorities.delete(_id=ca_id)
-        await self._crud_spaces.remove_ca_from_history(ca_id=ca_id)
-
-    async def create_space(
-        self, _id: str, payload: CASpacePost, fields: list = None
-    ) -> CASpaceGet:
-        if fields is None:
-            fields = ["id"]
-        data = payload.model_dump()
-        data["id"] = _id
-        data["ca_id_history"] = []
-        return await self._crud_spaces.insert(payload=data, fields=fields)
-
-    async def update_space(
-        self, _id: str, payload: CASpacePut, fields: list = None
-    ) -> CASpaceGet:
-        if fields is None:
-            fields = ["id"]
-        current = await self._crud_spaces.get(_id, fields=["ca_id", "ca_id_history"])
-        data = payload.model_dump()
-        if data["ca_id"] != current.ca_id:
-            if current.ca_id not in current.ca_id_history:
-                current.ca_id_history.append(current.ca_id)
-            if data["ca_id"] in current.ca_id_history:
-                current.ca_id_history.remove(data["ca_id"])
-            data["ca_id_history"] = current.ca_id_history
-
-        return await self._crud_spaces.update(
-            query={"id": _id}, payload=data, fields=fields
-        )
-
-    async def delete_space(self, _id: str) -> None:
-        await self._crud_spaces.delete(query={"id": _id})
-
-    async def delete_certificate(self, space_id: str, cn: str) -> None:
-        await self._crud_certificates.delete_by_cn(space_id=space_id, cn=cn)
+        return await self._crud_authorities.insert(data, fields=fields)
 
     async def submit_certificate_request(
         self, space_id: str, csr_pem: str, fields: list = None, cn: str = None
@@ -296,8 +487,10 @@ class CAService:
         try:
             csr_info = await asyncio.get_running_loop().run_in_executor(
                 self._executor,
-                CAUtils.get_csr_info,
-                csr_pem.encode(),
+                functools.partial(
+                    CAUtils.get_csr_info,
+                    csr_pem=csr_pem.encode(),
+                ),
             )
         except Exception as e:
             raise QueryParamValidationError(msg=f"Invalid CSR: {e}")
@@ -309,7 +502,16 @@ class CAService:
                 msg=f"CSR CN '{csr_cn}' does not match nodename '{cn}'"
             )
 
-        space = await self._crud_spaces.get(space_id, fields=["ca_id"])
+        space = await self._crud_spaces.get_cached(space_id)
+        ca = await self._crud_authorities.get_cached(space.ca_id)
+
+        await self._validate_csr(
+            csr_pem=csr_pem,
+            ca_config=ca.validation_config,
+            space_config=space.validation_config,
+            ca_id=ca.id,
+            space_id=space_id,
+        )
 
         # Check if already exists in 'requested' state to update it
         try:
@@ -320,293 +522,343 @@ class CAService:
             existing_requested = None
 
         if existing_requested:
-            query = {"id": existing_requested.id}
-            payload = {
-                "ca_id": space.ca_id,
-                "csr": csr_pem,
-                "created": datetime.datetime.now(datetime.timezone.utc),
-            }
-        else:
-            query = {"space_id": space_id, "cn": csr_cn, "status": "requested"}
-            payload = {
-                "id": str(uuid.uuid4().int),
-                "ca_id": space.ca_id,
-                "csr": csr_pem,
-                "cert_uniqueness": csr_cn,
-                "created": datetime.datetime.now(datetime.timezone.utc),
-            }
+            # Update existing request
+            updated = await self._crud_certificates.update(
+                query={"id": existing_requested.id},
+                payload={"csr": csr_pem, **csr_info},
+                fields=fields,
+            )
+            return updated
 
+        # Check if already signed to avoid duplicates
         try:
-            return await self._crud_certificates.update(
-                query=query, payload=payload, fields=fields, upsert=True
+            await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=csr_cn, status="signed"
             )
-        except DuplicateResource:
-            try:
-                existing_signed = await self._crud_certificates.get_by_cn(
-                    space_id=space_id, cn=csr_cn, status="signed"
-                )
-            except ResourceNotFound:
-                existing_signed = None
-
-            if existing_signed and existing_signed.not_after:
-                not_after = existing_signed.not_after
-                if not_after.tzinfo is None:
-                    not_after = not_after.replace(tzinfo=datetime.timezone.utc)
-                if not_after < datetime.datetime.now(datetime.timezone.utc):
-                    self.log.info(
-                        f"Existing certificate for CN '{csr_cn}' in space '{space_id}' is expired, revoking it and retrying CSR submission"
-                    )
-                    await self.revoke_certificate(space_id=space_id, cn=csr_cn)
-                    return await self._crud_certificates.update(
-                        query=query, payload=payload, fields=fields, upsert=True
-                    )
-
-            raise QueryParamValidationError(
-                msg=f"A signed certificate already exists for CN '{csr_cn}' in space '{space_id}'. Revoke it first."
+            raise DuplicateResource(
+                msg=f"A signed certificate already exists for '{csr_cn}' in space '{space_id}'"
             )
+        except ResourceNotFound:
+            pass
 
-    async def update_certificate_status(
-        self, space_id: str, cn: str, data: CACertificatePut, fields: list = None
-    ) -> CACertificateGet | None:
-        if data.status == "signed":
-            return await self.sign_certificate(space_id=space_id, cn=cn, fields=fields)
-        elif data.status == "revoked":
-            return await self.revoke_certificate(
-                space_id=space_id, cn=cn, fields=fields
-            )
-        else:
-            raise QueryParamValidationError(msg=f"Invalid status: {data.status}")
+        data = {
+            "id": str(uuid.uuid4().int),
+            "space_id": space_id,
+            "ca_id": space.ca_id,
+            "cn": csr_cn,
+            "csr": csr_pem,
+            "status": "requested",
+            "cert_uniqueness": f"{space_id}:{csr_cn}",
+            **csr_info,
+        }
+
+        return await self._crud_certificates.insert(data, fields=fields)
 
     async def sign_certificate(
         self, space_id: str, cn: str, fields: list = None
     ) -> CACertificateGet:
-        if fields is None:
-            fields = ["id", "status", "ca_id"]
+        try:
+            cert_req = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cn, status="requested"
+            )
+        except ResourceNotFound:
+            # For idempotency, if it's already active, return it
+            try:
+                return await self._crud_certificates.get_by_cn(
+                    space_id=space_id, cn=cn, status="signed", fields=fields
+                )
+            except ResourceNotFound:
+                raise ResourceNotFound(
+                    details=f"Certificate request for {cn} in space {space_id} not found"
+                )
 
-        cert_data = await self._crud_certificates.get_by_cn(
-            space_id=space_id, cn=cn, status="requested"
-        )
-        if not cert_data:
+        return await self.process_requested_certificate(cert_req.id)
+
+    async def process_requested_certificate(self, _id: str) -> CACertificateGet:
+        cert_req = await self._crud_certificates.get(_id, fields=None)
+        if cert_req.status != "requested":
             raise QueryParamValidationError(
-                msg=f"No pending CSR found for CN '{cn}' in space '{space_id}'"
+                msg=f"Certificate '{_id}' is in status '{cert_req.status}', expected 'requested'"
             )
 
-        space = await self._crud_spaces.get(space_id, fields=["ca_id"])
+        space = await self._crud_spaces.get_cached(cert_req.space_id)
+        ca = await self._crud_authorities.get_cached(space.ca_id)
+
         ca_cert_obj, ca_key_obj = await self._get_ca_resources(space.ca_id)
+
+        # CSR already validated in sign_certificate, but we might want to re-run injection
+        cn = cert_req.cn
+        allowed_exts = None
+        if ca.validation_config and ca.validation_config.allowed_extensions is not None:
+            allowed_exts = set(ca.validation_config.allowed_extensions)
+
+        if (
+            space.validation_config
+            and space.validation_config.allowed_extensions is not None
+        ):
+            space_exts = set(space.validation_config.allowed_extensions)
+            if allowed_exts is not None:
+                allowed_exts = allowed_exts.intersection(space_exts)
+            else:
+                allowed_exts = space_exts
+        if allowed_exts is not None:
+            allowed_exts = list(allowed_exts)
+
+        key_usages = None
+        if space.validation_config and space.validation_config.key_usages is not None:
+            key_usages = space.validation_config.key_usages
+        elif ca.validation_config and ca.validation_config.key_usages is not None:
+            key_usages = ca.validation_config.key_usages
+
+        extended_key_usages = None
+        if (
+            space.validation_config
+            and space.validation_config.extended_key_usages is not None
+        ):
+            extended_key_usages = space.validation_config.extended_key_usages
+        elif (
+            ca.validation_config
+            and ca.validation_config.extended_key_usages is not None
+        ):
+            extended_key_usages = ca.validation_config.extended_key_usages
+
+        injected_sans = self._get_injected_sans(
+            cn, [ca.validation_config, space.validation_config]
+        )
 
         cert_pem = await asyncio.get_running_loop().run_in_executor(
             self._executor,
-            CAUtils.sign_csr,
-            cert_data.csr.encode(),
-            ca_cert_obj,
-            ca_key_obj,
-            self._config.ca.certificateValidityDays,
-            int(cert_data.id),
+            functools.partial(
+                CAUtils.sign_csr,
+                csr_pem=cert_req.csr.encode(),
+                ca_cert=ca_cert_obj,
+                ca_key=ca_key_obj,
+                validity_days=self._config.ca.certificateValidityDays,
+                allowed_extensions=allowed_exts,
+                injected_sans=injected_sans,
+                key_usages=key_usages,
+                extended_key_usages=extended_key_usages,
+            ),
         )
 
         info = await asyncio.get_running_loop().run_in_executor(
             self._executor,
-            CAUtils.get_cert_info,
-            cert_pem,
+            functools.partial(
+                CAUtils.get_cert_info,
+                cert_pem=cert_pem,
+            ),
         )
 
-        payload = {"status": "signed", "certificate": cert_pem.decode(), **info}
-
-        return await self._crud_certificates.update(
-            query={"id": cert_data.id}, payload=payload, fields=fields
-        )
-
-    async def revoke_certificate(
-        self, space_id: str, cn: str, fields: list = None
-    ) -> CACertificateGet:
-        if fields is None:
-            fields = ["id", "status", "ca_id"]
-
-        cert_doc = await self._crud_certificates.get_by_cn(
-            space_id=space_id, cn=cn, status="signed"
-        )
-        if not cert_doc:
-            raise QueryParamValidationError(
-                msg=f"No signed certificate found for CN '{cn}' in space '{space_id}'"
-            )
-
-        payload = {
-            "status": "revoked",
-            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-            "cert_uniqueness": str(cert_doc.id),
-        }
-
-        cert = await self._crud_certificates.update(
-            query={"id": cert_doc.id}, payload=payload, fields=fields
-        )
-        return cert
-
-    async def renew_certificate(
-        self, space_id: str, cn: str, fields: list = None
-    ) -> CACertificateGet:
-        if fields is None:
-            fields = ["id", "status", "ca_id", "certificate"]
-
-        cert_data = await self._crud_certificates.get_by_cn(
-            space_id=space_id, cn=cn, status="signed"
-        )
-        if not cert_data:
-            raise QueryParamValidationError(
-                msg=f"No signed certificate found for CN '{cn}' in space '{space_id}'"
-            )
-
-        space = await self._crud_spaces.get(space_id, fields=["ca_id"])
-        ca_cert_obj, ca_key_obj = await self._get_ca_resources(space.ca_id)
-
-        new_serial = uuid.uuid4().int
-
-        new_cert_pem = await asyncio.get_running_loop().run_in_executor(
-            self._executor,
-            CAUtils.renew_cert,
-            cert_data.certificate.encode(),
-            ca_cert_obj,
-            ca_key_obj,
-            self._config.ca.certificateValidityDays,
-            new_serial,
-        )
-
-        info = await asyncio.get_running_loop().run_in_executor(
-            self._executor,
-            CAUtils.get_cert_info,
-            new_cert_pem,
-        )
-
-        payload = {
-            "id": str(new_serial),
-            "space_id": space_id,
-            "ca_id": cert_data.ca_id,
-            "cn": cn,
+        update_data = {
+            "id": info["serial_number"],
+            "certificate": cert_pem.decode(),
             "status": "signed",
-            "certificate": new_cert_pem.decode(),
-            "cert_uniqueness": cn,
-            "created": datetime.datetime.now(datetime.timezone.utc),
             **info,
         }
 
-        # Mark old certificate as revoked first to release cert_uniqueness
-        await self._crud_certificates.update(
-            query={"id": cert_data.id},
-            payload={
-                "status": "revoked",
-                "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-                "cert_uniqueness": str(cert_data.id),
-            },
-            fields=["id"],
+        return await self._crud_certificates.update(
+            query={"id": _id}, payload=update_data, fields=None
         )
 
-        new_cert = await self._crud_certificates.insert(payload=payload, fields=fields)
-
-        await self.refresh_crl(space.ca_id)
-        return new_cert
-
-    async def update_certificate_status_by_ca(
-        self, ca_id: str, serial: str, data: CACertificatePut, fields: list = None
-    ) -> CACertificateGet | None:
-        if fields is None:
-            fields = ["id", "status", "ca_id"]
-
-        if data.status == "signed":
-            raise QueryParamValidationError(
-                msg="Cannot sign a certificate by serial number. Use space_id and CN instead."
-            )
-        elif data.status == "revoked":
-            payload = {
-                "status": "revoked",
-                "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-                "cert_uniqueness": serial,
-            }
-            cert = await self._crud_certificates.update(
-                query={"id": serial}, payload=payload, fields=fields
-            )
-            await self.refresh_crl(ca_id)
+    async def revoke_certificate(self, _id: str) -> CACertificateGet:
+        cert = await self._crud_certificates.get(_id, fields=["status", "ca_id"])
+        if cert.status == "revoked":
             return cert
 
-    async def revoke_authority(self, ca_id: str) -> CAAuthorityGet:
-        await self._validate_ca_usage(ca_id=ca_id, operation="revoked")
-        ca = await self._crud_authorities.get(ca_id, fields=["parent_id"])
-
-        payload = {
-            "status": "revoked",
-            "revocation_date": datetime.datetime.now(datetime.timezone.utc),
-        }
-
-        revoked_ca = await self._crud_authorities.update(
-            query={"id": ca_id},
-            payload=payload,
-            fields=["status", "revocation_date"],
+        now = datetime.datetime.now(datetime.timezone.utc)
+        result = await self._crud_certificates.update(
+            query={"id": _id},
+            payload={
+                "status": "revoked",
+                "revocation_date": now,
+                "cert_uniqueness": f"revoked:{_id}",
+            },
+            fields=None,
         )
 
+        # Refresh CRL
+        await self.refresh_crl(cert.ca_id)
+
+        return result
+
+    async def renew_certificate(self, space_id: str, cn: str) -> CACertificateGet:
+        try:
+            old_cert = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cn, status="signed"
+            )
+        except ResourceNotFound:
+            try:
+                old_cert = await self._crud_certificates.get_by_cn(
+                    space_id=space_id, cn=cn
+                )
+            except ResourceNotFound:
+                raise ResourceNotFound(
+                    details=f"Certificate for {cn} in space {space_id} not found"
+                )
+
+        if not old_cert.csr:
+            # Backtrack: try to find a CSR in any other record for this CN
+            # This handles cases where older versions might not have saved the CSR in the signed record
+            self.log.debug(
+                f"CSR missing in signed record for {cn}, searching in other records"
+            )
+            try:
+                # Search for any record with this CN that has a CSR, sorted by created date descending
+                search_res = await self._crud_certificates.search(
+                    space_id=space_id, cn=cn, sort="created", sort_order="descending"
+                )
+                for cert in search_res.result:
+                    if cert.csr:
+                        old_cert.csr = cert.csr
+                        break
+            except Exception as e:
+                self.log.error(f"Failed to backtrack CSR for {cn}: {e}")
+
+        if not old_cert.csr:
+            raise QueryParamValidationError(
+                msg=f"No CSR found for certificate {cn}, cannot renew"
+            )
+
+        if old_cert.status == "signed":
+            await self.revoke_certificate(old_cert.id)
+        else:
+            # If it was already revoked but uniqueness wasn't freed (legacy), free it now
+            await self._crud_certificates.update(
+                query={"id": old_cert.id},
+                payload={"cert_uniqueness": f"revoked:{old_cert.id}"},
+                fields=None,
+            )
+
+        # Submit a NEW request using the same CSR
+        await self.submit_certificate_request(
+            space_id=space_id, csr_pem=old_cert.csr, cn=cn
+        )
+
+        # Sign it
+        return await self.sign_certificate(space_id=space_id, cn=cn)
+
+    async def revoke_authority(self, _id: str) -> CAAuthorityGet:
+        ca = await self._crud_authorities.get(_id, fields=["status", "parent_id"])
+        if ca.status == "revoked":
+            return ca
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        result = await self._crud_authorities.update(
+            query={"id": _id},
+            payload={"status": "revoked", "revocation_date": now},
+            fields=None,
+        )
+
+        # Refresh parent CRL if exists
         if ca.parent_id:
             await self.refresh_crl(ca.parent_id)
-        return revoked_ca
 
-    async def get_certificate_chain(self, space_id: str) -> str:
-        space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
-        ca_ids = [space.ca_id] + space.ca_id_history
+        return result
 
-        full_chain_parts = []
-        processed_certs = set()
+    async def create_space(
+        self, _id: str, payload: CASpacePost, fields: list = None
+    ) -> CASpaceGet:
+        data = payload.model_dump()
+        data["id"] = _id
+        return await self._crud_spaces.insert(data, fields=fields)
 
-        for ca_id in ca_ids:
-            try:
-                ca = await self._crud_authorities.get(
-                    ca_id, fields=["certificate", "chain"]
-                )
+    async def update_space(
+        self, _id: str, payload: CASpacePut, fields: list = None
+    ) -> CASpaceGet:
+        query = {"id": _id}
+        data = payload.model_dump(exclude_unset=True)
+        return await self._crud_spaces.update(query=query, payload=data, fields=fields)
 
-                if ca.certificate not in processed_certs:
-                    full_chain_parts.append(ca.certificate)
-                    processed_certs.add(ca.certificate)
+    async def delete_space(self, _id: str) -> None:
+        await self._crud_spaces.delete(query={"id": _id})
 
-                for parent_cert in ca.chain:
-                    if parent_cert not in processed_certs:
-                        full_chain_parts.append(parent_cert)
-                        processed_certs.add(parent_cert)
-            except ResourceNotFound:
-                self.log.warning(
-                    f"CA Authority '{ca_id}' not found during certificate chain generation"
-                )
-                continue
+    async def update_authority(
+        self, ca_id: str, payload: CAAuthorityPut, fields: list = None
+    ) -> CAAuthorityGet:
+        query = {"id": ca_id}
+        data = payload.model_dump(exclude_unset=True)
+        return await self._crud_authorities.update(
+            query=query, payload=data, fields=fields
+        )
 
-        return "\n".join(full_chain_parts)
+    async def delete_authority(self, ca_id: str) -> None:
+        await self._crud_authorities.delete(_id=ca_id)
+
+    async def update_certificate_status(
+        self, space_id: str, cn: str, payload: CACertificatePut, fields: list = None
+    ) -> CACertificateGet:
+        cert_req = await self._crud_certificates.get_by_cn(
+            space_id=space_id, cn=cn, status="requested"
+        )
+        if payload.status == "signed":
+            return await self.process_requested_certificate(_id=cert_req.id)
+        elif payload.status == "revoked":
+            return await self.revoke_certificate(_id=cert_req.id)
+        else:
+            raise QueryParamValidationError(
+                msg=f"Invalid transition to {payload.status} for requested certificate"
+            )
+
+    async def update_certificate_status_by_ca(
+        self, ca_id: str, cert_id: str, payload: CACertificatePut, fields: list = None
+    ) -> CACertificateGet:
+        if payload.status == "revoked":
+            return await self.revoke_certificate(_id=cert_id)
+        else:
+            raise QueryParamValidationError(
+                msg=f"Invalid transition to {payload.status} for active certificate"
+            )
+
+    async def delete_certificate(self, space_id: str, cn: str) -> None:
+        await self._crud_certificates.delete_by_cn(space_id=space_id, cn=cn)
 
     async def get_crl_chain(self, space_id: str) -> bytes:
-        space = await self._crud_spaces.get(space_id, fields=["ca_id", "ca_id_history"])
+        space = await self._crud_spaces.get_cached(space_id)
+        ca_id_path = [space.ca_id]
 
-        ca_ids_to_process = [space.ca_id] + space.ca_id_history
-        processed_ca_ids = set()
+        # Resolve chain of parent IDs
+        current_ca_id = space.ca_id
+        while True:
+            ca = await self._crud_authorities.get(current_ca_id, fields=["parent_id"])
+            if ca.parent_id:
+                ca_id_path.append(ca.parent_id)
+                current_ca_id = ca.parent_id
+            else:
+                break
+
         crl_chain_pem = b""
-
-        while ca_ids_to_process:
-            ca_id = ca_ids_to_process.pop(0)
-            if ca_id in processed_ca_ids:
-                continue
-            processed_ca_ids.add(ca_id)
-
-            try:
-                ca = await self._crud_authorities.get(
-                    ca_id, fields=["crl", "internal", "parent_id"]
-                )
-            except ResourceNotFound:
-                self.log.warning(
-                    f"CA Authority '{ca_id}' not found during CRL chain generation"
-                )
-                continue
-
-            if ca.parent_id and ca.parent_id not in processed_ca_ids:
-                ca_ids_to_process.append(ca.parent_id)
-
+        for ca_id in ca_id_path:
+            ca = await self._crud_authorities.get(
+                ca_id, fields=["crl", "internal", "parent_id"]
+            )
             if not ca.internal:
+                self.log.debug(f"Skipping external CA '{ca_id}' in CRL chain")
                 continue
-
             if not ca.crl:
                 self.log.error(f"Internal CA '{ca_id}' is missing CRL data")
                 continue
-
             crl_chain_pem += ca.crl.crl_pem.encode()
 
         return crl_chain_pem
+
+    async def get_certificate_chain(self, space_id: str) -> bytes:
+        space = await self._crud_spaces.get_cached(space_id)
+        ca_id_path = [space.ca_id]
+
+        # Resolve chain of parent IDs
+        current_ca_id = space.ca_id
+        while True:
+            ca = await self._crud_authorities.get(current_ca_id, fields=["parent_id"])
+            if ca.parent_id:
+                ca_id_path.append(ca.parent_id)
+                current_ca_id = ca.parent_id
+            else:
+                break
+
+        cert_chain_pem = b""
+        for ca_id in ca_id_path:
+            ca = await self._crud_authorities.get(ca_id, fields=["certificate"])
+            if ca.certificate:
+                cert_chain_pem += ca.certificate.encode()
+
+        return cert_chain_pem

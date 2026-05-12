@@ -247,19 +247,24 @@ class CrudNodesSecretsRedactor(CrudMongo):
         redactor: NodesSecretsRedactor,
     ):
         super(CrudNodesSecretsRedactor, self).__init__(
-            config=config, log=log, coll=coll
+            config=config,
+            log=log,
+            coll=coll,
         )
         self._redactor = redactor
         self._cache = CrudNodesSecretsRedactorCache(
             log=log, coll=coll, redactor=redactor
+        )
+        self._indices.append(
+            pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
         )
 
     @property
     def cache(self):
         return self._cache
 
-    async def index_create(self) -> None:
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self.cache.run()
 
     @staticmethod

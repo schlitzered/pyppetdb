@@ -160,8 +160,8 @@ class AuthorizeClientCert:
         serial = cert_info["serial"]
         if self.crud_ca_certificates:
             try:
-                cert = await self.crud_ca_certificates.get(
-                    _id=serial, fields=["status", "cn"]
+                cert = await self.crud_ca_certificates.get_by_serial(
+                    serial=serial, fields=["status", "cn"]
                 )
 
                 if cert.cn != cn:

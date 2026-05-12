@@ -21,10 +21,8 @@ class AuthenticationError(HTTPException):
 
 
 class DuplicateResource(HTTPException):
-    def __init__(self):
-        super(DuplicateResource, self).__init__(
-            status_code=400, detail="Duplicate Resource"
-        )
+    def __init__(self, msg="Duplicate Resource"):
+        super(DuplicateResource, self).__init__(status_code=400, detail=msg)
 
 
 class ResourceNotFound(HTTPException):

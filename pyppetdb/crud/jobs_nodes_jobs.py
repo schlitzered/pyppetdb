@@ -22,13 +22,33 @@ from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 
 
 class CrudJobsNodeJobs(CrudMongo):
-    async def index_create(self) -> None:
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("job_id", pymongo.ASCENDING)])
-        await self.coll.create_index([("node_id", pymongo.ASCENDING)])
-        await self.coll.create_index([("definition_id", pymongo.ASCENDING)])
-        await self.coll.create_index([("created_by", pymongo.ASCENDING)])
-        await self.coll.create_index([("job_id", 1), ("node_id", 1)], unique=True)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel([("job_id", pymongo.ASCENDING)], name="idx_job_id"),
+                pymongo.IndexModel(
+                    [("node_id", pymongo.ASCENDING)], name="idx_node_id"
+                ),
+                pymongo.IndexModel(
+                    [("definition_id", pymongo.ASCENDING)], name="idx_definition_id"
+                ),
+                pymongo.IndexModel(
+                    [("created_by", pymongo.ASCENDING)], name="idx_created_by"
+                ),
+                pymongo.IndexModel(
+                    [("job_id", pymongo.ASCENDING), ("node_id", pymongo.ASCENDING)],
+                    unique=True,
+                    name="idx_job_node_uniqueness",
+                ),
+            ]
+        )
+
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def create_node_job(
         self, job_id: str, definition_id: str, node_id: str, created_by: str
