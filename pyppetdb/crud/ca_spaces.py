@@ -31,9 +31,16 @@ from pyppetdb.model.ca_validation import CAValidationConfig
 
 
 class CrudCASpacesCache:
-    def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
+    def __init__(
+        self,
+        log: logging.Logger,
+        coll: AsyncIOMotorCollection,
+        protector: NodesDataProtector,
+    ):
         self._coll = coll
         self._log = log
+        self._protector = protector
+        self._validation_protector = CAValidationProtector(protector)
         self._cache = {}
         self._doc_to_id = {}
         self._initialized = False
@@ -57,12 +64,21 @@ class CrudCASpacesCache:
         asyncio.create_task(self._watch_changes())
         self._initialized = True
 
+    def _process_doc(self, doc: dict) -> CASpaceGet:
+        obj = CASpaceGet(**doc)
+        if obj.validation_config:
+            obj.validation_config = self._validation_protector.decrypt_config(
+                obj.validation_config
+            )
+        return obj
+
     async def _load_initial_data(self):
         try:
             cursor = self.coll.find({})
             async for doc in cursor:
-                self._cache[doc["id"]] = CASpaceGet(**doc)
-                self._doc_to_id[doc["_id"]] = doc["id"]
+                obj = self._process_doc(doc)
+                self._cache[obj.id] = obj
+                self._doc_to_id[doc["_id"]] = obj.id
             self.log.info(f"Loaded {len(self._cache)} initial CA spaces into cache")
         except Exception as e:
             self.log.error(f"Failed to load initial CA spaces: {e}")
@@ -77,8 +93,9 @@ class CrudCASpacesCache:
                     if operation in ("insert", "replace", "update"):
                         doc = change.get("fullDocument")
                         if doc:
-                            self._cache[doc["id"]] = CASpaceGet(**doc)
-                            self._doc_to_id[doc_id] = doc["id"]
+                            obj = self._process_doc(doc)
+                            self._cache[obj.id] = obj
+                            self._doc_to_id[doc_id] = obj.id
                     elif operation == "delete":
                         custom_id = self._doc_to_id.pop(doc_id, None)
                         if custom_id:
@@ -102,7 +119,7 @@ class CrudCASpaces(CrudMongo):
     ):
         super().__init__(config, log, coll, schema_model=CASpacePost)
         self._protector = protector
-        self._cache = CrudCASpacesCache(log=log, coll=coll)
+        self._cache = CrudCASpacesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
             pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
         )

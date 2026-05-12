@@ -48,7 +48,6 @@ from pyppetdb.model.ca_validation import (
     CAHTTPValidation,
     CAScriptValidation,
 )
-from pyppetdb.ca.validation_protector import CAValidationProtector
 
 
 class CAService:
@@ -70,9 +69,6 @@ class CAService:
         )
         self._cache = {}
         self._cache_ttl = 3600  # 1 hour
-        self._validation_protector = CAValidationProtector(
-            protector=self._crud_authorities.protector
-        )
 
     @property
     def log(self):
@@ -96,17 +92,14 @@ class CAService:
         csr = x509.load_pem_x509_csr(csr_pem.encode())
         cn = csr.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
 
-        # Decrypt configurations for validation
-        configs = self._decrypt_validation_configs(ca_config, space_config)
-
         # 2. Subject Name Validation
-        self._validate_csr_subject_name(cn, configs)
+        self._validate_csr_subject_name(cn, [ca_config, space_config])
 
         # 3. SAN Validation
         await self._validate_csr_sans(
             csr=csr,
             cn=cn,
-            configs=configs,
+            configs=[ca_config, space_config],
             ca_id=ca_id,
             space_id=space_id,
         )
@@ -114,32 +107,6 @@ class CAService:
     def _validate_csr_integrity(self, csr_pem: str):
         if not CAUtils.verify_csr_signature(csr_pem.encode()):
             raise QueryParamValidationError(msg="CSR signature is invalid")
-
-    def _decrypt_validation_configs(
-        self,
-        ca_config: CAValidationConfig,
-        space_config: CAValidationConfig,
-    ) -> list[CAValidationConfig]:
-        configs = []
-        if ca_config:
-            configs.append(
-                self._validation_protector.decrypt_config(
-                    ca_config.model_copy(deep=True)
-                )
-            )
-        else:
-            configs.append(None)
-
-        if space_config:
-            configs.append(
-                self._validation_protector.decrypt_config(
-                    space_config.model_copy(deep=True)
-                )
-            )
-        else:
-            configs.append(None)
-
-        return configs
 
     def _validate_csr_subject_name(self, cn: str, configs: list[CAValidationConfig]):
         for config in configs:
@@ -856,16 +823,29 @@ class CAService:
     async def update_certificate_status(
         self, space_id: str, cn: str, payload: CACertificatePut, fields: list = None
     ) -> CACertificateGet:
-        cert_req = await self._crud_certificates.get_by_cn(
-            space_id=space_id, cn=cn, status="requested"
-        )
+        try:
+            cert = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cn, status="requested"
+            )
+        except ResourceNotFound:
+            try:
+                cert = await self._crud_certificates.get_by_cn(
+                    space_id=space_id, cn=cn, status="signed"
+                )
+            except ResourceNotFound:
+                raise ResourceNotFound(
+                    details=f"Certificate for {cn} in space {space_id} not found"
+                )
+
         if payload.status == "signed":
-            return await self.process_requested_certificate(_id=cert_req.id)
+            if cert.status == "signed":
+                return cert
+            return await self.process_requested_certificate(_id=cert.id)
         elif payload.status == "revoked":
-            return await self.revoke_certificate(_id=cert_req.id)
+            return await self.revoke_certificate(_id=cert.id)
         else:
             raise QueryParamValidationError(
-                msg=f"Invalid transition to {payload.status} for requested certificate"
+                msg=f"Invalid transition to {payload.status} for certificate in status {cert.status}"
             )
 
     async def update_certificate_status_by_ca(
