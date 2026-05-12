@@ -268,7 +268,9 @@ class CrudCAAuthorities(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(ca["serial_number"]),
-                    "revocation_date": ca["revocation_date"],
+                    "revocation_date": ca.get(
+                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
+                    ),
                 }
             )
         return revoked

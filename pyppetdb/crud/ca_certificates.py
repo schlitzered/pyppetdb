@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import datetime
 import typing
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -138,7 +139,9 @@ class CrudCACertificates(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(cert["serial_number"]),
-                    "revocation_date": cert["revocation_date"],
+                    "revocation_date": cert.get(
+                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
+                    ),
                 }
             )
         return revoked

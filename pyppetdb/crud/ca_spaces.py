@@ -235,6 +235,9 @@ class CrudCASpaces(CrudMongo):
         cursor = self.coll.find({"$or": [{"ca_id": ca_id}, {"ca_id_history": ca_id}]})
         return await cursor.to_list(length=None)
 
+    async def count(self, query: dict) -> int:
+        return await self.coll.count_documents(query)
+
     async def search(
         self,
         _id: typing.Optional[str] = None,

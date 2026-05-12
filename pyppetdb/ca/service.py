@@ -93,7 +93,13 @@ class CAService:
         space_id: str,
     ):
         # 1. Subject Name Validation
-        if ca_config.enforce_rfc1123 or space_config.enforce_rfc1123:
+        enforce_rfc1123 = False
+        if ca_config and ca_config.enforce_rfc1123:
+            enforce_rfc1123 = True
+        if space_config and space_config.enforce_rfc1123:
+            enforce_rfc1123 = True
+
+        if enforce_rfc1123:
             if not RE_RFC1123.match(cn):
                 raise QueryParamValidationError(
                     msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
@@ -772,10 +778,28 @@ class CAService:
         self, _id: str, payload: CASpacePut, fields: list = None
     ) -> CASpaceGet:
         query = {"id": _id}
+        if payload.ca_id:
+            # Check if ca_id changed to update history
+            current = await self._crud_spaces.get(_id, fields=["ca_id", "ca_id_history"])
+            if current.ca_id != payload.ca_id:
+                history = current.ca_id_history or []
+                if current.ca_id not in history:
+                    history.append(current.ca_id)
+                data = payload.model_dump(exclude_unset=True)
+                data["ca_id_history"] = history
+                return await self._crud_spaces.update(
+                    query=query, payload=data, fields=fields
+                )
+
         data = payload.model_dump(exclude_unset=True)
         return await self._crud_spaces.update(query=query, payload=data, fields=fields)
 
     async def delete_space(self, _id: str) -> None:
+        # Check if space contains certificates
+        if await self._crud_certificates.count({"space_id": _id}) > 0:
+            raise QueryParamValidationError(
+                msg=f"Space '{_id}' still contains certificates, cannot delete"
+            )
         await self._crud_spaces.delete(query={"id": _id})
 
     async def update_authority(
@@ -788,6 +812,18 @@ class CAService:
         )
 
     async def delete_authority(self, ca_id: str) -> None:
+        # Check if authority is in use by spaces
+        if await self._crud_spaces.count({"ca_id": ca_id}) > 0:
+            raise QueryParamValidationError(
+                msg=f"CA Authority '{ca_id}' still in use by one or more spaces, cannot delete"
+            )
+
+        # Check if authority is parent of another authority
+        if await self._crud_authorities.count({"parent_id": ca_id}) > 0:
+            raise QueryParamValidationError(
+                msg=f"CA Authority '{ca_id}' still a parent of one or more authorities, cannot delete"
+            )
+
         await self._crud_authorities.delete(_id=ca_id)
 
     async def update_certificate_status(

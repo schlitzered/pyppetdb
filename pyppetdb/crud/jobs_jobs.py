@@ -73,6 +73,11 @@ class CrudJobs(CrudMongo):
         result = await self._get(query=query, fields=fields)
         return JobGet(**result)
 
+    async def remove_node_from_jobs(self, node_id: str) -> None:
+        await self.coll.update_many(
+            {"node_ids": node_id}, {"$pull": {"node_ids": node_id}}
+        )
+
     async def search(
         self,
         _id: typing.Optional[str] = None,

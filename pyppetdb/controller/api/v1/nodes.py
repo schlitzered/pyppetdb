@@ -208,7 +208,7 @@ class ControllerApiV1Nodes:
         await self.ca_service.update_certificate_status(
             space_id="puppet-ca",
             cn=node_id,
-            data=CACertificatePut(status="revoked"),
+            payload=CACertificatePut(status="revoked"),
         )
 
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
