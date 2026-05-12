@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
 from pyppetdb.errors import ResourceNotFound
@@ -37,16 +37,16 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_certificate_status_transition_requested_to_signed(self):
         # Mock finding a requested cert
-        cert_req = CACertificateGet(id="123", status="requested", cn="node1", space_id="space1")
+        cert_req = CACertificateGet(
+            id="123", status="requested", cn="node1", space_id="space1"
+        )
         self.crud_certificates.get_by_cn.side_effect = [cert_req]
-        
+
         # Mock processing the request
         self.service.process_requested_certificate = AsyncMock(return_value=cert_req)
 
         result = await self.service.update_certificate_status(
-            space_id="space1",
-            cn="node1",
-            payload=CACertificatePut(status="signed")
+            space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
         )
 
         self.assertEqual(result, cert_req)
@@ -54,16 +54,16 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_certificate_status_already_signed(self):
         # Mock NOT finding a requested cert, but finding a signed one
-        cert_signed = CACertificateGet(id="123", status="signed", cn="node1", space_id="space1")
+        cert_signed = CACertificateGet(
+            id="123", status="signed", cn="node1", space_id="space1"
+        )
         self.crud_certificates.get_by_cn.side_effect = [ResourceNotFound(), cert_signed]
-        
+
         # Mock processing should NOT be called
         self.service.process_requested_certificate = AsyncMock()
 
         result = await self.service.update_certificate_status(
-            space_id="space1",
-            cn="node1",
-            payload=CACertificatePut(status="signed")
+            space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
         )
 
         self.assertEqual(result, cert_signed)
@@ -71,16 +71,16 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_certificate_status_revoke_signed(self):
         # Mock NOT finding a requested cert, but finding a signed one
-        cert_signed = CACertificateGet(id="123", status="signed", cn="node1", space_id="space1")
+        cert_signed = CACertificateGet(
+            id="123", status="signed", cn="node1", space_id="space1"
+        )
         self.crud_certificates.get_by_cn.side_effect = [ResourceNotFound(), cert_signed]
-        
+
         # Mock revocation
         self.service.revoke_certificate = AsyncMock(return_value=cert_signed)
 
         result = await self.service.update_certificate_status(
-            space_id="space1",
-            cn="node1",
-            payload=CACertificatePut(status="revoked")
+            space_id="space1", cn="node1", payload=CACertificatePut(status="revoked")
         )
 
         self.assertEqual(result, cert_signed)
@@ -88,11 +88,12 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_certificate_status_not_found(self):
         # Mock finding nothing
-        self.crud_certificates.get_by_cn.side_effect = [ResourceNotFound(), ResourceNotFound()]
+        self.crud_certificates.get_by_cn.side_effect = [
+            ResourceNotFound(),
+            ResourceNotFound(),
+        ]
 
         with self.assertRaises(ResourceNotFound):
             await self.service.update_certificate_status(
-                space_id="space1",
-                cn="node1",
-                payload=CACertificatePut(status="signed")
+                space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
             )

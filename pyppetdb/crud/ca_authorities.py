@@ -44,12 +44,17 @@ class CrudCAAuthoritiesCache:
         self._protector = protector
         self._validation_protector = CAValidationProtector(protector)
         self._cache = {}
+        self._key_cache = {}
         self._doc_to_id = {}
         self._initialized = False
 
     @property
     def cache(self) -> dict["str", CAAuthorityGet]:
         return self._cache
+
+    @property
+    def key_cache(self) -> dict["str", bytes]:
+        return self._key_cache
 
     @property
     def coll(self):
@@ -72,6 +77,12 @@ class CrudCAAuthoritiesCache:
             obj.validation_config = self._validation_protector.decrypt_config(
                 obj.validation_config
             )
+        if doc.get("private_key_encrypted"):
+            try:
+                decrypted = self._protector.decrypt_string(doc["private_key_encrypted"])
+                self._key_cache[obj.id] = decrypted.encode()
+            except Exception as e:
+                self.log.error(f"Failed to decrypt private key for CA {obj.id}: {e}")
         return obj
 
     async def _load_initial_data(self):
@@ -104,6 +115,7 @@ class CrudCAAuthoritiesCache:
                         custom_id = self._doc_to_id.pop(doc_id, None)
                         if custom_id:
                             self._cache.pop(custom_id, None)
+                            self._key_cache.pop(custom_id, None)
                             self.log.info(
                                 f"Removed CA authority {custom_id} from cache"
                             )
@@ -140,6 +152,18 @@ class CrudCAAuthorities(CrudMongo):
             # Fallback to DB if not in cache (maybe not yet initialized or just inserted)
             return await self.get(_id, fields=None)
         return self.cache.cache[_id]
+
+    async def get_private_key_cached(self, _id: str) -> bytes:
+        if _id not in self.cache.key_cache:
+            return await self.get_private_key(_id)
+        return self.cache.key_cache[_id]
+
+    async def get_all_internal_cas(self) -> list[str]:
+        return [
+            ca_id
+            for ca_id, ca in self.cache.cache.items()
+            if ca.internal and ca.status == "active"
+        ]
 
     @property
     def protector(self):

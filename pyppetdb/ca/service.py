@@ -49,6 +49,11 @@ from pyppetdb.model.ca_validation import (
     CAScriptValidation,
 )
 
+# RFC 1123 hostname regex (lowercase only)
+RE_RFC1123 = re.compile(
+    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
 
 class CAService:
     def __init__(
@@ -111,11 +116,7 @@ class CAService:
     def _validate_csr_subject_name(self, cn: str, configs: list[CAValidationConfig]):
         for config in configs:
             if config and config.enforce_rfc1123:
-                # RFC 1123 hostname regex (lowercase only)
-                if not re.match(
-                    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$",
-                    cn,
-                ):
+                if not RE_RFC1123.match(cn):
                     raise QueryParamValidationError(
                         msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
                     )
@@ -336,21 +337,19 @@ class CAService:
         return list(injected)
 
     async def _get_ca_resources(self, ca_id: str):
-        """Load CA key and cert from cache or DB and return cryptography objects."""
+        """Load CA key and cert from cache and return cryptography objects."""
         now = time.time()
         cached = self._cache.get(ca_id)
 
         if cached and (now - cached["timestamp"] < self._cache_ttl):
             return cached["cert"], cached["key"]
 
-        ca = await self._crud_authorities.get(
-            ca_id, fields=["certificate", "private_key_encrypted"]
-        )
+        ca = await self._crud_authorities.get_cached(ca_id)
+        ca_key_pem = await self._crud_authorities.get_private_key_cached(ca_id)
+
         ca_cert = x509.load_pem_x509_certificate(ca.certificate.encode())
         ca_key = serialization.load_pem_private_key(
-            self._crud_authorities.protector.decrypt_string(
-                ca.private_key_encrypted
-            ).encode(),
+            ca_key_pem,
             password=None,
         )
 
@@ -390,9 +389,9 @@ class CAService:
             next_update=next_update,
         )
 
-    async def refresh_expiring_crls(self) -> None:
-        self.log.info("Checking for expiring CRLs...")
-        ca_ids = await self._crud_authorities.find_expiring_crls(threshold_hours=24)
+    async def refresh_all_internal_crls(self) -> None:
+        self.log.info("Refreshing all internal CRLs...")
+        ca_ids = await self._crud_authorities.get_all_internal_cas()
 
         for ca_id in ca_ids:
             if await self._crud_authorities.lock_crl_acquire(ca_id):
@@ -401,6 +400,7 @@ class CAService:
                     await self.refresh_crl(ca_id)
                 except Exception as e:
                     self.log.error(f"Failed to refresh CRL for CA '{ca_id}': {e}")
+                finally:
                     await self._crud_authorities.lock_crl_release(ca_id)
             else:
                 self.log.debug(
@@ -410,10 +410,10 @@ class CAService:
     async def crl_refresh_worker(self) -> None:
         while True:
             try:
-                await self.refresh_expiring_crls()
+                await self.refresh_all_internal_crls()
             except Exception as e:
                 self.log.error(f"Error in CRL refresh worker: {e}")
-            await asyncio.sleep(43200)
+            await asyncio.sleep(self._config.ca.crlRefreshInterval)
 
     async def create_authority(
         self, _id: str, payload: CAAuthorityPost, fields: list = None
@@ -711,9 +711,6 @@ class CAService:
             },
             fields=None,
         )
-
-        # Refresh CRL
-        await self.refresh_crl(cert.ca_id)
 
         return result
 
