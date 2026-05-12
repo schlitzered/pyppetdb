@@ -56,29 +56,15 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 critical=False,
             )
         csr = builder.sign(private_key, hashes.SHA256())
-        return csr.public_bytes(serialization.Encoding.PEM).decode()
-
-    async def test_validate_csr_signature_invalid(self):
-        csr_pem = self._generate_csr("test.example.com")
-        with patch(
-            "pyppetdb.ca.utils.CAUtils.verify_csr_signature", return_value=False
-        ):
-            with self.assertRaises(QueryParamValidationError) as cm:
-                await self.service._validate_csr(
-                    csr_pem=csr_pem,
-                    ca_config=None,
-                    space_config=None,
-                    ca_id="ca1",
-                    space_id="space1",
-                )
-            self.assertIn("CSR signature is invalid", str(cm.exception))
+        return csr.public_bytes(serialization.Encoding.PEM).decode(), csr
 
     async def test_validate_subject_name_rfc1123_invalid(self):
-        csr_pem = self._generate_csr("Test.Example.Com")
+        csr_pem, csr_obj = self._generate_csr("Test.Example.Com")
         ca_config = CAValidationConfig(enforce_rfc1123=True)
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.service._validate_csr(
-                csr_pem=csr_pem,
+                csr=csr_obj,
+                cn="Test.Example.Com",
                 ca_config=ca_config,
                 space_config=None,
                 ca_id="ca1",
@@ -87,11 +73,14 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.assertIn("does not follow strict RFC 1123", str(cm.exception))
 
     async def test_validate_san_max_count_exceeded(self):
-        csr_pem = self._generate_csr("test.com", san=["a.com", "b.com", "c.com"])
+        csr_pem, csr_obj = self._generate_csr(
+            "test.com", san=["a.com", "b.com", "c.com"]
+        )
         ca_config = CAValidationConfig(san_validation=CASANValidation(max_san_count=2))
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.service._validate_csr(
-                csr_pem=csr_pem,
+                csr=csr_obj,
+                cn="test.com",
                 ca_config=ca_config,
                 space_config=None,
                 ca_id="ca1",
@@ -100,13 +89,14 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.assertIn("exceeds maximum allowed", str(cm.exception))
 
     async def test_validate_san_regex_mismatch(self):
-        csr_pem = self._generate_csr("test.com", san=["forbidden.com"])
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["forbidden.com"])
         ca_config = CAValidationConfig(
             san_validation=CASANValidation(regex_list=[r".*\.example\.com$"])
         )
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.service._validate_csr(
-                csr_pem=csr_pem,
+                csr=csr_obj,
+                cn="test.com",
                 ca_config=ca_config,
                 space_config=None,
                 ca_id="ca1",
@@ -117,7 +107,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
     @patch("httpx.AsyncClient.request")
     async def test_validate_san_http_failure(self, mock_request):
         mock_request.return_value = MagicMock(is_error=True, status_code=403)
-        csr_pem = self._generate_csr("test.com", san=["a.com"])
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["a.com"])
         ca_config = CAValidationConfig(
             san_validation=CASANValidation(
                 http_checks=[CAHTTPValidation(url="http://validate.me")]
@@ -125,7 +115,8 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         )
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.service._validate_csr(
-                csr_pem=csr_pem,
+                csr=csr_obj,
+                cn="test.com",
                 ca_config=ca_config,
                 space_config=None,
                 ca_id="ca1",
@@ -138,7 +129,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
     @patch("httpx.AsyncClient.request")
     async def test_validate_san_http_placeholders(self, mock_request):
         mock_request.return_value = MagicMock(is_error=False, status_code=200)
-        csr_pem = self._generate_csr("test.com", san=["a.com"])
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["a.com"])
         ca_config = CAValidationConfig(
             san_validation=CASANValidation(
                 http_checks=[
@@ -150,26 +141,21 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             )
         )
         await self.service._validate_csr(
-            csr_pem=csr_pem,
+            csr=csr_obj,
+            cn="test.com",
             ca_config=ca_config,
             space_config=None,
-            ca_id="myca",
-            space_id="myspace",
+            ca_id="ca1",
+            space_id="space1",
         )
         args, kwargs = mock_request.call_args
-        self.assertEqual(kwargs["url"], "http://validate.me/myca/myspace/test.com")
+        self.assertEqual(kwargs["url"], "http://validate.me/ca1/space1/test.com")
         self.assertEqual(kwargs["method"], "PUT")
 
     @patch("httpx.AsyncClient.request")
     async def test_validate_san_http_basic_auth(self, mock_request):
         mock_request.return_value = MagicMock(is_error=False, status_code=200)
-        csr_pem = self._generate_csr("test.com", san=["a.com"])
-
-        # We need to mock the decrypt_string because it is called in _validate_csr via decrypt_config
-        # Use MagicMock instead of AsyncMock for the protector attributes as they are synchronous
-        self.service._crud_authorities.protector.decrypt_string = MagicMock(
-            side_effect=lambda x: x
-        )
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["a.com"])
 
         ca_config = CAValidationConfig(
             san_validation=CASANValidation(
@@ -187,7 +173,8 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             )
         )
         await self.service._validate_csr(
-            csr_pem=csr_pem,
+            csr=csr_obj,
+            cn="test.com",
             ca_config=ca_config,
             space_config=None,
             ca_id="myca",
@@ -197,8 +184,14 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["auth"], ("user1", "pass1"))
         self.assertEqual(kwargs["headers"]["X-Secret"], "secret")
 
-    async def test_validate_san_script_failure(self):
-        csr_pem = self._generate_csr("test.com", san=["a.com"])
+    @patch("asyncio.create_subprocess_exec")
+    async def test_validate_san_script_failure(self, mock_exec):
+        mock_proc = MagicMock()
+        mock_proc.communicate = AsyncMock(return_value=(b"output", b"error"))
+        mock_proc.returncode = 1
+        mock_exec.return_value = mock_proc
+
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["a.com"])
         from pyppetdb.model.ca_validation import CAScriptValidation
 
         ca_config = CAValidationConfig(
@@ -208,16 +201,51 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 ]
             )
         )
-        # /bin/false returns 1
         with self.assertRaises(QueryParamValidationError) as cm:
             await self.service._validate_csr(
-                csr_pem=csr_pem,
+                csr=csr_obj,
+                cn="test.com",
                 ca_config=ca_config,
                 space_config=None,
                 ca_id="ca1",
                 space_id="space1",
             )
-        self.assertIn("External script validation failed", str(cm.exception))
+        self.assertIn("External script validation failed (exit 1)", str(cm.exception))
+
+    async def test_validate_san_multiple_configs(self):
+        csr_pem, csr_obj = self._generate_csr("test.com", san=["a.example.com"])
+
+        # CA config allows anything
+        ca_config = CAValidationConfig(
+            san_validation=CASANValidation(regex_list=[r".*"])
+        )
+        # Space config restricts to example.com
+        space_config = CAValidationConfig(
+            san_validation=CASANValidation(regex_list=[r".*\.example\.com$"])
+        )
+
+        # Should pass
+        await self.service._validate_csr(
+            csr=csr_obj,
+            cn="test.com",
+            ca_config=ca_config,
+            space_config=space_config,
+            ca_id="ca1",
+            space_id="space1",
+        )
+
+        # Now try with a non-matching SAN in space config
+        csr_pem2, csr_obj2 = self._generate_csr("test.com", san=["a.other.com"])
+        with self.assertRaises(QueryParamValidationError) as cm:
+            await self.service._validate_csr(
+                csr=csr_obj2,
+                cn="test.com",
+                ca_config=ca_config,
+                space_config=space_config,
+                ca_id="ca1",
+                space_id="space1",
+            )
+        self.assertIn("does not match any allowed patterns", str(cm.exception))
 
     def test_get_injected_sans_success(self):
         from pyppetdb.model.ca_validation import CASANInjection
@@ -271,7 +299,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             return_value=(MagicMock(), MagicMock())
         )
 
-        csr_pem = self._generate_csr("node-1")
+        csr_pem, _ = self._generate_csr("node-1")
 
         # Mock certificates crud
         cert_req = CACertificateGet(

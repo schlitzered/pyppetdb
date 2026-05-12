@@ -85,22 +85,21 @@ class CAService:
 
     async def _validate_csr(
         self,
-        csr_pem: str,
+        csr: x509.CertificateSigningRequest,
+        cn: str,
         ca_config: CAValidationConfig,
         space_config: CAValidationConfig,
         ca_id: str,
         space_id: str,
     ):
-        # 1. Cryptographic Integrity
-        self._validate_csr_integrity(csr_pem)
+        # 1. Subject Name Validation
+        if ca_config.enforce_rfc1123 or space_config.enforce_rfc1123:
+            if not RE_RFC1123.match(cn):
+                raise QueryParamValidationError(
+                    msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
+                )
 
-        csr = x509.load_pem_x509_csr(csr_pem.encode())
-        cn = csr.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
-
-        # 2. Subject Name Validation
-        self._validate_csr_subject_name(cn, [ca_config, space_config])
-
-        # 3. SAN Validation
+        # 2. SAN Validation
         await self._validate_csr_sans(
             csr=csr,
             cn=cn,
@@ -108,18 +107,6 @@ class CAService:
             ca_id=ca_id,
             space_id=space_id,
         )
-
-    def _validate_csr_integrity(self, csr_pem: str):
-        if not CAUtils.verify_csr_signature(csr_pem.encode()):
-            raise QueryParamValidationError(msg="CSR signature is invalid")
-
-    def _validate_csr_subject_name(self, cn: str, configs: list[CAValidationConfig]):
-        for config in configs:
-            if config and config.enforce_rfc1123:
-                if not RE_RFC1123.match(cn):
-                    raise QueryParamValidationError(
-                        msg=f"CN '{cn}' does not follow strict RFC 1123 (lowercase) format"
-                    )
 
     async def _validate_csr_sans(
         self,
@@ -129,17 +116,17 @@ class CAService:
         ca_id: str,
         space_id: str,
     ):
-        san_ext = None
         try:
             san_ext = csr.extensions.get_extension_for_class(
                 x509.SubjectAlternativeName
             )
+            sans = []
+            if san_ext:
+                sans = san_ext.value.get_values_for_type(x509.DNSName)
+            if not sans:
+                return
         except x509.ExtensionNotFound:
-            pass
-
-        sans = []
-        if san_ext:
-            sans = san_ext.value.get_values_for_type(x509.DNSName)
+            return
 
         for config in configs:
             if not config or not config.san_validation:
@@ -166,13 +153,15 @@ class CAService:
                     script_checks=san_val.script_checks,
                 )
 
-    def _validate_sans_count(self, sans: list[str], max_count: int):
+    @staticmethod
+    def _validate_sans_count(sans: list[str], max_count: int):
         if len(sans) > max_count:
             raise QueryParamValidationError(
                 msg=f"Number of SANs ({len(sans)}) exceeds maximum allowed ({max_count})"
             )
 
-    def _validate_sans_regex(self, sans: list[str], regex_list: list[str] | None):
+    @staticmethod
+    def _validate_sans_regex(sans: list[str], regex_list: list[str] | None):
         if not regex_list:
             return
         for san in sans:
@@ -521,10 +510,10 @@ class CAService:
             fields = ["id", "status", "ca_id"]
 
         try:
-            csr_info = await asyncio.get_running_loop().run_in_executor(
+            csr, csr_info = await asyncio.get_running_loop().run_in_executor(
                 self._executor,
                 functools.partial(
-                    CAUtils.get_csr_info,
+                    CAUtils.parse_and_extract_csr,
                     csr_pem=csr_pem.encode(),
                 ),
             )
@@ -542,53 +531,43 @@ class CAService:
         ca = await self._crud_authorities.get_cached(space.ca_id)
 
         await self._validate_csr(
-            csr_pem=csr_pem,
+            csr=csr,
+            cn=csr_cn,
             ca_config=ca.validation_config,
             space_config=space.validation_config,
             ca_id=ca.id,
             space_id=space_id,
         )
 
-        # Check if already exists in 'requested' state to update it
-        try:
-            existing_requested = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=csr_cn, status="requested"
-            )
-        except ResourceNotFound:
-            existing_requested = None
-
-        if existing_requested:
-            # Update existing request
-            updated = await self._crud_certificates.update(
-                query={"id": existing_requested.id},
-                payload={"csr": csr_pem, **csr_info},
-                fields=fields,
-            )
-            return updated
-
-        # Check if already signed to avoid duplicates
-        try:
-            await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=csr_cn, status="signed"
-            )
-            raise DuplicateResource(
-                msg=f"A signed certificate already exists for '{csr_cn}' in space '{space_id}'"
-            )
-        except ResourceNotFound:
-            pass
-
-        data = {
-            "id": str(uuid.uuid4().int),
+        query = {
             "space_id": space_id,
-            "ca_id": space.ca_id,
             "cn": csr_cn,
-            "csr": csr_pem,
             "status": "requested",
-            "cert_uniqueness": f"{space_id}:{csr_cn}",
+        }
+
+        payload = {
+            "csr": csr_pem,
             **csr_info,
         }
 
-        return await self._crud_certificates.insert(data, fields=fields)
+        set_on_insert = {
+            "id": str(uuid.uuid4().int),
+            "ca_id": space.ca_id,
+            "cert_uniqueness": f"{space_id}:{csr_cn}",
+        }
+
+        try:
+            return await self._crud_certificates.update(
+                query=query,
+                payload=payload,
+                fields=fields,
+                upsert=True,
+                set_on_insert=set_on_insert,
+            )
+        except DuplicateResource:
+            raise DuplicateResource(
+                msg=f"A signed certificate already exists for '{csr_cn}' in space '{space_id}'"
+            )
 
     async def sign_certificate(
         self, space_id: str, cn: str, fields: list = None
@@ -666,7 +645,7 @@ class CAService:
             self._executor,
             functools.partial(
                 CAUtils.sign_csr,
-                csr_pem=cert_req.csr.encode(),
+                csr=cert_req.csr.encode(),
                 ca_cert=ca_cert_obj,
                 ca_key=ca_key_obj,
                 validity_days=self._config.ca.certificateValidityDays,

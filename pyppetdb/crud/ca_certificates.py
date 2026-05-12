@@ -77,10 +77,19 @@ class CrudCACertificates(CrudMongo):
         await super()._create_index()
 
     async def update(
-        self, query: dict, payload: dict, fields: list, upsert: bool = False
+        self,
+        query: dict,
+        payload: dict,
+        fields: list,
+        upsert: bool = False,
+        set_on_insert: dict = None,
     ) -> CACertificateGet:
         result = await self._update(
-            query=query, payload=payload, fields=fields, upsert=upsert
+            query=query,
+            payload=payload,
+            fields=fields,
+            upsert=upsert,
+            set_on_insert=set_on_insert,
         )
         return CACertificateGet(**result)
 

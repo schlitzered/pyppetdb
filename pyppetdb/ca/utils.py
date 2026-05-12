@@ -188,14 +188,32 @@ class CAUtils:
         return cert_pem, key_pem
 
     @staticmethod
-    def verify_csr_signature(csr_pem: bytes) -> bool:
-        """Verify the signature of a CSR."""
+    def parse_and_extract_csr(
+        csr_pem: bytes,
+    ) -> Tuple[x509.CertificateSigningRequest, dict]:
+        """Parse CSR, verify signature, and extract info."""
         csr = x509.load_pem_x509_csr(csr_pem)
-        return csr.is_signature_valid
+        if not csr.is_signature_valid:
+            raise ValueError("CSR signature is invalid")
+
+        sans = []
+        try:
+            san_extension = csr.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            )
+            sans = [str(name.value) for name in san_extension.value]
+        except x509.ExtensionNotFound:
+            pass
+
+        info = {
+            "cn": csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
+            "sans": sans,
+        }
+        return csr, info
 
     @staticmethod
     def sign_csr(
-        csr_pem: bytes,
+        csr: Union[bytes, x509.CertificateSigningRequest],
         ca_cert: Union[bytes, x509.Certificate],
         ca_key: Union[bytes, rsa.RSAPrivateKey],
         validity_days: int = 365,
@@ -206,7 +224,8 @@ class CAUtils:
         injected_sans: Optional[List[str]] = None,
     ) -> bytes:
         """Sign a CSR with the CA certificate and key."""
-        csr = x509.load_pem_x509_csr(csr_pem)
+        if isinstance(csr, bytes):
+            csr = x509.load_pem_x509_csr(csr)
 
         if isinstance(ca_cert, bytes):
             ca_cert = x509.load_pem_x509_certificate(ca_cert)
@@ -493,25 +512,6 @@ class CAUtils:
         new_cert = builder.sign(ca_key, hashes.SHA256())
 
         return new_cert.public_bytes(serialization.Encoding.PEM)
-
-    @staticmethod
-    def get_csr_info(csr_pem: bytes) -> dict:
-        """Extract information from a CSR."""
-        csr = x509.load_pem_x509_csr(csr_pem)
-
-        sans = []
-        try:
-            san_extension = csr.extensions.get_extension_for_class(
-                x509.SubjectAlternativeName
-            )
-            sans = [str(name.value) for name in san_extension.value]
-        except x509.ExtensionNotFound:
-            pass
-
-        return {
-            "cn": csr.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value,
-            "sans": sans,
-        }
 
     @staticmethod
     def get_cert_info(cert_pem: bytes) -> dict:

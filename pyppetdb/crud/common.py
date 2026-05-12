@@ -447,13 +447,20 @@ class CrudMongo(
             raise BackendError
 
     async def _update(
-        self, query: dict, payload: dict, fields: list, upsert=False
+        self,
+        query: dict,
+        payload: dict,
+        fields: list,
+        upsert=False,
+        set_on_insert: dict = None,
     ) -> dict:
         update = {"$set": {}}
         for k, v in payload.items():
             if v is None:
                 continue
             update["$set"][k] = v
+        if set_on_insert:
+            update["$setOnInsert"] = set_on_insert
         try:
             result = await self._coll.find_one_and_update(
                 filter=query,

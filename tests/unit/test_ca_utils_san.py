@@ -27,7 +27,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         csr_pem, _ = CAUtils.generate_csr(cn=cn)
 
         signed_cert_pem = CAUtils.sign_csr(
-            csr_pem=csr_pem,
+            csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
         )
@@ -45,7 +45,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = CAUtils.sign_csr(
-            csr_pem=csr_pem,
+            csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
         )
@@ -65,7 +65,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = CAUtils.sign_csr(
-            csr_pem=csr_pem,
+            csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
         )
@@ -87,7 +87,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         # Actually CAUtils.sign_csr now ALWAYS injects SAN, so I have to test if it keeps it.
 
         signed_cert_pem = CAUtils.sign_csr(
-            csr_pem=csr_pem,
+            csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
         )
@@ -111,7 +111,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = CAUtils.sign_csr(
-            csr_pem=csr_pem,
+            csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
         )
@@ -123,12 +123,12 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         self.assertIn("alt2.example.com", info["sans"])
         self.assertEqual(len(info["sans"]), 3)
 
-    def test_get_csr_info_sans(self):
+    def test_parse_and_extract_csr_sans(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
         csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
 
-        info = CAUtils.get_csr_info(csr_pem)
+        csr, info = CAUtils.parse_and_extract_csr(csr_pem)
         self.assertIn("sans", info)
         self.assertIn("alt1.example.com", info["sans"])
         self.assertIn("alt2.example.com", info["sans"])
