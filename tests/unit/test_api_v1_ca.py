@@ -47,7 +47,6 @@ class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_update_authority_permission(self):
         self.mock_authorize.require_perm = AsyncMock()
         self.mock_ca_service.update_authority = AsyncMock()
-        self.mock_ca_service.revoke_authority = AsyncMock()
 
         mock_request = MagicMock()
         data = CAAuthorityPut(status="revoked")

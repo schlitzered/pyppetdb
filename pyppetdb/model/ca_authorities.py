@@ -18,6 +18,7 @@ from typing import Optional
 from typing import Literal
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
+from pydantic import Field
 from pyppetdb.model.common import MetaMulti
 from pyppetdb.model.common import Fingerprints
 from pyppetdb.model.ca_validation import CAValidationConfig
@@ -66,7 +67,7 @@ class CAAuthorityPost(BaseModel):
     certificate: Optional[str] = None
     private_key: Optional[str] = None
     external_chain: Optional[List[str]] = None
-    validation_config: Optional[CAValidationConfig] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
 class CACRL(BaseModel):
@@ -94,7 +95,7 @@ class CAAuthorityGet(BaseModel):
     status: Optional[CAStatus] = None
     revocation_date: Optional[datetime] = None
     crl: Optional[CACRL] = None
-    validation_config: Optional[CAValidationConfig] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
     private_key_encrypted: Optional[str] = None
 
 
@@ -105,4 +106,4 @@ class CAAuthorityGetMulti(BaseModel):
 
 class CAAuthorityPut(BaseModel):
     status: Optional[Literal["revoked"]] = None
-    validation_config: Optional[CAValidationConfig] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)

@@ -93,11 +93,7 @@ class CAService:
         space_id: str,
     ):
         # 1. Subject Name Validation
-        enforce_rfc1123 = False
-        if ca_config and ca_config.enforce_rfc1123:
-            enforce_rfc1123 = True
-        if space_config and space_config.enforce_rfc1123:
-            enforce_rfc1123 = True
+        enforce_rfc1123 = ca_config.enforce_rfc1123 or space_config.enforce_rfc1123
 
         if enforce_rfc1123:
             if not RE_RFC1123.match(cn):
@@ -135,7 +131,7 @@ class CAService:
             return
 
         for config in configs:
-            if not config or not config.san_validation:
+            if not config.san_validation:
                 continue
 
             san_val = config.san_validation
@@ -314,7 +310,7 @@ class CAService:
     ) -> list[str]:
         injected = set()
         for config in configs:
-            if not config or not config.san_injection:
+            if not config.san_injection:
                 continue
             for rule in config.san_injection:
                 match = re.match(rule.pattern, cn)
@@ -610,41 +606,33 @@ class CAService:
         # CSR already validated in sign_certificate, but we might want to re-run injection
         cn = cert_req.cn
         allowed_exts = None
-        if ca.validation_config and ca.validation_config.allowed_extensions is not None:
+        if ca.validation_config.allowed_extensions is not None:
             allowed_exts = set(ca.validation_config.allowed_extensions)
 
-        if (
-            space.validation_config
-            and space.validation_config.allowed_extensions is not None
-        ):
+        if space.validation_config.allowed_extensions is not None:
             space_exts = set(space.validation_config.allowed_extensions)
             if allowed_exts is not None:
                 allowed_exts = allowed_exts.intersection(space_exts)
             else:
                 allowed_exts = space_exts
+
         if allowed_exts is not None:
             allowed_exts = list(allowed_exts)
 
-        key_usages = None
-        if space.validation_config and space.validation_config.key_usages is not None:
-            key_usages = space.validation_config.key_usages
-        elif ca.validation_config and ca.validation_config.key_usages is not None:
-            key_usages = ca.validation_config.key_usages
-
-        extended_key_usages = None
-        if (
-            space.validation_config
-            and space.validation_config.extended_key_usages is not None
-        ):
-            extended_key_usages = space.validation_config.extended_key_usages
-        elif (
-            ca.validation_config
-            and ca.validation_config.extended_key_usages is not None
-        ):
-            extended_key_usages = ca.validation_config.extended_key_usages
+        key_usages = (
+            space.validation_config.key_usages or ca.validation_config.key_usages
+        )
+        extended_key_usages = (
+            space.validation_config.extended_key_usages
+            or ca.validation_config.extended_key_usages
+        )
 
         injected_sans = self._get_injected_sans(
-            cn, [ca.validation_config, space.validation_config]
+            cn,
+            [
+                ca.validation_config,
+                space.validation_config,
+            ],
         )
 
         cert_pem = await asyncio.get_running_loop().run_in_executor(
@@ -749,24 +737,6 @@ class CAService:
         # Sign it
         return await self.sign_certificate(space_id=space_id, cn=cn)
 
-    async def revoke_authority(self, _id: str) -> CAAuthorityGet:
-        ca = await self._crud_authorities.get(_id, fields=["status", "parent_id"])
-        if ca.status == "revoked":
-            return ca
-
-        now = datetime.datetime.now(datetime.timezone.utc)
-        result = await self._crud_authorities.update(
-            query={"id": _id},
-            payload={"status": "revoked", "revocation_date": now},
-            fields=None,
-        )
-
-        # Refresh parent CRL if exists
-        if ca.parent_id:
-            await self.refresh_crl(ca.parent_id)
-
-        return result
-
     async def create_space(
         self, _id: str, payload: CASpacePost, fields: list = None
     ) -> CASpaceGet:
@@ -780,7 +750,9 @@ class CAService:
         query = {"id": _id}
         if payload.ca_id:
             # Check if ca_id changed to update history
-            current = await self._crud_spaces.get(_id, fields=["ca_id", "ca_id_history"])
+            current = await self._crud_spaces.get(
+                _id, fields=["ca_id", "ca_id_history"]
+            )
             if current.ca_id != payload.ca_id:
                 history = current.ca_id_history or []
                 if current.ca_id not in history:

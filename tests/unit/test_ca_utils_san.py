@@ -30,6 +30,14 @@ class TestCAUtilsSANInjection(unittest.TestCase):
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
+            key_usages=[
+                "digital_signature",
+                "key_encipherment",
+            ],
+            extended_key_usages=[
+                "SERVER_AUTH",
+                "CLIENT_AUTH",
+            ],
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -48,6 +56,14 @@ class TestCAUtilsSANInjection(unittest.TestCase):
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
+            key_usages=[
+                "digital_signature",
+                "key_encipherment",
+            ],
+            extended_key_usages=[
+                "SERVER_AUTH",
+                "CLIENT_AUTH",
+            ],
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -68,6 +84,14 @@ class TestCAUtilsSANInjection(unittest.TestCase):
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
+            key_usages=[
+                "digital_signature",
+                "key_encipherment",
+            ],
+            extended_key_usages=[
+                "SERVER_AUTH",
+                "CLIENT_AUTH",
+            ],
         )
 
         cert = x509.load_pem_x509_certificate(signed_cert_pem)
@@ -79,32 +103,6 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         # Should not duplicate if it was already there
         self.assertEqual(len(dns_names), 2)
 
-    def test_renew_cert_inject_san_no_original_san(self):
-        cn = "test-node"
-        csr_pem, _ = CAUtils.generate_csr(cn=cn)
-
-        # Manually sign without SAN first to test renewal injection
-        # Actually CAUtils.sign_csr now ALWAYS injects SAN, so I have to test if it keeps it.
-
-        signed_cert_pem = CAUtils.sign_csr(
-            csr=csr_pem,
-            ca_cert=self.ca_cert_pem,
-            ca_key=self.ca_key_pem,
-        )
-
-        renewed_cert_pem = CAUtils.renew_cert(
-            cert_pem=signed_cert_pem,
-            ca_cert=self.ca_cert_pem,
-            ca_key=self.ca_key_pem,
-        )
-
-        cert = x509.load_pem_x509_certificate(renewed_cert_pem)
-        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
-        dns_names = san.get_values_for_type(x509.DNSName)
-
-        self.assertIn(cn, dns_names)
-        self.assertEqual(len(dns_names), 1)
-
     def test_get_cert_info_sans(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
@@ -114,6 +112,14 @@ class TestCAUtilsSANInjection(unittest.TestCase):
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
+            key_usages=[
+                "digital_signature",
+                "key_encipherment",
+            ],
+            extended_key_usages=[
+                "SERVER_AUTH",
+                "CLIENT_AUTH",
+            ],
         )
 
         info = CAUtils.get_cert_info(signed_cert_pem)

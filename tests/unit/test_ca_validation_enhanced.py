@@ -66,7 +66,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 csr=csr_obj,
                 cn="Test.Example.Com",
                 ca_config=ca_config,
-                space_config=None,
+                space_config=CAValidationConfig(),
                 ca_id="ca1",
                 space_id="space1",
             )
@@ -82,7 +82,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 csr=csr_obj,
                 cn="test.com",
                 ca_config=ca_config,
-                space_config=None,
+                space_config=CAValidationConfig(),
                 ca_id="ca1",
                 space_id="space1",
             )
@@ -98,7 +98,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 csr=csr_obj,
                 cn="test.com",
                 ca_config=ca_config,
-                space_config=None,
+                space_config=CAValidationConfig(),
                 ca_id="ca1",
                 space_id="space1",
             )
@@ -118,7 +118,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 csr=csr_obj,
                 cn="test.com",
                 ca_config=ca_config,
-                space_config=None,
+                space_config=CAValidationConfig(),
                 ca_id="ca1",
                 space_id="space1",
             )
@@ -144,7 +144,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             csr=csr_obj,
             cn="test.com",
             ca_config=ca_config,
-            space_config=None,
+            space_config=CAValidationConfig(),
             ca_id="ca1",
             space_id="space1",
         )
@@ -176,7 +176,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             csr=csr_obj,
             cn="test.com",
             ca_config=ca_config,
-            space_config=None,
+            space_config=CAValidationConfig(),
             ca_id="myca",
             space_id="myspace",
         )
@@ -206,7 +206,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 csr=csr_obj,
                 cn="test.com",
                 ca_config=ca_config,
-                space_config=None,
+                space_config=CAValidationConfig(),
                 ca_id="ca1",
                 space_id="space1",
             )
