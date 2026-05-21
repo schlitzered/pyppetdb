@@ -619,9 +619,11 @@ class CAService:
         if allowed_exts is not None:
             allowed_exts = list(allowed_exts)
 
-        key_usages = (
-            space.validation_config.key_usages or ca.validation_config.key_usages
-        )
+        if space.validation_config.key_usages is not None:
+            key_usages = space.validation_config.get_key_usage_kwargs()
+        else:
+            key_usages = ca.validation_config.get_key_usage_kwargs()
+
         extended_key_usages = (
             space.validation_config.extended_key_usages
             or ca.validation_config.extended_key_usages

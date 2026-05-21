@@ -83,3 +83,21 @@ class CAValidationConfig(BaseModel):
         "SERVER_AUTH",
         "CLIENT_AUTH",
     ]
+
+    def get_key_usage_kwargs(self) -> dict[str, bool]:
+        usage_kwargs = {
+            "digital_signature": False,
+            "content_commitment": False,
+            "key_encipherment": False,
+            "data_encipherment": False,
+            "key_agreement": False,
+            "key_cert_sign": False,
+            "crl_sign": False,
+            "encipher_only": False,
+            "decipher_only": False,
+        }
+        if self.key_usages:
+            for usage in self.key_usages:
+                if usage in usage_kwargs:
+                    usage_kwargs[usage] = True
+        return usage_kwargs

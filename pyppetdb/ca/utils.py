@@ -367,7 +367,7 @@ class CAUtils:
         extensions: x509.Extensions,
         ca_cert: Union[bytes, x509.Certificate],
         ca_key: Union[bytes, rsa.RSAPrivateKey],
-        key_usages: List[str],
+        key_usages: dict[str, bool],
         extended_key_usages: List[str],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
@@ -422,24 +422,9 @@ class CAUtils:
             critical=True,
         )
 
-        usage_kwargs = {
-            "digital_signature": False,
-            "content_commitment": False,
-            "key_encipherment": False,
-            "data_encipherment": False,
-            "key_agreement": False,
-            "key_cert_sign": False,
-            "crl_sign": False,
-            "encipher_only": False,
-            "decipher_only": False,
-        }
-        for usage in key_usages:
-            if usage in usage_kwargs:
-                usage_kwargs[usage] = True
-
         builder = builder.add_extension(
             extval=x509.KeyUsage(
-                **usage_kwargs,
+                **key_usages,
             ),
             critical=True,
         )
@@ -555,7 +540,7 @@ class CAUtils:
         csr: Union[bytes, x509.CertificateSigningRequest],
         ca_cert: Union[bytes, x509.Certificate],
         ca_key: Union[bytes, rsa.RSAPrivateKey],
-        key_usages: List[str],
+        key_usages: dict[str, bool],
         extended_key_usages: List[str],
         validity_days: int = 365,
         serial_number: Optional[int] = None,
