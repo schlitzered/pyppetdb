@@ -38,6 +38,7 @@ from pyppetdb.model.ca_spaces import filter_list
 from pyppetdb.model.ca_spaces import sort_literal
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.ca.validation_protector import CAValidationProtector
 
 
 class ControllerApiV1CASpaces:
@@ -100,6 +101,12 @@ class ControllerApiV1CASpaces:
     def router(self):
         return self._router
 
+    def _mask(self, data: CASpaceGet):
+        if data.validation_config:
+            protector = CAValidationProtector(protector=None)
+            data.validation_config = protector.mask_config(data.validation_config)
+        return data
+
     @property
     def authorize(self):
         return self._authorize
@@ -128,9 +135,10 @@ class ControllerApiV1CASpaces:
         )
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
-        return await self._ca_service.update_space(
+        res = await self._ca_service.update_space(
             _id=space_id, payload=data, fields=list(fields)
         )
+        return self._mask(res)
 
     async def create(
         self,
@@ -142,9 +150,10 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_perm(
             request=request, permission=PERM_CA_SPACES_CREATE
         )
-        return await self._ca_service.create_space(
+        res = await self._ca_service.create_space(
             _id=space_id, payload=data, fields=list(fields)
         )
+        return self._mask(res)
 
     async def get(
         self,
@@ -153,7 +162,8 @@ class ControllerApiV1CASpaces:
         fields: Set[filter_literal] = Query(default=filter_list),
     ):
         await self.authorize.require_perm(request=request, permission=PERM_CA_GET)
-        return await self.crud_ca_spaces.get(_id=space_id, fields=list(fields))
+        res = await self.crud_ca_spaces.get(_id=space_id, fields=list(fields))
+        return self._mask(res)
 
     async def delete(
         self,
@@ -193,7 +203,7 @@ class ControllerApiV1CASpaces:
         ),
     ):
         await self.authorize.require_perm(request=request, permission=PERM_CA_GET)
-        return await self.crud_ca_spaces.search(
+        res = await self.crud_ca_spaces.search(
             _id=space_id,
             ca_id=ca_id,
             fields=list(fields),
@@ -202,3 +212,6 @@ class ControllerApiV1CASpaces:
             page=page,
             limit=limit,
         )
+        for r in res.result:
+            self._mask(r)
+        return res

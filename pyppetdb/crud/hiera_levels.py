@@ -151,17 +151,28 @@ class CrudHieraLevels(CrudMongo):
             coll=coll,
         )
         self._cache = CrudHieraLevelsCache(log=log, coll=coll)
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)],
+                    unique=True,
+                    name="idx_id",
+                ),
+                pymongo.IndexModel(
+                    [("priority", pymongo.ASCENDING)],
+                    unique=True,
+                    name="idx_priority",
+                ),
+            ]
+        )
 
     @property
     def cache(self):
         return self._cache
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("priority", pymongo.ASCENDING)], unique=True)
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self.cache.run()
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
         self,

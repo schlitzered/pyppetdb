@@ -55,11 +55,12 @@ class CrudUsers(CrudMongo):
             coll=coll,
         )
         self._crud_ldap = crud_ldap
+        self._indices.append(
+            pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
+        )
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     @property
     def crud_ldap(self):

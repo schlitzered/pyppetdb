@@ -166,6 +166,8 @@ class ConfigOAuth(BaseModel):
 
 class ConfigCA(BaseModel):
     enableCrlRefresh: bool = True
+    crlRefreshInterval: int = 3600
+    crlValidityDays: int = 30
     autoSign: bool = False
     autoSignNodeIfExists: bool = False
     certificateValidityDays: int = 365

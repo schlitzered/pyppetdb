@@ -139,7 +139,8 @@ class CrudHieraModelsDynamicAdapter:
         from typing import Any
 
         validation_model = SchemaModelFactory().create(
-            schema, name=f"{model_id}_Validator"
+            schema=schema,
+            name=f"{model_id}_Validator",
         )
 
         wrapped_model = create_model(
@@ -165,12 +166,19 @@ class CrudHieraModelsDynamicAdapter:
         return DynamicKeyModel
 
     def model_register(self, model_id: str, schema: dict, description: str):
-        model_type = self._build_key_model_class(model_id, schema, description)
+        model_type = self._build_key_model_class(
+            model_id=model_id,
+            schema=schema,
+            description=description,
+        )
         try:
             self.pyhiera.hiera.key_model_delete(model_id)
         except PyHieraError:
             pass
-        self.pyhiera.hiera.key_model_add(model_id, model_type)
+        self.pyhiera.hiera.key_model_add(
+            model_id,
+            model_type,
+        )
 
     def model_unregister(self, model_id: str):
         self.pyhiera.hiera.key_model_delete(model_id)
@@ -192,10 +200,16 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
         coll: AsyncIOMotorCollection,
         pyhiera: PyHiera,
     ):
-        super(CrudHieraKeyModelsDynamic, self).__init__(
+        super().__init__(
             config=config,
             log=log,
             coll=coll,
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("id", pymongo.ASCENDING)],
+                unique=True,
+            )
         )
         self._key_model_adapter = CrudHieraModelsDynamicAdapter(
             log=log,
@@ -203,11 +217,9 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
             pyhiera=pyhiera,
         )
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self._key_model_adapter.run()
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
         self,
@@ -219,9 +231,14 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
             raise QueryParamValidationError(msg=f"key model {_id} not found")
         data = payload.model_dump()
         data["id"] = _id
-        result = await self._create(payload=data, fields=fields)
+        result = await self._create(
+            payload=data,
+            fields=fields,
+        )
         self._key_model_adapter.model_register(
-            _id, data["model"], data.get("description")
+            model_id=_id,
+            schema=data["model"],
+            description=data.get("description"),
         )
         return HieraKeyModelGet(**result)
 

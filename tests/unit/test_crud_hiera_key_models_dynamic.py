@@ -57,7 +57,9 @@ class TestCrudHieraKeyModelsDynamicUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.id, "dynamic:test")
         self.mock_adapter.model_register.assert_called_once_with(
-            "dynamic:test", valid_model, "desc"
+            model_id="dynamic:test",
+            schema=valid_model,
+            description="desc",
         )
 
     async def test_create_invalid_prefix(self):

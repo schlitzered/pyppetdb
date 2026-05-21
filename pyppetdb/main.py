@@ -81,6 +81,7 @@ from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.manager import CrudManager
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
@@ -132,6 +133,37 @@ async def expire_scheduled_jobs_worker(
             log.error(f"Error in scheduled jobs expiration worker: {e}")
 
         await asyncio.sleep(60)
+
+
+async def migrate_ca_configs(
+    log: logging.Logger,
+    ca_service: CAService,
+):
+    from pyppetdb.model.ca_validation import CAValidationConfig
+
+    default_config = CAValidationConfig().model_dump()
+
+    # Authorities
+    authorities_coll = ca_service._crud_authorities.coll
+    res_auth = await authorities_coll.update_many(
+        {"validation_config": {"$exists": False}},
+        {"$set": {"validation_config": default_config}},
+    )
+    if res_auth.modified_count > 0:
+        log.info(
+            f"Migrated {res_auth.modified_count} CA Authorities with default validation config"
+        )
+
+    # Spaces
+    spaces_coll = ca_service._crud_spaces.coll
+    res_spaces = await spaces_coll.update_many(
+        {"validation_config": {"$exists": False}},
+        {"$set": {"validation_config": default_config}},
+    )
+    if res_spaces.modified_count > 0:
+        log.info(
+            f"Migrated {res_spaces.modified_count} CA Spaces with default validation config"
+        )
 
 
 async def ensure_default_ca_setup(
@@ -199,6 +231,8 @@ async def prepare_env():
         url=settings.mongodb.url,
     )
 
+    crud_manager = CrudManager(log=log)
+
     nodes_data_protector = NodesDataProtector(
         app_secret_key=settings.app.secretkey,
         log=log,
@@ -240,162 +274,182 @@ async def prepare_env():
     )
     env["crud_ldap"] = crud_ldap
 
-    crud_hiera_levels = CrudHieraLevels(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_levels"],
+    crud_hiera_levels = crud_manager.register(
+        CrudHieraLevels(
+            config=settings,
+            log=log,
+            coll=mongo_db["hiera_levels"],
+        )
     )
-    await crud_hiera_levels.index_create()
     env["crud_hiera_levels"] = crud_hiera_levels
 
-    crud_hiera_level_data = CrudHieraLevelData(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_level_data"],
+    crud_hiera_level_data = crud_manager.register(
+        CrudHieraLevelData(
+            config=settings,
+            log=log,
+            coll=mongo_db["hiera_level_data"],
+        )
     )
-    await crud_hiera_level_data.index_create()
     env["crud_hiera_level_data"] = crud_hiera_level_data
 
-    crud_hiera_lookup_cache = CrudHieraLookupCache(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_lookup_cache"],
+    crud_hiera_lookup_cache = crud_manager.register(
+        CrudHieraLookupCache(
+            config=settings,
+            log=log,
+            coll=mongo_db["hiera_lookup_cache"],
+        )
     )
-    await crud_hiera_lookup_cache.index_create()
     env["crud_hiera_lookup_cache"] = crud_hiera_lookup_cache
 
-    crud_job_definitions = CrudJobsDefinitions(
-        config=settings,
-        log=log,
-        coll=mongo_db["jobs_definitions"],
+    crud_job_definitions = crud_manager.register(
+        CrudJobsDefinitions(
+            config=settings,
+            log=log,
+            coll=mongo_db["jobs_definitions"],
+        )
     )
-    await crud_job_definitions.index_create()
     env["crud_job_definitions"] = crud_job_definitions
 
-    crud_node_jobs = CrudJobsNodeJobs(
-        config=settings,
-        log=log,
-        coll=mongo_db["jobs_node_jobs"],
+    crud_node_jobs = crud_manager.register(
+        CrudJobsNodeJobs(
+            config=settings,
+            log=log,
+            coll=mongo_db["jobs_node_jobs"],
+        )
     )
-    await crud_node_jobs.index_create()
     env["crud_node_jobs"] = crud_node_jobs
 
-    crud_jobs = CrudJobs(
-        config=settings,
-        log=log,
-        coll=mongo_db["jobs"],
+    crud_jobs = crud_manager.register(
+        CrudJobs(
+            config=settings,
+            log=log,
+            coll=mongo_db["jobs"],
+        )
     )
-    await crud_jobs.index_create()
     env["crud_jobs"] = crud_jobs
 
-    crud_nodes_catalog_cache = CrudNodesCatalogCache(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_catalog_cache"],
-        protector=nodes_data_protector,
+    crud_nodes_catalog_cache = crud_manager.register(
+        CrudNodesCatalogCache(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes_catalog_cache"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_nodes_catalog_cache.index_create()
     env["crud_nodes_catalog_cache"] = crud_nodes_catalog_cache
 
-    crud_nodes = CrudNodes(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes"],
+    crud_nodes = crud_manager.register(
+        CrudNodes(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes"],
+        )
     )
-    await crud_nodes.index_create()
     env["crud_nodes"] = crud_nodes
 
-    crud_nodes_secrets_redactor = CrudNodesSecretsRedactor(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_secrets_redactor"],
-        redactor=nodes_secrets_redactor,
+    crud_nodes_secrets_redactor = crud_manager.register(
+        CrudNodesSecretsRedactor(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes_secrets_redactor"],
+            redactor=nodes_secrets_redactor,
+        )
     )
-    await crud_nodes_secrets_redactor.index_create()
     env["crud_nodes_secrets_redactor"] = crud_nodes_secrets_redactor
 
-    crud_nodes_catalogs = CrudNodesCatalogs(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_catalogs"],
-        secret_manager=nodes_catalogs_redactor,
+    crud_nodes_catalogs = crud_manager.register(
+        CrudNodesCatalogs(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes_catalogs"],
+            secret_manager=nodes_catalogs_redactor,
+        )
     )
-    await crud_nodes_catalogs.index_create()
     env["crud_nodes_catalogs"] = crud_nodes_catalogs
 
-    crud_nodes_groups = CrudNodesGroups(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_groups"],
+    crud_nodes_groups = crud_manager.register(
+        CrudNodesGroups(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes_groups"],
+        )
     )
-    await crud_nodes_groups.index_create()
     env["crud_nodes_groups"] = crud_nodes_groups
 
-    crud_nodes_reports = CrudNodesReports(
-        config=settings,
-        log=log,
-        coll=mongo_db["nodes_reports"],
-        secret_manager=nodes_reports_redactor,
+    crud_nodes_reports = crud_manager.register(
+        CrudNodesReports(
+            config=settings,
+            log=log,
+            coll=mongo_db["nodes_reports"],
+            secret_manager=nodes_reports_redactor,
+        )
     )
-    await crud_nodes_reports.index_create()
     env["crud_nodes_reports"] = crud_nodes_reports
 
-    crud_pyppetdb_nodes = CrudPyppetDBNodes(
-        config=settings,
-        log=log,
-        coll=mongo_db["pyppetdb_nodes"],
+    crud_pyppetdb_nodes = crud_manager.register(
+        CrudPyppetDBNodes(
+            config=settings,
+            log=log,
+            coll=mongo_db["pyppetdb_nodes"],
+        )
     )
-    await crud_pyppetdb_nodes.index_create()
     env["crud_pyppetdb_nodes"] = crud_pyppetdb_nodes
 
-    crud_teams = CrudTeams(
-        config=settings,
-        log=log,
-        coll=mongo_db["teams"],
+    crud_teams = crud_manager.register(
+        CrudTeams(
+            config=settings,
+            log=log,
+            coll=mongo_db["teams"],
+        )
     )
-    await crud_teams.index_create()
     env["crud_teams"] = crud_teams
 
-    crud_users = CrudUsers(
-        config=settings,
-        log=log,
-        coll=mongo_db["users"],
-        crud_ldap=crud_ldap,
+    crud_users = crud_manager.register(
+        CrudUsers(
+            config=settings,
+            log=log,
+            coll=mongo_db["users"],
+            crud_ldap=crud_ldap,
+        )
     )
-    await crud_users.index_create()
     env["crud_users"] = crud_users
 
-    crud_users_credentials = CrudCredentials(
-        config=settings,
-        log=log,
-        coll=mongo_db["users_credentials"],
+    crud_users_credentials = crud_manager.register(
+        CrudCredentials(
+            config=settings,
+            log=log,
+            coll=mongo_db["users_credentials"],
+        )
     )
-    await crud_users_credentials.index_create()
     env["crud_users_credentials"] = crud_users_credentials
 
-    crud_ca_authorities = CrudCAAuthorities(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_authorities"],
-        protector=nodes_data_protector,
+    crud_ca_authorities = crud_manager.register(
+        CrudCAAuthorities(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_authorities"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_authorities.index_create()
     env["crud_ca_authorities"] = crud_ca_authorities
 
-    crud_ca_spaces = CrudCASpaces(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_spaces"],
+    crud_ca_spaces = crud_manager.register(
+        CrudCASpaces(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_spaces"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_spaces.index_create()
     env["crud_ca_spaces"] = crud_ca_spaces
 
-    crud_ca_certificates = CrudCACertificates(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_certificates"],
+    crud_ca_certificates = crud_manager.register(
+        CrudCACertificates(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_certificates"],
+        )
     )
-    await crud_ca_certificates.index_create()
     env["crud_ca_certificates"] = crud_ca_certificates
 
     ca_service = CAService(
@@ -435,22 +489,24 @@ async def prepare_env():
     )
     env["pyhiera"] = pyhiera
 
-    crud_hiera_key_models_dynamic = CrudHieraKeyModelsDynamic(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_key_models_dynamic"],
-        pyhiera=pyhiera,
+    crud_hiera_key_models_dynamic = crud_manager.register(
+        CrudHieraKeyModelsDynamic(
+            config=settings,
+            log=log,
+            coll=mongo_db["hiera_key_models_dynamic"],
+            pyhiera=pyhiera,
+        )
     )
-    await crud_hiera_key_models_dynamic.index_create()
     env["crud_hiera_key_models_dynamic"] = crud_hiera_key_models_dynamic
 
-    crud_hiera_keys = CrudHieraKeys(
-        config=settings,
-        log=log,
-        coll=mongo_db["hiera_keys"],
-        pyhiera=pyhiera,
+    crud_hiera_keys = crud_manager.register(
+        CrudHieraKeys(
+            config=settings,
+            log=log,
+            coll=mongo_db["hiera_keys"],
+            pyhiera=pyhiera,
+        )
     )
-    await crud_hiera_keys.index_create()
     env["crud_hiera_keys"] = crud_hiera_keys
 
     crud_hiera_key_models_static = CrudHieraKeyModelsStatic(
@@ -459,6 +515,8 @@ async def prepare_env():
         pyhiera=pyhiera,
     )
     env["crud_hiera_key_models_static"] = crud_hiera_key_models_static
+
+    await crud_manager.init_all()
 
     authorize_pyppetdb = AuthorizePyppetDB(
         log=log,
@@ -652,12 +710,18 @@ async def cli_create_admin(
         ldap_url=settings.ldap.url,
         ldap_user_pattern=settings.ldap.userpattern,
     )
-    crud_users = CrudUsers(
-        config=settings,
-        log=log,
-        coll=mongo_db["users"],
-        crud_ldap=crud_ldap,
+
+    crud_manager = CrudManager(log=log)
+    crud_users = crud_manager.register(
+        CrudUsers(
+            config=settings,
+            log=log,
+            coll=mongo_db["users"],
+            crud_ldap=crud_ldap,
+        )
     )
+
+    await crud_manager.init_all()
 
     try:
         await crud_users.get(_id=user_id, fields=["_id"])
@@ -713,27 +777,35 @@ async def cli_init_ca(
         log=log,
     )
 
-    crud_ca_authorities = CrudCAAuthorities(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_authorities"],
-        protector=nodes_data_protector,
-    )
-    await crud_ca_authorities.index_create()
+    crud_manager = CrudManager(log=log)
 
-    crud_ca_spaces = CrudCASpaces(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_spaces"],
+    crud_ca_authorities = crud_manager.register(
+        CrudCAAuthorities(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_authorities"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_spaces.index_create()
 
-    crud_ca_certificates = CrudCACertificates(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_certificates"],
+    crud_ca_spaces = crud_manager.register(
+        CrudCASpaces(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_spaces"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_certificates.index_create()
+
+    crud_ca_certificates = crud_manager.register(
+        CrudCACertificates(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_certificates"],
+        )
+    )
+
+    await crud_manager.init_all()
 
     ca_service = CAService(
         log=log,
@@ -800,27 +872,35 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         log=log,
     )
 
-    crud_ca_authorities = CrudCAAuthorities(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_authorities"],
-        protector=nodes_data_protector,
-    )
-    await crud_ca_authorities.index_create()
+    crud_manager = CrudManager(log=log)
 
-    crud_ca_spaces = CrudCASpaces(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_spaces"],
+    crud_ca_authorities = crud_manager.register(
+        CrudCAAuthorities(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_authorities"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_spaces.index_create()
 
-    crud_ca_certificates = CrudCACertificates(
-        config=settings,
-        log=log,
-        coll=mongo_db["ca_certificates"],
+    crud_ca_spaces = crud_manager.register(
+        CrudCASpaces(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_spaces"],
+            protector=nodes_data_protector,
+        )
     )
-    await crud_ca_certificates.index_create()
+
+    crud_ca_certificates = crud_manager.register(
+        CrudCACertificates(
+            config=settings,
+            log=log,
+            coll=mongo_db["ca_certificates"],
+        )
+    )
+
+    await crud_manager.init_all()
 
     ca_service = CAService(
         log=log,
@@ -861,9 +941,10 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
     encrypted_key = nodes_data_protector.encrypt_string(ca_key_pem.decode())
 
     crl_pem, next_update = CAUtils.generate_crl(
-        ca_cert_pem=ca_cert_pem,
-        ca_key_pem=ca_key_pem,
+        ca_cert=ca_cert_pem,
+        ca_key=ca_key_pem,
         revoked_certs=[],
+        validity_days=settings.ca.crlValidityDays,
     )
     now = datetime.datetime.now(datetime.timezone.utc)
 

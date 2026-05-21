@@ -22,7 +22,9 @@ from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ca.service import CAService
-from pyppetdb.errors import ResourceNotFound, QueryParamValidationError
+from pyppetdb.errors import ResourceNotFound
+from pyppetdb.errors import QueryParamValidationError
+from pyppetdb.errors import DuplicateResource
 from pyppetdb.model.ca_certificates import CACertificatePut
 
 
@@ -178,6 +180,8 @@ class ControllerPuppetCaV1CA:
 
         except QueryParamValidationError as e:
             raise HTTPException(status_code=400, detail=e.detail)
+        except DuplicateResource as e:
+            raise HTTPException(status_code=400, detail=e.detail)
         except asyncio.CancelledError:
             self.log.info(
                 f"CSR submission for {nodename} cancelled, rolling back DB entry"
@@ -248,6 +252,8 @@ class ControllerPuppetCaV1CA:
         except ResourceNotFound as e:
             raise HTTPException(status_code=404, detail=e.detail)
         except QueryParamValidationError as e:
+            raise HTTPException(status_code=400, detail=e.detail)
+        except DuplicateResource as e:
             raise HTTPException(status_code=400, detail=e.detail)
         except asyncio.CancelledError:
             raise

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import datetime
 import typing
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -29,39 +30,67 @@ class CrudCACertificates(CrudMongo):
     def __init__(
         self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection
     ):
-        super().__init__(config, log, coll)
+        super().__init__(config, log, coll, schema_model=CACertificateGet)
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel(
+                    [("serial_number", pymongo.ASCENDING)],
+                    unique=True,
+                    sparse=True,
+                    name="idx_serial_number",
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("space_id", pymongo.ASCENDING),
+                        ("cert_uniqueness", pymongo.ASCENDING),
+                    ],
+                    unique=True,
+                    name="idx_space_uniqueness",
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("space_id", pymongo.ASCENDING),
+                        ("status", pymongo.ASCENDING),
+                        ("cn", pymongo.ASCENDING),
+                    ],
+                    name="idx_space_status_cn",
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("ca_id", pymongo.ASCENDING),
+                        ("status", pymongo.ASCENDING),
+                        ("cn", pymongo.ASCENDING),
+                    ],
+                    name="idx_ca_status_cn",
+                ),
+                pymongo.IndexModel(
+                    [("not_after", pymongo.ASCENDING)],
+                    expireAfterSeconds=0,
+                    name="ttl_not_after",
+                ),
+            ]
+        )
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index(
-            [("space_id", pymongo.ASCENDING), ("cert_uniqueness", pymongo.ASCENDING)],
-            unique=True,
-        )
-        await self.coll.create_index(
-            [
-                ("space_id", pymongo.ASCENDING),
-                ("status", pymongo.ASCENDING),
-                ("cn", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [
-                ("ca_id", pymongo.ASCENDING),
-                ("status", pymongo.ASCENDING),
-                ("cn", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [("not_after", pymongo.ASCENDING)], expireAfterSeconds=0
-        )
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def update(
-        self, query: dict, payload: dict, fields: list, upsert: bool = False
+        self,
+        query: dict,
+        payload: dict,
+        fields: list,
+        upsert: bool = False,
+        set_on_insert: dict = None,
     ) -> CACertificateGet:
         result = await self._update(
-            query=query, payload=payload, fields=fields, upsert=upsert
+            query=query,
+            payload=payload,
+            fields=fields,
+            upsert=upsert,
+            set_on_insert=set_on_insert,
         )
         return CACertificateGet(**result)
 
@@ -110,7 +139,9 @@ class CrudCACertificates(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(cert["serial_number"]),
-                    "revocation_date": cert["revocation_date"],
+                    "revocation_date": cert.get(
+                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
+                    ),
                 }
             )
         return revoked

@@ -249,7 +249,9 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
             self.assertNotEqual(new_cert.serial_number, old_cert.serial_number)
 
             # 4. Verify old cert is now revoked in DB
-            old_cert_doc = self._db["ca_certificates"].find_one({"id": old_serial})
+            old_cert_doc = self._db["ca_certificates"].find_one(
+                {"serial_number": old_serial}
+            )
             self.assertEqual(old_cert_doc["status"], "revoked")
 
             # 5. Verify new cert is now the one returned by GET /certificate/{nodename}

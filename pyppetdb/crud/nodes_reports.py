@@ -85,26 +85,30 @@ class CrudNodesReports(CrudMongo):
             coll=coll,
         )
         self._secret_manager = secret_manager
-
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
+        self._indices.extend(
             [
-                ("placement", pymongo.ASCENDING),
-                ("node_id", pymongo.ASCENDING),
-                ("id", pymongo.ASCENDING),
-            ],
-            unique=True,
+                pymongo.IndexModel(
+                    [
+                        ("placement", pymongo.ASCENDING),
+                        ("node_id", pymongo.ASCENDING),
+                        ("id", pymongo.ASCENDING),
+                    ],
+                    unique=True,
+                    name="idx_placement_node_id_report_id",
+                ),
+                pymongo.IndexModel(
+                    [("report.status", pymongo.ASCENDING)], name="idx_report_status"
+                ),
+            ]
         )
-        await self.coll.create_index([("report.status", pymongo.ASCENDING)])
 
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self._create_ttl_index(
-            field="id",
+            field="created",
             ttl_seconds=self.config.app.main.storeHistory.ttl,
             index_name="ttl_report_history",
         )
-
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
         self,

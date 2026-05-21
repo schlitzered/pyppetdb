@@ -133,31 +133,23 @@ class CrudNodesGroups(CrudMongo):
             coll=coll,
         )
         self._cache = CrudNodesGroupsCache(log=log, coll=coll)
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel([("nodes", pymongo.ASCENDING)], name="idx_nodes"),
+                pymongo.IndexModel([("teams", pymongo.ASCENDING)], name="idx_teams"),
+            ]
+        )
 
     @property
     def cache(self):
         return self._cache
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
-            [
-                ("id", pymongo.ASCENDING),
-            ],
-            unique=True,
-        )
-        await self.coll.create_index(
-            [
-                ("nodes", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [
-                ("teams", pymongo.ASCENDING),
-            ]
-        )
+    async def _create_index(self) -> None:
+        await super()._create_index()
         await self.cache.run()
-        self.log.info(f"creating {self.resource_type} indices, done")
 
     async def create(
         self,

@@ -43,31 +43,23 @@ class CrudTeams(CrudMongo):
             log=log,
             coll=coll,
         )
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel(
+                    [("ldap_group", pymongo.ASCENDING)], name="idx_ldap_group"
+                ),
+                pymongo.IndexModel(
+                    [("oauth_groups", pymongo.ASCENDING)], name="idx_oauth_groups"
+                ),
+                pymongo.IndexModel([("users", pymongo.ASCENDING)], name="idx_users"),
+            ]
+        )
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index(
-            [
-                ("id", pymongo.ASCENDING),
-            ],
-            unique=True,
-        )
-        await self.coll.create_index(
-            [
-                ("ldap_group", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [
-                ("users", pymongo.ASCENDING),
-            ]
-        )
-        await self.coll.create_index(
-            [
-                ("permissions", pymongo.ASCENDING),
-            ]
-        )
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def create(
         self,

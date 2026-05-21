@@ -28,7 +28,10 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll = MagicMock()
         self.mock_protector = MagicMock()
         self.crud = CrudNodesCatalogCache(
-            self.log, self.mock_config, self.mock_coll, self.mock_protector
+            config=self.mock_config,
+            log=self.log,
+            coll=self.mock_coll,
+            protector=self.mock_protector,
         )
 
     async def test_get_cached(self):

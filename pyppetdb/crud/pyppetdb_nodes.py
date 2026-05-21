@@ -29,8 +29,8 @@ from pyppetdb.model.pyppetdb_nodes import PyppetDBNodeGetMulti
 class CrudPyppetDBNodes(CrudMongo):
     def __init__(
         self,
-        log: logging.Logger,
         config: Config,
+        log: logging.Logger,
         coll: AsyncIOMotorCollection,
     ):
         super(CrudPyppetDBNodes, self).__init__(
@@ -38,12 +38,19 @@ class CrudPyppetDBNodes(CrudMongo):
             log=log,
             coll=coll,
         )
+        self._indices.extend(
+            [
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                ),
+                pymongo.IndexModel(
+                    [("heartbeat", pymongo.ASCENDING)], name="idx_heartbeat"
+                ),
+            ]
+        )
 
-    async def index_create(self) -> None:
-        self.log.info(f"creating {self.resource_type} indices")
-        await self.coll.create_index([("id", pymongo.ASCENDING)], unique=True)
-        await self.coll.create_index([("heartbeat", pymongo.ASCENDING)])
-        self.log.info(f"creating {self.resource_type} indices, done")
+    async def _create_index(self) -> None:
+        await super()._create_index()
 
     async def heartbeat_update(self, _id: str) -> None:
         now = datetime.now()

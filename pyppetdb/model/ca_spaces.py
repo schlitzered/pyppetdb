@@ -17,13 +17,16 @@ from typing import Optional
 from typing import Literal
 from typing import get_args as typing_get_args
 from pydantic import BaseModel
+from pydantic import Field
 from pyppetdb.model.common import MetaMulti
+from pyppetdb.model.ca_validation import CAValidationConfig
 
 filter_literal = Literal[
     "id",
     "ca_id",
     "ca_id_history",
     "description",
+    "validation_config",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -37,6 +40,7 @@ sort_literal = Literal[
 class CASpacePost(BaseModel):
     ca_id: str
     description: Optional[str] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
 class CASpaceGet(BaseModel):
@@ -44,6 +48,7 @@ class CASpaceGet(BaseModel):
     ca_id: Optional[str] = None
     ca_id_history: Optional[List[str]] = None
     description: Optional[str] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
 class CASpaceGetMulti(BaseModel):
@@ -54,3 +59,4 @@ class CASpaceGetMulti(BaseModel):
 class CASpacePut(BaseModel):
     ca_id: Optional[str] = None
     description: Optional[str] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
