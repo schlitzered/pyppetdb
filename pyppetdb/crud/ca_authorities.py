@@ -23,11 +23,17 @@ from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSessio
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
-from pyppetdb.model.ca_authorities import CAAuthorityGet, CAAuthorityPost
+from pyppetdb.model.ca_authorities import (
+    CAAuthorityGet,
+    CAAuthorityPost,
+    CAAuthorityPostInternal,
+)
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
+from pyppetdb.model.ca_authorities import CAAuthorityPutInternal
 from pyppetdb.model.ca_authorities import CACRL
 from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
+from pyppetdb.model.common import DataDelete
 from pyppetdb.ca.validation_protector import CAValidationProtector
 from pyppetdb.model.ca_validation import CAValidationConfig
 
@@ -136,7 +142,7 @@ class CrudCAAuthorities(CrudMongo):
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
     ):
-        super().__init__(config, log, coll, schema_model=CAAuthorityPost)
+        super().__init__(config, log, coll, schema_model=CAAuthorityGet)
         self._protector = protector
         self._cache = CrudCAAuthoritiesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
@@ -147,11 +153,16 @@ class CrudCAAuthorities(CrudMongo):
     def cache(self):
         return self._cache
 
-    async def get_cached(self, _id: str) -> CAAuthorityGet:
-        if _id not in self.cache.cache:
-            # Fallback to DB if not in cache (maybe not yet initialized or just inserted)
-            return await self.get(_id, fields=None)
-        return self.cache.cache[_id]
+    async def get(
+        self,
+        _id: str,
+        fields: list,
+        use_cache: bool = True,
+    ) -> CAAuthorityGet:
+        if use_cache and _id in self.cache.cache:
+            return self.cache.cache[_id]
+        result = await self._get(query={"id": _id}, fields=fields)
+        return CAAuthorityGet(**result)
 
     async def get_private_key_cached(self, _id: str) -> bytes:
         if _id not in self.cache.key_cache:
@@ -225,30 +236,30 @@ class CrudCAAuthorities(CrudMongo):
                 f"Migrated {res.modified_count} CA Authorities with default validation config"
             )
 
-    async def insert(self, payload: dict, fields: list) -> CAAuthorityGet:
-        await self._encrypt_validation_config(payload, ca_id=payload.get("id"))
-        result = await self._create(payload=payload, fields=fields)
+    async def create(
+        self, _id: str, payload: CAAuthorityPostInternal, fields: list
+    ) -> CAAuthorityGet:
+        data = payload.model_dump()
+        data["id"] = _id
+        await self._encrypt_validation_config(data, ca_id=_id)
+        result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
     async def update(
-        self, query: dict, payload: dict, fields: list, upsert: bool = False
+        self, _id: str, payload: CAAuthorityPutInternal, fields: list
     ) -> CAAuthorityGet:
-        await self._encrypt_validation_config(payload, ca_id=query.get("id"))
-        result = await self._update(
-            query=query, payload=payload, fields=fields, upsert=upsert
-        )
-        return CAAuthorityGet(**result)
-
-    async def get(self, _id: str, fields: list) -> CAAuthorityGet:
-        result = await self._get(query={"id": _id}, fields=fields)
+        data = payload.model_dump(exclude_unset=True)
+        await self._encrypt_validation_config(data, ca_id=_id)
+        result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
     async def resource_exists(self, _id: str) -> str:
         query = {"id": _id}
         return await self._resource_exists(query=query)
 
-    async def delete(self, _id: str) -> None:
+    async def delete(self, _id: str) -> DataDelete:
         await self._delete(query={"id": _id})
+        return DataDelete()
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
@@ -258,7 +269,7 @@ class CrudCAAuthorities(CrudMongo):
         decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
         return decrypted.encode()
 
-    async def get_revoked(self, parent_id: str) -> list[dict]:
+    async def get_revoked_for_ca(self, parent_id: str) -> list[dict]:
         cursor = self.coll.find(
             {"parent_id": parent_id, "status": "revoked"},
             {"serial_number": 1, "revocation_date": 1},

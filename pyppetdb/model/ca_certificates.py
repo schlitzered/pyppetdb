@@ -37,6 +37,7 @@ filter_literal = Literal[
     "not_after",
     "serial_number",
     "created",
+    "revocation_date",
     "ca",
     "ca_chain",
     "sans",
@@ -52,6 +53,7 @@ sort_literal = Literal[
     "not_before",
     "not_after",
     "created",
+    "revocation_date",
 ]
 
 
@@ -69,6 +71,7 @@ class CACertificateGet(BaseModel):
     serial_number: Optional[str] = None
     created: Optional[datetime] = None
     cert_uniqueness: Optional[str] = None
+    revocation_date: Optional[datetime] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
     sans: List[str] = []
@@ -81,3 +84,40 @@ class CACertificateGetMulti(BaseModel):
 
 class CACertificatePut(BaseModel):
     status: Literal["signed", "revoked"]
+
+
+class CACertificatePutInternal(CACertificatePut):
+    id: Optional[str] = None
+    ca_id: Optional[str] = None
+    cn: Optional[str] = None
+    space_id: Optional[str] = None
+    status: Optional[CAStatus] = None
+    fingerprint: Optional[Fingerprints] = None
+    certificate: Optional[str] = None
+    csr: Optional[str] = None
+    not_before: Optional[datetime] = None
+    not_after: Optional[datetime] = None
+    serial_number: Optional[str] = None
+    cert_uniqueness: Optional[str] = None
+    revocation_date: Optional[datetime] = None
+    ca: Optional[str] = None
+    ca_chain: List[str] = []
+    sans: List[str] = []
+
+
+class CACertificatePostInternal(BaseModel):
+    id: str
+    ca_id: str
+    cn: str
+    space_id: str
+    status: CAStatus
+    fingerprint: Optional[Fingerprints] = None
+    certificate: Optional[str] = None
+    csr: Optional[str] = None
+    not_before: Optional[datetime] = None
+    not_after: Optional[datetime] = None
+    serial_number: Optional[str] = None
+    cert_uniqueness: str
+    ca: Optional[str] = None
+    ca_chain: List[str] = []
+    sans: List[str] = []

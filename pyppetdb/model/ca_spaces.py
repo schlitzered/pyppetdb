@@ -60,3 +60,7 @@ class CASpacePut(BaseModel):
     ca_id: Optional[str] = None
     description: Optional[str] = None
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
+
+
+class CASpacePutInternal(CASpacePut):
+    ca_id_history: Optional[List[str]] = None

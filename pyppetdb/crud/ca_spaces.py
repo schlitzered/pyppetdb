@@ -18,7 +18,9 @@ import typing
 import pymongo
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost
 from pyppetdb.model.ca_spaces import CASpaceGetMulti
+from pyppetdb.model.ca_spaces import CASpacePutInternal
 from pyppetdb.model.common import sort_order_literal
+from pyppetdb.model.common import DataDelete
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
 from pyppetdb.config import Config
@@ -167,10 +169,16 @@ class CrudCASpaces(CrudMongo):
             encrypted = protector.encrypt_config(config)
             payload["validation_config"] = encrypted.model_dump()
 
-    async def get_cached(self, _id: str) -> CASpaceGet:
-        if _id not in self.cache.cache:
-            return await self.get(_id, fields=None)
-        return self.cache.cache[_id]
+    async def get(
+        self,
+        _id: str,
+        fields: list,
+        use_cache: bool = True,
+    ) -> CASpaceGet:
+        if use_cache and _id in self.cache.cache:
+            return self.cache.cache[_id]
+        result = await self._get(query={"id": _id}, fields=fields)
+        return CASpaceGet(**result)
 
     async def _create_index(self) -> None:
         await super()._create_index()
@@ -193,38 +201,32 @@ class CrudCASpaces(CrudMongo):
                 f"Migrated {res.modified_count} CA Spaces with default validation config"
             )
 
-    async def insert(self, payload: dict, fields: list) -> CASpaceGet:
-        await self._encrypt_validation_config(payload, space_id=payload.get("id"))
-        result = await self._create(payload=payload, fields=fields)
+    async def create(self, _id: str, payload: CASpacePost, fields: list) -> CASpaceGet:
+        data = payload.model_dump()
+        data["id"] = _id
+        await self._encrypt_validation_config(data, space_id=_id)
+        result = await self._create(payload=data, fields=fields)
         return CASpaceGet(**result)
 
     async def update(
-        self, query: dict, payload: dict, fields: list, upsert: bool = False
+        self, _id: str, payload: CASpacePutInternal, fields: list
     ) -> CASpaceGet:
-        await self._encrypt_validation_config(payload, space_id=query.get("id"))
-        result = await self._update(
-            query=query, payload=payload, fields=fields, upsert=upsert
-        )
-        return CASpaceGet(**result)
-
-    async def get(
-        self,
-        _id: str,
-        fields: list,
-    ) -> CASpaceGet:
-        result = await self._get(query={"id": _id}, fields=fields)
+        data = payload.model_dump(exclude_unset=True)
+        await self._encrypt_validation_config(data, space_id=_id)
+        result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CASpaceGet(**result)
 
     async def resource_exists(self, _id: str) -> str:
         query = {"id": _id}
         return await self._resource_exists(query=query)
 
-    async def delete(self, query: dict) -> None:
-        if query.get("id") == "puppet-ca":
+    async def delete(self, _id: str) -> DataDelete:
+        if _id == "puppet-ca":
             raise QueryParamValidationError(
                 msg="The 'puppet-ca' space is protected and cannot be deleted"
             )
-        await self._delete(query=query)
+        await self._delete(query={"id": _id})
+        return DataDelete()
 
     async def remove_ca_from_history(self, ca_id: str) -> None:
         await self.coll.update_many(

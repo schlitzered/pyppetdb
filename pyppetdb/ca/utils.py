@@ -549,13 +549,44 @@ class CAUtils:
     ) -> bytes:
         if isinstance(csr, bytes):
             csr = x509.load_pem_x509_csr(
-                data=csr,
+                data=csr.strip(),
             )
 
         return CAUtils._build_and_sign_certificate(
             subject=csr.subject,
             public_key=csr.public_key(),
             extensions=csr.extensions,
+            ca_cert=ca_cert,
+            ca_key=ca_key,
+            key_usages=key_usages,
+            extended_key_usages=extended_key_usages,
+            validity_days=validity_days,
+            serial_number=serial_number,
+            allowed_extensions=allowed_extensions,
+            injected_sans=injected_sans,
+        )
+
+    @staticmethod
+    def renew_cert(
+        cert: Union[bytes, x509.Certificate],
+        ca_cert: Union[bytes, x509.Certificate],
+        ca_key: Union[bytes, rsa.RSAPrivateKey],
+        key_usages: dict[str, bool],
+        extended_key_usages: List[str],
+        validity_days: int = 365,
+        serial_number: Optional[int] = None,
+        allowed_extensions: Optional[List[str]] = None,
+        injected_sans: Optional[List[str]] = None,
+    ) -> bytes:
+        if isinstance(cert, bytes):
+            cert = x509.load_pem_x509_certificate(
+                data=cert.strip(),
+            )
+
+        return CAUtils._build_and_sign_certificate(
+            subject=cert.subject,
+            public_key=cert.public_key(),
+            extensions=cert.extensions,
             ca_cert=ca_cert,
             ca_key=ca_key,
             key_usages=key_usages,

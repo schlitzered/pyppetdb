@@ -187,6 +187,7 @@ async def ensure_default_ca_setup(
                     state="Hessen",
                     validity_days=3650,
                 ),
+                fields=[],
             )
         except DuplicateResource:
             log.info(
@@ -202,6 +203,7 @@ async def ensure_default_ca_setup(
             await ca_service.create_space(
                 _id=default_id,
                 payload=CASpacePost(ca_id=default_id),
+                fields=[],
             )
         except DuplicateResource:
             log.info(f"Default CA Space '{default_id}' was created by another process")
@@ -982,6 +984,7 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
     await ca_service.create_space(
         _id=puppet_ca_id,
         payload=CASpacePost(ca_id=puppet_ca_id),
+        fields=[],
     )
     log.info(f"CA Space '{puppet_ca_id}' created successfully.")
 
