@@ -247,7 +247,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             )
         self.assertIn("does not match any allowed patterns", str(cm.exception))
 
-    def test_get_injected_sans_success(self):
+    async def test_get_injected_sans_success(self):
         from pyppetdb.model.ca_validation import CASANInjection
 
         cn = "www-1.prod.fra.dc.example.com"
@@ -261,7 +261,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                 ]
             )
         ]
-        injected = self.service._get_injected_sans(cn, configs)
+        injected = await self.service._get_injected_sans(cn, configs)
         self.assertIn("www-svc.prod.fra.dc.example.com", injected)
         self.assertIn("www-admin.prod.fra.dc.example.com", injected)
         self.assertEqual(len(injected), 2)
@@ -275,7 +275,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
 
         self.config.ca.autoSign = True
         self.crud_certificates.get_by_cn.side_effect = ResourceNotFound
-        self.crud_certificates.insert.return_value = MagicMock(id="123")
+        self.crud_certificates.create.return_value = MagicMock(id="123")
         self.crud_certificates.get.return_value = MagicMock(
             id="123", space_id="space1", cn="node-1", csr="PEM", status="requested"
         )
@@ -288,10 +288,10 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             ]
         )
 
-        self.crud_spaces.get_cached.return_value = CASpaceGet(
+        self.crud_spaces.get.return_value = CASpaceGet(
             ca_id="ca1", validation_config=CAValidationConfig()
         )
-        self.crud_authorities.get_cached.return_value = CAAuthorityGet(
+        self.crud_authorities.get.return_value = CAAuthorityGet(
             id="ca1", validation_config=ca_config
         )
         # Mock resources loading
@@ -319,13 +319,16 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             space_id="space1",
             csr_pem=csr_pem,
             cn="node-1",
+            fields=[],
         )
 
         await self.service.sign_certificate(
             space_id="space1",
             cn="node-1",
+            fields=[],
         )
 
         # Check if injected SAN was passed to sign_csr
         args, kwargs = mock_sign_csr.call_args
-        self.assertIn("svc-1.com", kwargs["injected_sans"])
+        # injected_sans is the 9th positional argument (index 8)
+        self.assertIn("svc-1.com", args[8])
