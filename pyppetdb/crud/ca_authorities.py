@@ -25,7 +25,6 @@ from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.ca_authorities import (
     CAAuthorityGet,
-    CAAuthorityPost,
     CAAuthorityPostInternal,
 )
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
