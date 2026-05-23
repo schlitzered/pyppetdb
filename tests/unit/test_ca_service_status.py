@@ -27,12 +27,14 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
+        self.crud_pyppetdb_nodes = MagicMock()
         self.service = CAService(
             log=self.log,
             config=self.config,
             crud_authorities=self.crud_authorities,
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
+            crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
         )
 
     async def test_update_certificate_status_transition_requested_to_signed(self):

@@ -56,7 +56,10 @@ class CrudPyppetDBNodes(CrudMongo):
         now = datetime.now()
         await self.coll.update_one(
             filter={"id": _id},
-            update={"$set": {"heartbeat": now}},
+            update={
+                "$set": {"heartbeat": now},
+                "$setOnInsert": {"online_since": now},
+            },
             upsert=True,
         )
 
@@ -97,3 +100,9 @@ class CrudPyppetDBNodes(CrudMongo):
             limit=limit,
         )
         return PyppetDBNodeGetMulti(**result)
+
+    async def get_leader(self) -> str | None:
+        cursor = self.coll.find({}).sort("online_since", pymongo.ASCENDING).limit(1)
+        async for doc in cursor:
+            return str(doc.get("id"))
+        return None

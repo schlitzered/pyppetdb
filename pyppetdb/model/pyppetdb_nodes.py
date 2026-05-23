@@ -23,6 +23,7 @@ from pyppetdb.model.common import MetaMulti
 filter_literal = Literal[
     "id",
     "heartbeat",
+    "online_since",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -30,12 +31,14 @@ filter_list = set(typing_get_args(filter_literal))
 sort_literal = Literal[
     "id",
     "heartbeat",
+    "online_since",
 ]
 
 
 class PyppetDBNodeGet(BaseModel):
     id: Optional[str] = None
     heartbeat: Optional[datetime] = None
+    online_since: Optional[datetime] = None
 
 
 class PyppetDBNodeGetMulti(BaseModel):

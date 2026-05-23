@@ -35,6 +35,10 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["filter"], {"id": "instance1"})
         self.assertTrue("heartbeat" in kwargs["update"]["$set"])
         self.assertIsInstance(kwargs["update"]["$set"]["heartbeat"], datetime)
+        self.assertTrue("online_since" in kwargs["update"]["$setOnInsert"])
+        self.assertIsInstance(
+            kwargs["update"]["$setOnInsert"]["online_since"], datetime
+        )
         self.assertEqual(kwargs["upsert"], True)
 
     async def test_delete(self):

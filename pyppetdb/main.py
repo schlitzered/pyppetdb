@@ -460,6 +460,7 @@ async def prepare_env():
         crud_authorities=crud_ca_authorities,
         crud_spaces=crud_ca_spaces,
         crud_certificates=crud_ca_certificates,
+        crud_pyppetdb_nodes=crud_pyppetdb_nodes,
     )
     env["ca_service"] = ca_service
 
@@ -807,6 +808,14 @@ async def cli_init_ca(
         )
     )
 
+    crud_pyppetdb_nodes = crud_manager.register(
+        CrudPyppetDBNodes(
+            config=settings,
+            log=log,
+            coll=mongo_db["pyppetdb_nodes"],
+        )
+    )
+
     await crud_manager.init_all()
 
     ca_service = CAService(
@@ -815,6 +824,7 @@ async def cli_init_ca(
         crud_authorities=crud_ca_authorities,
         crud_spaces=crud_ca_spaces,
         crud_certificates=crud_ca_certificates,
+        crud_pyppetdb_nodes=crud_pyppetdb_nodes,
     )
 
     await ensure_default_ca_setup(
@@ -902,6 +912,14 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         )
     )
 
+    crud_pyppetdb_nodes = crud_manager.register(
+        CrudPyppetDBNodes(
+            config=settings,
+            log=log,
+            coll=mongo_db["pyppetdb_nodes"],
+        )
+    )
+
     await crud_manager.init_all()
 
     ca_service = CAService(
@@ -910,6 +928,7 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         crud_authorities=crud_ca_authorities,
         crud_spaces=crud_ca_spaces,
         crud_certificates=crud_ca_certificates,
+        crud_pyppetdb_nodes=crud_pyppetdb_nodes,
     )
 
     puppet_ca_id = "puppet-ca"
@@ -1224,7 +1243,13 @@ async def main_run():
                 t.cancel()
                 with suppress(asyncio.CancelledError):
                     await t
-        await env["crud_nodes"].cleanup_remote_agents(via=socket.getfqdn())
+
+        instance_id = socket.getfqdn()
+        log.info(f"Removing PyppetDB node '{instance_id}' from database...")
+        with suppress(Exception):
+            await env["crud_pyppetdb_nodes"].delete(_id=instance_id)
+
+        await env["crud_nodes"].cleanup_remote_agents(via=instance_id)
 
         if "ldap_pool" in env and env["ldap_pool"]:
             log.info("Closing LDAP pool...")

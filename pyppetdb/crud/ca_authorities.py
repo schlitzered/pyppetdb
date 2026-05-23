@@ -16,7 +16,7 @@ import datetime
 import logging
 import asyncio
 import typing
-from typing import List, Optional
+from typing import Optional
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
 
@@ -342,7 +342,6 @@ class CrudCAAuthorities(CrudMongo):
                         "crl.crl_pem": crl_pem,
                         "crl.updated_at": now,
                         "crl.next_update": next_update,
-                        "crl.locked_at": None,
                         "crl.generation": current_generation + 1,
                     }
                 },
@@ -350,33 +349,3 @@ class CrudCAAuthorities(CrudMongo):
             if result.modified_count > 0:
                 updated = await self.coll.find_one({"id": ca_id}, {"crl": 1})
                 return CACRL(**updated["crl"])
-
-    async def lock_crl_acquire(
-        self,
-        ca_id: str,
-        lock_timeout_minutes: int = 10,
-    ) -> bool:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        timeout = now - datetime.timedelta(minutes=lock_timeout_minutes)
-
-        result = await self.coll.update_one(
-            {
-                "id": ca_id,
-                "$or": [
-                    {"crl.locked_at": None},
-                    {"crl.locked_at": {"$lt": timeout}},
-                ],
-            },
-            {"$set": {"crl.locked_at": now}},
-        )
-        return result.modified_count > 0
-
-    async def lock_crl_release(self, ca_id: str) -> None:
-        await self.coll.update_one({"id": ca_id}, {"$set": {"crl.locked_at": None}})
-
-    async def find_expiring_crls(self, threshold_hours: int = 4) -> List[str]:
-        threshold = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            hours=threshold_hours
-        )
-        cursor = self.coll.find({"crl.next_update": {"$lt": threshold}}, {"id": 1})
-        return [doc["id"] async for doc in cursor]

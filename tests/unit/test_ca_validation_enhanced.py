@@ -37,12 +37,14 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
+        self.crud_pyppetdb_nodes = MagicMock()
         self.service = CAService(
             log=self.log,
             config=self.config,
             crud_authorities=self.crud_authorities,
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
+            crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
         )
 
     def _generate_csr(self, cn, san=None):

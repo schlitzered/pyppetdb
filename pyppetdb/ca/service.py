@@ -22,6 +22,7 @@ import os
 import re
 import json
 import httpx
+import socket
 from concurrent.futures import ThreadPoolExecutor
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -31,6 +32,7 @@ from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.ca.utils import CAUtils
 from pyppetdb.errors import (
     ResourceNotFound,
@@ -76,12 +78,15 @@ class CAService:
         crud_authorities: CrudCAAuthorities,
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
+        crud_pyppetdb_nodes: CrudPyppetDBNodes,
     ):
         self._log = log
         self._config = config
         self._crud_authorities = crud_authorities
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
+        self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
+        self._instance_id = socket.getfqdn()
         self._executor = ThreadPoolExecutor(
             max_workers=self._config.ca.concurrentWorkers
         )
@@ -482,20 +487,20 @@ class CAService:
         )
 
     async def refresh_all_internal_crls(self) -> None:
-        self.log.info("Refreshing all internal CRLs...")
+        leader = await self._crud_pyppetdb_nodes.get_leader()
+        if leader != self._instance_id:
+            self.log.debug(
+                f"Skipping CRL refresh, I am not the leader (Leader: {leader}, Me: {self._instance_id})"
+            )
+            return
+
+        self.log.info("I am the leader, refreshing all internal CRLs...")
         ca_ids = await self._crud_authorities.get_all_internal_cas()
         for ca_id in ca_ids:
-            if await self._crud_authorities.lock_crl_acquire(ca_id):
-                try:
-                    await self.generate_crl(ca_id)
-                except Exception as e:
-                    self.log.error(f"Failed to generate CRL for CA '{ca_id}': {e}")
-                finally:
-                    await self._crud_authorities.lock_crl_release(ca_id)
-            else:
-                self.log.debug(
-                    f"CRL refresh for CA '{ca_id}' is already locked by another process"
-                )
+            try:
+                await self.generate_crl(ca_id)
+            except Exception as e:
+                self.log.error(f"Failed to generate CRL for CA '{ca_id}': {e}")
 
     async def crl_refresh_worker(self) -> None:
         while True:
