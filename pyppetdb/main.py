@@ -111,23 +111,31 @@ async def expire_scheduled_jobs_worker(
     log: logging.Logger,
     config: Config,
     crud_node_jobs: CrudJobsNodeJobs,
+    crud_pyppetdb_nodes: CrudPyppetDBNodes,
     hub: WsHub,
 ):
     log.info("starting scheduled jobs expiration worker")
+    instance_id = socket.getfqdn()
     while True:
         try:
-            expired_jobs = await crud_node_jobs.expire_scheduled_jobs(
-                timeout_seconds=config.jobs.expireSeconds
-            )
-            for job in expired_jobs:
-                log.warning(
-                    f"Job {job.job_id} for node {job.node_id} expired and marked as failed"
+            leader = await crud_pyppetdb_nodes.get_leader()
+            if leader == instance_id:
+                expired_jobs = await crud_node_jobs.expire_scheduled_jobs(
+                    timeout_seconds=config.jobs.expireSeconds
                 )
-                await hub.job_finished(
-                    node_id=job.node_id,
-                    job_id=job.job_id,
-                    status="failed",
-                    exit_code=1,
+                for job in expired_jobs:
+                    log.warning(
+                        f"Job {job.job_id} for node {job.node_id} expired and marked as failed"
+                    )
+                    await hub.job_finished(
+                        node_id=job.node_id,
+                        job_id=job.job_id,
+                        status="failed",
+                        exit_code=1,
+                    )
+            else:
+                log.debug(
+                    f"Skipping job expiration, I am not the leader (Leader: {leader}, Me: {instance_id})"
                 )
         except Exception as e:
             log.error(f"Error in scheduled jobs expiration worker: {e}")
@@ -597,6 +605,7 @@ async def lifespan_dev(app: FastAPI):
             log=env["log"],
             config=settings,
             crud_node_jobs=env["crud_node_jobs"],
+            crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
             hub=env["ws_hub"],
         ),
         name="expire-scheduled-jobs",
@@ -1177,6 +1186,7 @@ async def main_run():
                 log=env["log"],
                 config=settings,
                 crud_node_jobs=env["crud_node_jobs"],
+                crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
                 hub=env["ws_hub"],
             ),
             name="expire-scheduled-jobs",
