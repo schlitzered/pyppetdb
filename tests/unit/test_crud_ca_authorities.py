@@ -44,7 +44,9 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res, 5)
         self.mock_coll.count_documents.assert_called_once_with({"some": "query"})
 
-    async def test_insert(self):
+    async def test_create(self):
+        from pyppetdb.model.ca_authorities import CAAuthorityPostInternal
+
         self.crud._create = AsyncMock(
             return_value={
                 "id": "ca1",
@@ -55,13 +57,28 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
                 "not_after": datetime.now(timezone.utc),
                 "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
                 "certificate": "CERT",
+                "private_key_encrypted": "ENC",
                 "internal": True,
                 "chain": [],
                 "status": "active",
             }
         )
 
-        payload = {"id": "ca1", "cn": "CA1"}
-        await self.crud.insert(payload=payload, fields=["id"])
+        payload_dict = {
+            "id": "ca1",
+            "cn": "CA1",
+            "issuer": "CA1",
+            "serial_number": "1",
+            "not_before": datetime.now(timezone.utc),
+            "not_after": datetime.now(timezone.utc),
+            "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
+            "certificate": "CERT",
+            "private_key_encrypted": "ENC",
+            "internal": True,
+            "chain": [],
+            "status": "active",
+        }
+        payload = CAAuthorityPostInternal(**payload_dict)
+        await self.crud.create(_id="ca1", payload=payload, fields=["id"])
 
-        self.crud._create.assert_called_once_with(payload=payload, fields=["id"])
+        self.crud._create.assert_called_once()

@@ -27,12 +27,14 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
+        self.crud_pyppetdb_nodes = MagicMock()
         self.service = CAService(
             log=self.log,
             config=self.config,
             crud_authorities=self.crud_authorities,
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
+            crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
         )
 
     async def test_update_certificate_status_transition_requested_to_signed(self):
@@ -46,7 +48,10 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.process_requested_certificate = AsyncMock(return_value=cert_req)
 
         result = await self.service.update_certificate_status(
-            space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
+            space_id="space1",
+            cn="node1",
+            payload=CACertificatePut(status="signed"),
+            fields=[],
         )
 
         self.assertEqual(result, cert_req)
@@ -63,7 +68,10 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.process_requested_certificate = AsyncMock()
 
         result = await self.service.update_certificate_status(
-            space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
+            space_id="space1",
+            cn="node1",
+            payload=CACertificatePut(status="signed"),
+            fields=[],
         )
 
         self.assertEqual(result, cert_signed)
@@ -80,7 +88,10 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.revoke_certificate = AsyncMock(return_value=cert_signed)
 
         result = await self.service.update_certificate_status(
-            space_id="space1", cn="node1", payload=CACertificatePut(status="revoked")
+            space_id="space1",
+            cn="node1",
+            payload=CACertificatePut(status="revoked"),
+            fields=[],
         )
 
         self.assertEqual(result, cert_signed)
@@ -92,5 +103,8 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(ResourceNotFound):
             await self.service.update_certificate_status(
-                space_id="space1", cn="node1", payload=CACertificatePut(status="signed")
+                space_id="space1",
+                cn="node1",
+                payload=CACertificatePut(status="signed"),
+                fields=[],
             )

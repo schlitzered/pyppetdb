@@ -80,6 +80,25 @@ class CACRL(BaseModel):
     locked_at: Optional[datetime] = None
 
 
+class CAAuthorityPostInternal(BaseModel):
+    id: str
+    parent_id: Optional[str] = None
+    cn: str
+    issuer: str
+    serial_number: str
+    not_before: datetime
+    not_after: datetime
+    fingerprint: Fingerprints
+    certificate: str
+    private_key_encrypted: str
+    internal: bool
+    chain: List[str] = []
+    status: CAStatus
+    revocation_date: Optional[datetime] = None
+    crl: Optional[CACRL] = None
+    validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
+
+
 class CAAuthorityGet(BaseModel):
     id: Optional[str] = None
     parent_id: Optional[str] = None
@@ -107,3 +126,7 @@ class CAAuthorityGetMulti(BaseModel):
 class CAAuthorityPut(BaseModel):
     status: Optional[Literal["revoked"]] = None
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
+
+
+class CAAuthorityPutInternal(CAAuthorityPut):
+    revocation_date: Optional[datetime] = None

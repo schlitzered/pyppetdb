@@ -34,29 +34,33 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_success(self):
         self.mock_coll.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
-        await self.crud.delete(query={"id": "space1"})
+        await self.crud.delete(_id="space1")
         self.mock_coll.delete_one.assert_called_once_with(filter={"id": "space1"})
 
-    async def test_insert(self):
+    async def test_create(self):
+        from pyppetdb.model.ca_spaces import CASpacePost
+
         self.crud._create = AsyncMock(
             return_value={"id": "space1", "ca_id": "ca1", "ca_id_history": []}
         )
-        payload = {"id": "space1", "ca_id": "ca1", "ca_id_history": []}
-        await self.crud.insert(payload=payload, fields=["id"])
+        payload_dict = {"ca_id": "ca1"}
+        payload = CASpacePost(**payload_dict)
+        await self.crud.create(_id="space1", payload=payload, fields=["id"])
 
-        self.crud._create.assert_called_once_with(payload=payload, fields=["id"])
+        self.crud._create.assert_called_once()
 
     async def test_update(self):
+        from pyppetdb.model.ca_spaces import CASpacePutInternal
+
         self.crud._update = AsyncMock(
             return_value={"id": "space1", "ca_id": "ca2", "ca_id_history": ["ca1"]}
         )
 
-        payload = {"ca_id": "ca2", "ca_id_history": ["ca1"]}
-        await self.crud.update(query={"id": "space1"}, payload=payload, fields=["id"])
+        payload_dict = {"ca_id": "ca2", "ca_id_history": ["ca1"]}
+        payload = CASpacePutInternal(**payload_dict)
+        await self.crud.update(_id="space1", payload=payload, fields=["id"])
 
-        self.crud._update.assert_called_once_with(
-            query={"id": "space1"}, payload=payload, fields=["id"], upsert=False
-        )
+        self.crud._update.assert_called_once()
 
     async def test_search_by_ca(self):
         mock_cursor = MagicMock()

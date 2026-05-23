@@ -20,10 +20,15 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.model.ca_certificates import CACertificateGet
-from pyppetdb.model.ca_certificates import CACertificateGetMulti
+from pyppetdb.model.ca_certificates import (
+    CACertificateGet,
+    CACertificateGetMulti,
+    CACertificatePostInternal,
+    CACertificatePutInternal,
+)
 from pyppetdb.model.ca_certificates import CAStatus
 from pyppetdb.model.common import sort_order_literal
+from pyppetdb.model.common import DataDelete
 
 
 class CrudCACertificates(CrudMongo):
@@ -79,28 +84,62 @@ class CrudCACertificates(CrudMongo):
 
     async def update(
         self,
-        query: dict,
-        payload: dict,
+        _id: str,
+        payload: CACertificatePutInternal,
         fields: list,
         upsert: bool = False,
         set_on_insert: dict = None,
     ) -> CACertificateGet:
+        data = payload.model_dump(exclude_unset=True)
         result = await self._update(
-            query=query,
-            payload=payload,
+            query={"id": _id},
+            payload=data,
             fields=fields,
             upsert=upsert,
             set_on_insert=set_on_insert,
         )
         return CACertificateGet(**result)
 
-    async def insert(self, payload: dict, fields: list) -> CACertificateGet:
-        result = await self._create(payload=payload, fields=fields)
+    async def upsert_request(
+        self,
+        space_id: str,
+        cn: str,
+        payload: CACertificatePutInternal,
+        fields: list,
+        set_on_insert: dict,
+    ) -> CACertificateGet:
+        query = {
+            "space_id": space_id,
+            "cn": cn,
+            "status": "requested",
+        }
+        data = payload.model_dump(exclude_unset=True)
+        result = await self._update(
+            query=query,
+            payload=data,
+            fields=fields,
+            upsert=True,
+            set_on_insert=set_on_insert,
+        )
         return CACertificateGet(**result)
 
-    async def get(self, _id: str, fields: list) -> CACertificateGet:
+    async def create(
+        self, _id: str, payload: CACertificatePostInternal, fields: list
+    ) -> CACertificateGet:
+        data = payload.model_dump()
+        data["id"] = _id
+        result = await self._create(payload=data, fields=fields)
+        return CACertificateGet(**result)
+
+    async def get(
+        self, _id: str, fields: list, use_cache: bool = True
+    ) -> CACertificateGet:
         result = await self._get(query={"id": _id}, fields=fields)
         return CACertificateGet(**result)
+
+    async def delete(self, _id: str) -> DataDelete:
+        await self._delete(query={"id": _id})
+        return DataDelete()
 
     async def get_by_cn(
         self,

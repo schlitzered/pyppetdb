@@ -241,7 +241,7 @@ class ControllerPuppetCaV1CA:
             elif desired_state == "revoked":
                 await asyncio.shield(
                     self._ca_service.update_certificate_status(
-                        "puppet-ca", nodename, CACertificatePut(status="revoked")
+                        "puppet-ca", nodename, CACertificatePut(status="revoked"), []
                     )
                 )
                 return Response(status_code=204)
