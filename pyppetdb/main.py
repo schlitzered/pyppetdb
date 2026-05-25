@@ -46,6 +46,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
+import structlog
+from structlog.stdlib import ProcessorFormatter
 
 import pyppetdb.controller
 import pyppetdb.controller.oauth
@@ -221,6 +223,7 @@ async def prepare_env():
     env = dict()
     log = setup_logging(
         settings.app.loglevel,
+        settings.app.logstruct,
     )
     env["log"] = log
 
@@ -651,10 +654,57 @@ async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
     return pool
 
 
-def setup_logging(log_level):
-    log = logging.getLogger("uvicorn")
-    if not log.handlers and not logging.getLogger().handlers:
-        logging.basicConfig(level=log_level, format="%(levelname)s:     %(message)s")
+def setup_logging(log_level, logstruct: bool = False):
+    if logstruct:
+        structlog.configure(
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.UnicodeDecoder(),
+                ProcessorFormatter.wrap_for_formatter,
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            ProcessorFormatter(
+                processor=structlog.processors.JSONRenderer(),
+                fmt="%(message)s",
+                foreign_pre_chain=[
+                    structlog.stdlib.add_logger_name,
+                    structlog.stdlib.add_log_level,
+                    structlog.processors.TimeStamper(fmt="iso"),
+                ],
+            )
+        )
+        root_logger = logging.getLogger()
+        for h in root_logger.handlers[:]:
+            root_logger.removeHandler(h)
+        root_logger.addHandler(handler)
+        root_logger.setLevel(log_level)
+
+        for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            logging_logger = logging.getLogger(logger_name)
+            logging_logger.handlers = []
+            logging_logger.propagate = True
+
+        log = structlog.get_logger("uvicorn")
+    else:
+        log = logging.getLogger("uvicorn")
+        if not log.handlers and not logging.getLogger().handlers:
+            logging.basicConfig(
+                level=log_level, format="%(levelname)s:     %(message)s"
+            )
+
     log.info(f"setting loglevel to: {log_level}")
     log.setLevel(log_level)
     return log
@@ -708,7 +758,7 @@ async def cli_create_admin(
     name: str,
     password: str | None,
 ) -> None:
-    log = setup_logging(settings.app.loglevel)
+    log = setup_logging(settings.app.loglevel, settings.app.logstruct)
     mongo_db = setup_mongodb(
         log=log,
         database=settings.mongodb.database,
@@ -777,7 +827,7 @@ async def cli_init_ca(
     cert_path: str | None,
     key_path: str | None,
 ) -> None:
-    log = setup_logging(settings.app.loglevel)
+    log = setup_logging(settings.app.loglevel, settings.app.logstruct)
     mongo_db = setup_mongodb(
         log=log,
         database=settings.mongodb.database,
@@ -881,7 +931,7 @@ async def cli_init_ca(
 
 
 async def cli_import_puppet_ca(ca_dir: str) -> None:
-    log = setup_logging(settings.app.loglevel)
+    log = setup_logging(settings.app.loglevel, settings.app.logstruct)
     mongo_db = setup_mongodb(
         log=log,
         database=settings.mongodb.database,
@@ -1101,6 +1151,7 @@ def main_run_get_app(
         app,
         host=_settings.host,
         port=_settings.port,
+        log_config=None,
         ssl_ca_certs=ssl_ca,
         ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
         ssl_keyfile=_settings.ssl.key if _settings.ssl else None,

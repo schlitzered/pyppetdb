@@ -120,6 +120,7 @@ class ConfigApp(BaseModel):
     puppet: ConfigAppPuppet = ConfigAppPuppet()
     puppetdb: ConfigAppPuppetdb = ConfigAppPuppetdb()
     loglevel: log_levels = "INFO"
+    logstruct: bool = False
     secretkey: str = "secret"
     wssalt: str = "ws-auth"
 
