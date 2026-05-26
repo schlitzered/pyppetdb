@@ -212,8 +212,8 @@ class RemoteExecutorJobManager:
             user=definition.user,
             group=definition.group,
             params_template=definition.params_template,
-            parameters=job.parameters,
-            env_vars=job.env_vars,
+            parameters=job.parameters or {},
+            env_vars=job.env_vars or {},
         )
 
 

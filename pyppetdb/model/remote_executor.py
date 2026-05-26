@@ -53,8 +53,8 @@ class RemoteExecutorMsgBodyStartJob(BaseModel):
     user: str
     group: str
     params_template: List[str]
-    parameters: Dict[str, Any]
-    env_vars: Dict[str, str]
+    parameters: Dict[str, Any] = {}
+    env_vars: Dict[str, str] = {}
 
 
 class RemoteExecutorMsgBodyGetLogChunks(BaseModel):

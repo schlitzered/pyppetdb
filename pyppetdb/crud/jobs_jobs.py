@@ -61,7 +61,10 @@ class CrudJobs(CrudMongo):
         data = {
             "id": job_id,
             "definition_id": payload.definition_id,
-            "node_ids": node_ids,
+            "parameters": payload.parameters,
+            "env_vars": payload.env_vars,
+            "node_filter": list(payload.node_filter),
+            "nodes": node_ids,
             "created_by": created_by,
             "created_at": datetime.datetime.now(datetime.timezone.utc),
         }
@@ -75,7 +78,7 @@ class CrudJobs(CrudMongo):
 
     async def remove_node_from_jobs(self, node_id: str) -> None:
         await self.coll.update_many(
-            {"node_ids": node_id}, {"$pull": {"node_ids": node_id}}
+            {"nodes": node_id}, {"$pull": {"nodes": node_id}}
         )
 
     async def search(

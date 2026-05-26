@@ -172,33 +172,19 @@ class ControllerApiV1JobsJobs:
         )
 
         limit = self._config.jobs.maxNodesPerJob
-        count = await self._crud_nodes.count(
-            fact=data.node_filter,
-            remote_agent_connected=True,
-        )
-
-        if count > limit:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Too many nodes selected (max: {limit}, selected: {count})",
-            )
-
         nodes_result = await self._crud_nodes.search(
             fact=data.node_filter,
             remote_agent_connected=True,
             fields=["id"],
             limit=limit,
         )
-        node_ids = [node.id for node in nodes_result.result if node.id]
-
-        if node_ids:
-            busy_node_ids = (
-                await self._crud_jobs_node_jobs.get_busy_nodes_for_definition(
-                    definition_id=data.definition_id,
-                    node_ids=node_ids,
-                )
+        if nodes_result.meta.result_size > limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Too many nodes selected (max: {limit}, selected: {nodes_result.meta.result_size})",
             )
-            node_ids = [nid for nid in node_ids if nid not in busy_node_ids]
+
+        node_ids = [node.id for node in nodes_result.result if node.id]
 
         job = await self._crud_jobs.create(
             payload=data,
