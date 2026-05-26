@@ -67,12 +67,13 @@ class RemoteExecutorMsgBodyHeartbeat(BaseModel):
 class RemoteExecutorMsgBodyStartJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
+    job_definition_id: str
     executable: str
     user: str
     group: str
     params_template: List[str]
-    parameters: Dict[str, Any]
-    env_vars: Dict[str, str]
+    parameters: Dict[str, Any] = {}
+    env_vars: Dict[str, str] = {}
 
 
 class RemoteExecutorMsgBodyGetLogChunks(BaseModel):

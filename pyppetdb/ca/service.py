@@ -307,7 +307,7 @@ class CAService:
         env = os.environ.copy()
         env["CN"] = cn
         for i, san in enumerate(sans):
-            env[f"SAN{i+1}"] = san
+            env[f"SAN{i + 1}"] = san
 
         try:
             proc = await asyncio.create_subprocess_exec(

@@ -64,20 +64,18 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_crud_definitions.get = AsyncMock(return_value=mock_def)
 
-        # Mock count and nodes result
-        self.mock_crud_nodes.count = AsyncMock(return_value=1)
+        # Mock nodes result
         mock_node = MagicMock()
         mock_node.id = "node1"
         nodes_result = MagicMock()
         nodes_result.result = [mock_node]
+        nodes_result.meta.result_size = 1
         self.mock_crud_nodes.search = AsyncMock(return_value=nodes_result)
+
         mock_job = MagicMock()
         mock_job.id = "job1"
         self.mock_crud_jobs.create = AsyncMock(return_value=mock_job)
         self.mock_crud_node_jobs.create_node_jobs = AsyncMock()
-        self.mock_crud_node_jobs.get_busy_nodes_for_definition = AsyncMock(
-            return_value=[]
-        )
 
         payload = JobPost(
             definition_id="def1",
@@ -100,10 +98,6 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.mock_crud_nodes.search.assert_called_once()
-        self.mock_crud_node_jobs.get_busy_nodes_for_definition.assert_called_once_with(
-            definition_id="def1",
-            node_ids=["node1"],
-        )
         self.mock_crud_jobs.create.assert_called_once_with(
             payload=payload,
             node_ids=["node1"],
@@ -114,65 +108,6 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             job_id="job1",
             definition_id="def1",
             node_ids=["node1"],
-            created_by="admin",
-        )
-
-    async def test_jobs_create_filters_busy_nodes(self):
-        mock_request = MagicMock(spec=Request)
-        mock_user = MagicMock()
-        mock_user.id = "admin"
-        self.mock_authorize.require_perm = AsyncMock(return_value=mock_user)
-
-        # Mock definition
-        mock_def = JobDefinitionGet(
-            id="def1",
-            executable="/bin/ls",
-            user="root",
-            group="root",
-            params_template=[],
-            params={},
-            environment_variables={},
-        )
-        self.mock_crud_definitions.get = AsyncMock(return_value=mock_def)
-
-        # Mock nodes: node1 and node2
-        self.mock_crud_nodes.count = AsyncMock(return_value=2)
-        mock_node1 = MagicMock()
-        mock_node1.id = "node1"
-        mock_node2 = MagicMock()
-        mock_node2.id = "node2"
-        nodes_result = MagicMock()
-        nodes_result.result = [mock_node1, mock_node2]
-        self.mock_crud_nodes.search = AsyncMock(return_value=nodes_result)
-
-        # Mock node1 as busy
-        self.mock_crud_node_jobs.get_busy_nodes_for_definition = AsyncMock(
-            return_value=["node1"]
-        )
-
-        mock_job = MagicMock()
-        mock_job.id = "job1"
-        self.mock_crud_jobs.create = AsyncMock(return_value=mock_job)
-        self.mock_crud_node_jobs.create_node_jobs = AsyncMock()
-
-        payload = JobPost(
-            definition_id="def1",
-            node_filter={"kernel:eq:str:Linux"},
-        )
-
-        await self.controller.create(request=mock_request, data=payload)
-
-        # Only node2 should be in the job targets
-        self.mock_crud_jobs.create.assert_called_once_with(
-            payload=payload,
-            node_ids=["node2"],
-            created_by="admin",
-            fields=[],
-        )
-        self.mock_crud_node_jobs.create_node_jobs.assert_called_once_with(
-            job_id="job1",
-            definition_id="def1",
-            node_ids=["node2"],
             created_by="admin",
         )
 
@@ -223,8 +158,10 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_crud_definitions.get = AsyncMock(return_value=mock_def)
 
-        # Mock count returning 3 nodes (more than limit 2)
-        self.mock_crud_nodes.count = AsyncMock(return_value=3)
+        # Mock search result with metadata size 3 (more than limit 2)
+        nodes_result = MagicMock()
+        nodes_result.meta.result_size = 3
+        self.mock_crud_nodes.search = AsyncMock(return_value=nodes_result)
 
         payload = JobPost(
             definition_id="def1",

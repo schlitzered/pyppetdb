@@ -57,3 +57,11 @@ class TestCrudJobsUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.id, "job1")
         self.assertEqual(result.nodes, ["node1"])
+
+        # Verify node_filter was converted to a list for MongoDB
+        call_payload = self.crud._create.call_args[1]["payload"]
+        self.assertIsInstance(call_payload["node_filter"], list)
+        self.assertEqual(call_payload["node_filter"], ["kernel:eq:str:Linux"])
+
+        # Verify nodes field is used
+        self.assertEqual(call_payload["nodes"], ["node1"])
