@@ -71,7 +71,7 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
         nodes_result.result = [mock_node]
         nodes_result.meta.result_size = 1
         self.mock_crud_nodes.search = AsyncMock(return_value=nodes_result)
-        
+
         mock_job = MagicMock()
         mock_job.id = "job1"
         self.mock_crud_jobs.create = AsyncMock(return_value=mock_job)
