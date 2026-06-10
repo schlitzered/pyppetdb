@@ -1076,7 +1076,7 @@ async def cli_import_puppet_ca(
             fields=[],
         )
 
-    log.info(f"CA Space 'puppet-ca' updated successfully.")
+    log.info("CA Space 'puppet-ca' updated successfully.")
 
     if not skip_certs:
         signed_certs_dir = puppet_ca_dir / "signed"

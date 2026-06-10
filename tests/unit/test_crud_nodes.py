@@ -103,7 +103,9 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
                 {
                     "meta_counts": [{"_id": "outdated", "count": 1}],
                     "total_results": [{"count": 1}],
-                    "paginated_results": [{"id": "node1", "report_status_computed": "outdated"}],
+                    "paginated_results": [
+                        {"id": "node1", "report_status_computed": "outdated"}
+                    ],
                 }
             ]
         )
@@ -114,12 +116,13 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.meta.result_size, 1)
         self.assertEqual(result.meta.status_outdated, 1)
         self.assertEqual(result.result[0].report_status_computed, "outdated")
-        
+
         # Verify that aggregate was called with the correct pipeline
         call_args = self.mock_coll.aggregate.call_args[0][0]
         # Check if $match for report_status_computed is in the pipeline
         has_match = any(
-            "$match" in stage and stage["$match"].get("report_status_computed") == {"$regex": "outdated"}
+            "$match" in stage
+            and stage["$match"].get("report_status_computed") == {"$regex": "outdated"}
             for stage in call_args
         )
         self.assertTrue(has_match)

@@ -52,9 +52,7 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_cn_from_request_success(self):
         cert_dict = {
-            "subject": (
-                (("commonName", "admin.example.com"),),
-            ),
+            "subject": ((("commonName", "admin.example.com"),),),
             "serialNumber": "01",
         }
         self._setup_mock_cert("admin.example.com")

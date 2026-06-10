@@ -270,7 +270,11 @@ class CrudCAAuthorities(CrudMongo):
 
     async def get_revoked_for_ca(self, parent_id: str) -> list[dict]:
         cursor = self.coll.find(
-            {"parent_id": parent_id, "status": "revoked", "serial_number": {"$exists": True}},
+            {
+                "parent_id": parent_id,
+                "status": "revoked",
+                "serial_number": {"$exists": True},
+            },
             {"serial_number": 1, "revocation_date": 1},
         )
         revoked = []

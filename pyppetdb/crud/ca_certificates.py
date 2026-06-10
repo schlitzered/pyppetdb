@@ -179,7 +179,11 @@ class CrudCACertificates(CrudMongo):
 
     async def get_revoked_for_ca(self, ca_id: str) -> list[dict]:
         cursor = self.coll.find(
-            {"ca_id": {"$eq": ca_id}, "status": "revoked", "serial_number": {"$exists": True}},
+            {
+                "ca_id": {"$eq": ca_id},
+                "status": "revoked",
+                "serial_number": {"$exists": True},
+            },
             {"serial_number": 1, "revocation_date": 1},
         )
         revoked = []
