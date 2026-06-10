@@ -477,6 +477,7 @@ async def prepare_env():
 
     authorize_client_cert_puppet = AuthorizeClientCert(
         log=log,
+        config=settings,
         trusted_cns=settings.app.puppet.trustedCns,
         crud_ca_certificates=crud_ca_certificates,
     )
@@ -543,6 +544,7 @@ async def prepare_env():
 
     authorize_client_cert_pdb = AuthorizeClientCert(
         log=log,
+        config=settings,
         trusted_cns=settings.app.puppetdb.trustedCns,
         crud_ca_certificates=crud_ca_certificates,
     )
@@ -930,7 +932,9 @@ async def cli_init_ca(
     cli_init_ca_write_file(key_path, key_pem)
 
 
-async def cli_import_puppet_ca(ca_dir: str) -> None:
+async def cli_import_puppet_ca(
+    ca_dir: str, ca_id: str = "puppet-ca", skip_certs: bool = False
+) -> None:
     log = setup_logging(settings.app.loglevel, settings.app.logstruct)
     mongo_db = setup_mongodb(
         log=log,
@@ -990,7 +994,7 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
         crud_pyppetdb_nodes=crud_pyppetdb_nodes,
     )
 
-    puppet_ca_id = "puppet-ca"
+    puppet_ca_id = ca_id
     puppet_ca_dir = Path(ca_dir)
 
     ca_crt_path = puppet_ca_dir / "ca_crt.pem"
@@ -1008,9 +1012,14 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
 
     try:
         await crud_ca_authorities.get(puppet_ca_id, fields=["id"])
-        log.error(
-            f"CA Authority '{puppet_ca_id}' already exists. Please delete it first or choose a different ID."
-        )
+        if puppet_ca_id == "puppet-ca":
+            log.error(
+                f"CA Authority '{puppet_ca_id}' already exists. Please delete it first or use --ca-id to choose a different ID."
+            )
+        else:
+            log.error(
+                f"CA Authority '{puppet_ca_id}' already exists. Please choose a different ID."
+            )
         sys.exit(1)
     except ResourceNotFound:
         pass
@@ -1050,59 +1059,65 @@ async def cli_import_puppet_ca(ca_dir: str) -> None:
     log.info(f"CA Authority '{puppet_ca_id}' imported successfully.")
 
     try:
-        await crud_ca_spaces.get(puppet_ca_id, fields=["id"])
-        log.error(
-            f"CA Space '{puppet_ca_id}' already exists. Please delete it first or choose a different ID."
+        await crud_ca_spaces.get("puppet-ca", fields=["id"])
+        log.info(f"Updating existing CA Space 'puppet-ca' to use CA '{puppet_ca_id}'")
+        from pyppetdb.model.ca_spaces import CASpacePutInternal
+
+        await crud_ca_spaces.update(
+            _id="puppet-ca",
+            payload=CASpacePutInternal(ca_id=puppet_ca_id),
+            fields=[],
         )
-        sys.exit(1)
     except ResourceNotFound:
-        pass
-
-    log.info(f"Creating CA Space '{puppet_ca_id}'")
-    await ca_service.create_space(
-        _id=puppet_ca_id,
-        payload=CASpacePost(ca_id=puppet_ca_id),
-        fields=[],
-    )
-    log.info(f"CA Space '{puppet_ca_id}' created successfully.")
-
-    signed_certs_dir = puppet_ca_dir / "signed"
-    if signed_certs_dir.exists() and signed_certs_dir.is_dir():
-        log.info(f"Importing signed certificates from {signed_certs_dir}")
-        for cert_file in signed_certs_dir.glob("*.pem"):
-            try:
-                cert_pem = cert_file.read_bytes()
-                cert_info = CAUtils.get_cert_info(cert_pem)
-                cn = cert_info["cn"]
-                serial_number = cert_info["serial_number"]
-
-                try:
-                    await crud_ca_certificates.get(serial_number, fields=["id"])
-                    log.warning(
-                        f"Certificate with serial {serial_number} (CN: {cn}) already exists. Skipping."
-                    )
-                    continue
-                except ResourceNotFound:
-                    pass
-
-                cert_data = {
-                    "id": serial_number,
-                    "space_id": puppet_ca_id,
-                    "ca_id": puppet_ca_id,
-                    "cn": cn,
-                    "status": "signed",
-                    "certificate": cert_pem.decode(),
-                    "created": cert_info["not_before"],
-                    **cert_info,
-                }
-                await crud_ca_certificates.coll.insert_one(cert_data)
-                log.info(f"Imported certificate {cn} (Serial: {serial_number})")
-            except Exception as e:
-                log.error(f"Failed to import certificate {cert_file.name}: {e}")
-    else:
-        log.info(
-            f"No 'signed' directory found at {signed_certs_dir}. Skipping signed certificate import."
+        log.info(f"Creating CA Space 'puppet-ca' for CA '{puppet_ca_id}'")
+        await ca_service.create_space(
+            _id="puppet-ca",
+            payload=CASpacePost(ca_id=puppet_ca_id),
+            fields=[],
         )
+
+    log.info(f"CA Space 'puppet-ca' updated successfully.")
+
+    if not skip_certs:
+        signed_certs_dir = puppet_ca_dir / "signed"
+        if signed_certs_dir.exists() and signed_certs_dir.is_dir():
+            log.info(f"Importing signed certificates from {signed_certs_dir}")
+            for cert_file in signed_certs_dir.glob("*.pem"):
+                try:
+                    cert_pem = cert_file.read_bytes()
+                    cert_info = CAUtils.get_cert_info(cert_pem)
+                    cn = cert_info["cn"]
+                    serial_number = cert_info["serial_number"]
+
+                    try:
+                        await crud_ca_certificates.get(serial_number, fields=["id"])
+                        log.warning(
+                            f"Certificate with serial {serial_number} (CN: {cn}) already exists. Skipping."
+                        )
+                        continue
+                    except ResourceNotFound:
+                        pass
+
+                    cert_data = {
+                        "id": serial_number,
+                        "space_id": "puppet-ca",
+                        "ca_id": puppet_ca_id,
+                        "cn": cn,
+                        "status": "signed",
+                        "certificate": cert_pem.decode(),
+                        "created": cert_info["not_before"],
+                        **cert_info,
+                    }
+                    await crud_ca_certificates.coll.insert_one(cert_data)
+                    log.info(f"Imported certificate {cn} (Serial: {serial_number})")
+                except Exception as e:
+                    log.error(f"Failed to import certificate {cert_file.name}: {e}")
+        else:
+            log.info(
+                f"No 'signed' directory found at {signed_certs_dir}. Skipping signed certificate import."
+            )
+    else:
+        log.info("Skipping signed certificate import as requested.")
 
     log.info("Puppet CA import complete.")
 
@@ -1367,6 +1382,16 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to the Puppet CA directory (e.g., /etc/puppetlabs/puppetserver/ca)",
     )
+    import_puppet_ca.add_argument(
+        "--ca-id",
+        default="puppet-ca",
+        help="ID of the CA to import (default: puppet-ca)",
+    )
+    import_puppet_ca.add_argument(
+        "--skip-certs",
+        action="store_true",
+        help="Skip importing signed certificates",
+    )
 
     return parser
 
@@ -1402,6 +1427,8 @@ def main():
         asyncio.run(
             cli_import_puppet_ca(
                 ca_dir=args.ca_dir,
+                ca_id=args.ca_id,
+                skip_certs=args.skip_certs,
             )
         )
         return

@@ -132,9 +132,18 @@ class CrudCACertificates(CrudMongo):
         return CACertificateGet(**result)
 
     async def get(
-        self, _id: str, fields: list, use_cache: bool = True
+        self,
+        _id: str,
+        fields: list,
+        status: typing.Optional[CAStatus] = None,
+        cn: typing.Optional[str] = None,
     ) -> CACertificateGet:
-        result = await self._get(query={"id": _id}, fields=fields)
+        query = {"id": _id}
+        if status:
+            query["status"] = status
+        if cn:
+            query["cn"] = cn
+        result = await self._get(query=query, fields=fields)
         return CACertificateGet(**result)
 
     async def delete(self, _id: str) -> DataDelete:
@@ -170,7 +179,7 @@ class CrudCACertificates(CrudMongo):
 
     async def get_revoked_for_ca(self, ca_id: str) -> list[dict]:
         cursor = self.coll.find(
-            {"ca_id": {"$eq": ca_id}, "status": "revoked"},
+            {"ca_id": {"$eq": ca_id}, "status": "revoked", "serial_number": {"$exists": True}},
             {"serial_number": 1, "revocation_date": 1},
         )
         revoked = []

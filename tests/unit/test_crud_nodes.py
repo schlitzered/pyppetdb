@@ -54,23 +54,22 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._resource_exists.assert_called_once()
 
     async def test_search(self):
-        # Mock aggregation for status counts
+        # Mock aggregation for status counts and results
         mock_cursor = MagicMock()
         mock_cursor.to_list = AsyncMock(
             return_value=[
-                {"_id": "changed", "count": 5},
-                {"_id": "unchanged", "count": 10},
+                {
+                    "meta_counts": [
+                        {"_id": "changed", "count": 5},
+                        {"_id": "unchanged", "count": 10},
+                        {"_id": "outdated", "count": 2},
+                    ],
+                    "total_results": [{"count": 1}],
+                    "paginated_results": [{"id": "node1"}],
+                }
             ]
         )
         self.mock_coll.aggregate.return_value = mock_cursor
-
-        # Mock count_documents for outdated nodes
-        self.mock_coll.count_documents = AsyncMock(return_value=2)
-
-        # Mock _search from CrudMongo
-        self.crud._search = AsyncMock(
-            return_value={"result": [{"id": "node1"}], "meta": {"result_size": 1}}
-        )
 
         result = await self.crud.search(_id="node1", disabled=False)
 
@@ -80,17 +79,50 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.meta.status_outdated, 2)
 
     async def test_search_with_threshold(self):
-        # Mock aggregation for status counts
+        # Mock aggregation for status counts and results
         mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(return_value=[])
-        self.mock_coll.aggregate.return_value = mock_cursor
-        self.mock_coll.count_documents = AsyncMock(return_value=1)
-        self.crud._search = AsyncMock(
-            return_value={"result": [], "meta": {"result_size": 0}}
+        mock_cursor.to_list = AsyncMock(
+            return_value=[
+                {
+                    "meta_counts": [],
+                    "total_results": [{"count": 0}],
+                    "paginated_results": [],
+                }
+            ]
         )
+        self.mock_coll.aggregate.return_value = mock_cursor
 
         await self.crud.search(outdated_threshold="2026-03-06T00:00:00Z")
-        self.mock_coll.count_documents.assert_called_once()
+        self.mock_coll.aggregate.assert_called_once()
+
+    async def test_search_by_computed_status(self):
+        # Mock aggregation for status counts and results
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(
+            return_value=[
+                {
+                    "meta_counts": [{"_id": "outdated", "count": 1}],
+                    "total_results": [{"count": 1}],
+                    "paginated_results": [{"id": "node1", "report_status_computed": "outdated"}],
+                }
+            ]
+        )
+        self.mock_coll.aggregate.return_value = mock_cursor
+
+        result = await self.crud.search(report_status="outdated")
+
+        self.assertEqual(result.meta.result_size, 1)
+        self.assertEqual(result.meta.status_outdated, 1)
+        self.assertEqual(result.result[0].report_status_computed, "outdated")
+        
+        # Verify that aggregate was called with the correct pipeline
+        call_args = self.mock_coll.aggregate.call_args[0][0]
+        # Check if $match for report_status_computed is in the pipeline
+        has_match = any(
+            "$match" in stage and stage["$match"].get("report_status_computed") == {"$regex": "outdated"}
+            for stage in call_args
+        )
+        self.assertTrue(has_match)
 
     async def test_update(self):
         self.crud._update = AsyncMock(return_value={"id": "node1"})

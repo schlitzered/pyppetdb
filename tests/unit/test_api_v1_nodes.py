@@ -61,11 +61,13 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_nodes.get = AsyncMock()
 
         mock_request = MagicMock()
-        await self.controller.get(node_id="node1", request=mock_request, fields=set())
+        await self.controller.get(
+            node_id="node1", request=mock_request, fields=set(), outdated_threshold=None
+        )
 
         self.mock_authorize.require_user.assert_called_once_with(request=mock_request)
         self.mock_crud_nodes.get.assert_called_once_with(
-            _id="node1", user_node_groups=[], fields=[]
+            _id="node1", user_node_groups=[], fields=[], outdated_threshold=None
         )
 
     async def test_delete_node_cascades(self):

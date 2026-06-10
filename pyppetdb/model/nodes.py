@@ -167,6 +167,7 @@ class NodeGet(BaseModel):
     environment: Optional[str] = None
     facts: Optional[Dict] = None
     report: Optional[NodeGetReport] = None
+    report_status_computed: Optional[str] = None
     facts_inject: Optional[Dict[str, str]] = None
     remote_agent: Optional[NodeRemoteAgent] = None
 
