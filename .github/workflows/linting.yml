@@ -20,4 +20,4 @@ jobs:
           pip install flake8 Flake8-pyproject
       - name: Run flake8
         run: |
-          flake8 .
+          flake8 pyppetdb
