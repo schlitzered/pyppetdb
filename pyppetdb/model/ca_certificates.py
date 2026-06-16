@@ -98,6 +98,7 @@ class CACertificatePutInternal(CACertificatePut):
     not_before: Optional[datetime] = None
     not_after: Optional[datetime] = None
     serial_number: Optional[str] = None
+    created: Optional[datetime] = None
     cert_uniqueness: Optional[str] = None
     revocation_date: Optional[datetime] = None
     ca: Optional[str] = None
@@ -117,6 +118,7 @@ class CACertificatePostInternal(BaseModel):
     not_before: Optional[datetime] = None
     not_after: Optional[datetime] = None
     serial_number: Optional[str] = None
+    created: Optional[datetime] = None
     cert_uniqueness: str
     ca: Optional[str] = None
     ca_chain: List[str] = []

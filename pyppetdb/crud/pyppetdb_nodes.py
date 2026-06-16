@@ -45,14 +45,16 @@ class CrudPyppetDBNodes(CrudMongo):
                 pymongo.IndexModel(
                     [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
                 ),
-                pymongo.IndexModel(
-                    [("heartbeat", pymongo.ASCENDING)], name="idx_heartbeat"
-                ),
             ]
         )
 
     async def _create_index(self) -> None:
         await super()._create_index()
+        await self._create_ttl_index(
+            field="heartbeat",
+            ttl_seconds=70,
+            index_name="ttl_heartbeat",
+        )
 
     async def heartbeat_update(self, _id: str) -> None:
         now = datetime.now(timezone.utc)
