@@ -65,6 +65,7 @@ from pyppetdb.controller.api.v1.jobs_nodes_jobs_logs import (
     ControllerApiV1JobsNodesJobsLogs,
 )
 from pyppetdb.controller.api.v1.pyppetdb_nodes import ControllerApiV1PyppetDBNodes
+from pyppetdb.controller.api.v1.permissions import ControllerApiV1Permissions
 from pyppetdb.controller.api.v1.ws import ControllerApiV1Ws
 
 
@@ -360,6 +361,18 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            ControllerApiV1Permissions(
+                log=log,
+                authorize=authorize,
+                crud_ca_authorities=crud_ca_authorities,
+                crud_ca_spaces=crud_ca_spaces,
+                crud_hiera_keys=crud_hiera_keys,
+                crud_jobs_definitions=crud_job_definitions,
             ).router,
             responses={404: {"description": "Not found"}},
         )

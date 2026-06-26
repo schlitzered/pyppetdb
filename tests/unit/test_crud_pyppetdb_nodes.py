@@ -24,7 +24,19 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_coll = MagicMock()
         self.mock_config = MagicMock()
-        self.crud = CrudPyppetDBNodes(self.log, self.mock_config, self.mock_coll)
+        self.crud = CrudPyppetDBNodes(
+            config=self.mock_config, log=self.log, coll=self.mock_coll
+        )
+
+    async def test_create_index(self):
+        self.crud._create_ttl_index = AsyncMock()
+        self.mock_coll.create_indexes = AsyncMock()
+        await self.crud._create_index()
+        self.crud._create_ttl_index.assert_called_once_with(
+            field="heartbeat",
+            ttl_seconds=70,
+            index_name="ttl_heartbeat",
+        )
 
     async def test_heartbeat_update(self):
         self.mock_coll.update_one = AsyncMock()

@@ -36,9 +36,9 @@ from pyppetdb.authorize import PERM_JOBS_DEFINITION_UPDATE
 from pyppetdb.authorize import PERM_JOBS_DEFINITION_DELETE
 from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE
 from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE
-from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_CREATE
-from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_UPDATE
-from pyppetdb.authorize import PERM_HIERA_KEY_MODELS_DELETE
+from pyppetdb.authorize import PERM_HIERA_KEYS_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEYS_UPDATE
+from pyppetdb.authorize import PERM_HIERA_KEYS_DELETE
 from pyppetdb.authorize import PERM_HIERA_LEVELS_CREATE
 from pyppetdb.authorize import PERM_HIERA_LEVELS_UPDATE
 from pyppetdb.authorize import PERM_HIERA_LEVELS_DELETE
@@ -204,9 +204,9 @@ class ControllerApiV1Teams:
             rf"^{PERM_JOBS_DEFINITION_DELETE}$": None,
             rf"^{PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE}$": None,
             rf"^{PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE}$": None,
-            rf"^{PERM_HIERA_KEY_MODELS_CREATE}$": None,
-            rf"^{PERM_HIERA_KEY_MODELS_UPDATE}$": None,
-            rf"^{PERM_HIERA_KEY_MODELS_DELETE}$": None,
+            rf"^{PERM_HIERA_KEYS_CREATE}$": None,
+            rf"^{PERM_HIERA_KEYS_UPDATE}$": None,
+            rf"^{PERM_HIERA_KEYS_DELETE}$": None,
             rf"^{PERM_HIERA_LEVELS_CREATE}$": None,
             rf"^{PERM_HIERA_LEVELS_UPDATE}$": None,
             rf"^{PERM_HIERA_LEVELS_DELETE}$": None,

@@ -30,6 +30,7 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.nodes import NodeGet
 from pyppetdb.model.nodes import NodeGetMulti
+from pyppetdb.model.nodes import NodeGetMultiMeta
 from pyppetdb.model.nodes import NodePutInternal
 from pyppetdb.model.nodes import NodeDistinctFactValue
 from pyppetdb.model.nodes import NodeGetDistinctFactValues
@@ -317,10 +318,37 @@ class CrudNodes(CrudMongo):
         _id: str,
         fields: list,
         user_node_groups: typing.Optional[list[str]] = None,
+        outdated_threshold: typing.Optional[str] = None,
     ) -> NodeGet:
         query = {"id": _id}
         self._filter_list(query, "node_groups", user_node_groups)
         result = await self._get(query=query, fields=fields)
+
+        if outdated_threshold:
+            threshold_dt = datetime.fromisoformat(
+                outdated_threshold.replace("Z", "+00:00")
+            )
+        else:
+            threshold_dt = datetime.now() - timedelta(hours=4)
+
+        report = result.get("report")
+        report_status = report.get("status") if report else None
+        disabled = result.get("disabled", False)
+        change_report = result.get("change_report")
+
+        if (
+            disabled is not True
+            and change_report is not None
+            and change_report < threshold_dt
+        ):
+            status_computed = "outdated"
+        elif report_status is None:
+            status_computed = "unreported"
+        else:
+            status_computed = report_status
+
+        result["report_status_computed"] = status_computed
+
         return NodeGet(**result)
 
     async def resource_exists(
@@ -471,62 +499,121 @@ class CrudNodes(CrudMongo):
         self._filter_boolean(query, "disabled", disabled)
         self._filter_re(query, "environment", environment)
         self._filter_re(query, "id", _id)
-        self._filter_re(query, "report.status", report_status)
         self._filter_boolean(query, "remote_agent.connected", remote_agent_connected)
         self._filter_re(query, "remote_agent.via", remote_agent_via)
-        pipeline = [
-            {"$match": query},
-            {
-                "$group": {
-                    "_id": {
-                        "$cond": {
-                            "if": {"$eq": ["$report.status", None]},
-                            "then": "unreported",
-                            "else": "$report.status",
-                        }
-                    },
-                    "count": {"$sum": 1},
-                }
-            },
-        ]
-        statuses = {
-            "changed": 0,
-            "unchanged": 0,
-            "failed": 0,
-            None: 0,
-        }
-        for status in await self.coll.aggregate(pipeline).to_list(length=None):
-            statuses[status["_id"]] = status["count"]
 
-        # Count outdated nodes (not disabled, report older than threshold)
         if outdated_threshold:
-            # Parse ISO timestamp
             threshold_dt = datetime.fromisoformat(
                 outdated_threshold.replace("Z", "+00:00")
             )
         else:
-            # Default to now - 2 hours
             threshold_dt = datetime.now() - timedelta(hours=4)
 
-        outdated_query = {**query, "disabled": {"$ne": True}}
-        outdated_query["change_report"] = {"$lt": threshold_dt}
-        outdated_count = await self.coll.count_documents(outdated_query)
+        pipeline = [
+            {"$match": query},
+            {
+                "$addFields": {
+                    "report_status_computed": {
+                        "$cond": {
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$disabled", True]},
+                                    {"$ne": ["$change_report", None]},
+                                    {"$lt": ["$change_report", threshold_dt]},
+                                ]
+                            },
+                            "then": "outdated",
+                            "else": {
+                                "$cond": {
+                                    "if": {"$eq": ["$report.status", None]},
+                                    "then": "unreported",
+                                    "else": "$report.status",
+                                }
+                            },
+                        }
+                    }
+                }
+            },
+        ]
 
-        result = await self._search(
-            query=query,
-            fields=fields,
-            sort=sort,
-            sort_order=sort_order,
-            page=page,
-            limit=limit,
+        if report_status:
+            pipeline.append(
+                {"$match": {"report_status_computed": {"$regex": report_status}}}
+            )
+
+        meta_counts_pipeline = [
+            {"$group": {"_id": "$report_status_computed", "count": {"$sum": 1}}}
+        ]
+
+        paginated_pipeline = []
+        if sort and sort_order:
+            paginated_pipeline.append({"$sort": dict(self._sort(sort, sort_order))})
+
+        if isinstance(page, int) and page and limit:
+            paginated_pipeline.append({"$skip": self._pagination_skip(page, limit)})
+
+        if limit:
+            paginated_pipeline.append({"$limit": limit})
+
+        proj = self._projection(fields)
+        if proj:
+            # Ensure we keep report_status_computed if fields are specified
+            if isinstance(proj, dict) and not proj.get("report_status_computed"):
+                if any(v == 1 for v in proj.values()):
+                    proj["report_status_computed"] = 1
+            paginated_pipeline.append({"$project": proj})
+
+        pipeline.append(
+            {
+                "$facet": {
+                    "meta_counts": meta_counts_pipeline,
+                    "total_results": [{"$count": "count"}],
+                    "paginated_results": paginated_pipeline,
+                }
+            }
         )
 
-        result["meta"]["status_changed"] = statuses["changed"]
-        result["meta"]["status_unchanged"] = statuses["unchanged"]
-        result["meta"]["status_failed"] = statuses["failed"]
-        result["meta"]["status_unreported"] = statuses[None]
-        result["meta"]["status_outdated"] = outdated_count
-        return NodeGetMulti(**result)
+        results = await self.coll.aggregate(pipeline).to_list(length=None)
+
+        if not results:
+            return NodeGetMulti(
+                result=[],
+                meta=NodeGetMultiMeta(
+                    result_size=0,
+                    page=page,
+                    limit=limit,
+                ),
+            )
+
+        agg_result = results[0]
+
+        statuses = {
+            "changed": 0,
+            "unchanged": 0,
+            "failed": 0,
+            "unreported": 0,
+            "outdated": 0,
+        }
+        for status in agg_result.get("meta_counts", []):
+            if status["_id"] in statuses:
+                statuses[status["_id"]] = status["count"]
+
+        total_count = 0
+        if agg_result.get("total_results"):
+            total_count = agg_result["total_results"][0]["count"]
+
+        docs = agg_result.get("paginated_results", [])
+        formatted_result = self._format_multi(docs, count=total_count)
+
+        formatted_result["meta"]["status_changed"] = statuses["changed"]
+        formatted_result["meta"]["status_unchanged"] = statuses["unchanged"]
+        formatted_result["meta"]["status_failed"] = statuses["failed"]
+        formatted_result["meta"]["status_unreported"] = statuses["unreported"]
+        formatted_result["meta"]["status_outdated"] = statuses["outdated"]
+        formatted_result["meta"]["page"] = page
+        formatted_result["meta"]["limit"] = limit
+
+        return NodeGetMulti(**formatted_result)
 
     async def get_placement(self, _id: str) -> dict[str, str]:
         if not self.config.mongodb.placementFacts:

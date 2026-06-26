@@ -666,6 +666,7 @@ class CAService:
             "cn": csr_cn,
             "space_id": space_id,
             "csr": cleaned_csr.decode(),
+            "created": datetime.datetime.now(datetime.timezone.utc),
             **csr_info,
         }
 
@@ -830,6 +831,7 @@ class CAService:
             "certificate": cert_pem.decode(),
             "cert_uniqueness": f"{space_id}:{cn}",
             "csr": old_cert.csr,  # carry over if it existed
+            "created": datetime.datetime.now(datetime.timezone.utc),
             **info,
         }
 

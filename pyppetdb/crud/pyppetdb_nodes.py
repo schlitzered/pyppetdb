@@ -15,6 +15,8 @@
 import logging
 import typing
 from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
 
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -43,17 +45,19 @@ class CrudPyppetDBNodes(CrudMongo):
                 pymongo.IndexModel(
                     [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
                 ),
-                pymongo.IndexModel(
-                    [("heartbeat", pymongo.ASCENDING)], name="idx_heartbeat"
-                ),
             ]
         )
 
     async def _create_index(self) -> None:
         await super()._create_index()
+        await self._create_ttl_index(
+            field="heartbeat",
+            ttl_seconds=70,
+            index_name="ttl_heartbeat",
+        )
 
     async def heartbeat_update(self, _id: str) -> None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         await self.coll.update_one(
             filter={"id": _id},
             update={
@@ -102,7 +106,13 @@ class CrudPyppetDBNodes(CrudMongo):
         return PyppetDBNodeGetMulti(**result)
 
     async def get_leader(self) -> str | None:
-        cursor = self.coll.find({}).sort("online_since", pymongo.ASCENDING).limit(1)
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=60)
+        query = {"heartbeat": {"$gt": threshold}}
+        cursor = (
+            self.coll.find(query)
+            .sort([("online_since", pymongo.ASCENDING), ("id", pymongo.ASCENDING)])
+            .limit(1)
+        )
         async for doc in cursor:
             return str(doc.get("id"))
         return None

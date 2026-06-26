@@ -225,6 +225,10 @@ class ControllerApiV1Nodes:
         node_id: str,
         request: Request,
         fields: Set[filter_literal] = Query(default=filter_list),
+        outdated_threshold: str = Query(
+            default=None,
+            description="ISO timestamp for outdated threshold (defaults to now-2h)",
+        ),
     ):
         user = await self.authorize.require_user(request=request)
         user_node_groups = await self.authorize.get_user_node_groups(
@@ -234,6 +238,7 @@ class ControllerApiV1Nodes:
             _id=node_id,
             user_node_groups=user_node_groups,
             fields=list(fields),
+            outdated_threshold=outdated_threshold,
         )
 
         if "catalog_cached" in fields:

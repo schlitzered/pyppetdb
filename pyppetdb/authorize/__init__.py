@@ -16,9 +16,11 @@ import logging
 import re
 import typing
 
+from cachetools import TTLCache
 from fastapi import Request
 from fastapi import WebSocket
 
+from pyppetdb.config import Config
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
@@ -49,9 +51,9 @@ PERM_CA_SPACES_DELETE = "CA:SPACES:DELETE"
 PERM_HIERA_GET = "HIERA::GET"
 PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE = "HIERA:KEY_MODELS_DYNAMIC::CREATE"
 PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE = "HIERA:KEY_MODELS_DYNAMIC::DELETE"
-PERM_HIERA_KEY_MODELS_CREATE = "HIERA:KEY_MODELS::CREATE"
-PERM_HIERA_KEY_MODELS_UPDATE = "HIERA:KEY_MODELS::UPDATE"
-PERM_HIERA_KEY_MODELS_DELETE = "HIERA:KEY_MODELS::DELETE"
+PERM_HIERA_KEYS_CREATE = "HIERA:KEYS::CREATE"
+PERM_HIERA_KEYS_UPDATE = "HIERA:KEYS::UPDATE"
+PERM_HIERA_KEYS_DELETE = "HIERA:KEYS::DELETE"
 PERM_HIERA_LEVELS_CREATE = "HIERA:LEVELS::CREATE"
 PERM_HIERA_LEVELS_UPDATE = "HIERA:LEVELS::UPDATE"
 PERM_HIERA_LEVELS_DELETE = "HIERA:LEVELS::DELETE"
@@ -117,12 +119,22 @@ class AuthorizeClientCert:
     def __init__(
         self,
         log: logging.Logger,
+        config: Config,
         trusted_cns: list[str],
-        crud_ca_certificates: typing.Optional[CrudCACertificates] = None,
+        crud_ca_certificates: CrudCACertificates,
     ):
         self._log = log
+        self._config = config
         self._trusted_cns = trusted_cns
         self._crud_ca_certificates = crud_ca_certificates
+        self._cert_serial_cache = TTLCache(
+            maxsize=self.config.ca.verifyCertificateRegistrationCacheMaxsize,
+            ttl=self.config.ca.verifyCertificateRegistrationCacheTtl,
+        )
+
+    @property
+    def config(self):
+        return self._config
 
     @property
     def log(self):
@@ -132,7 +144,7 @@ class AuthorizeClientCert:
     def crud_ca_certificates(self):
         return self._crud_ca_certificates
 
-    async def get_cert_info(self, request: Request | WebSocket) -> dict | None:
+    async def get_cert_info(self, request: Request | WebSocket) -> dict:
         cert = request.scope.get("client_cert_dict")
         if not cert:
             raise ClientCertError(detail="No client certificate provided")
@@ -152,34 +164,31 @@ class AuthorizeClientCert:
             "cn": subject.get("commonName"),
             "serial": serial_dec,
         }
-        await self._check_revocation(cert_info=cert_info)
+        await self._verify_certificate_registration(cert_info=cert_info)
         return cert_info
 
-    async def _check_revocation(self, cert_info):
+    async def _verify_certificate_registration(self, cert_info):
+        if not self.config.ca.verifyCertificateRegistration:
+            return
+
         cn = cert_info["cn"]
         serial = cert_info["serial"]
-        if self.crud_ca_certificates:
-            try:
-                cert = await self.crud_ca_certificates.get(
-                    _id=serial, fields=["status", "cn"]
-                )
 
-                if cert.cn != cn:
-                    self.log.error(
-                        f"Access denied: CN mismatch. Cert: {cn}, DB: {cert.cn}"
-                    )
-                    raise ClientCertError(detail="Certificate CN mismatch")
+        if serial in self._cert_serial_cache:
+            return
 
-                if cert.status != "signed":
-                    self.log.warning(
-                        f"Access denied: certificate for {cn} (serial {serial}) has status '{cert.status}'"
-                    )
-                    raise ClientCertError(detail=f"Certificate is {cert.status}")
-            except ResourceNotFound:
-                self.log.error(
-                    f"Access denied: certificate for {cn} (serial {serial}) not found in database (unauthorized certificate)"
-                )
-                raise ClientCertError(detail="Certificate not found in database")
+        try:
+            await self.crud_ca_certificates.get(
+                _id=serial, fields=["status", "cn"], status="signed", cn=cn
+            )
+
+            self._cert_serial_cache[serial] = True
+
+        except ResourceNotFound:
+            self.log.error(
+                f"Access denied: certificate for {cn} (serial {serial}) not found in database, not signed or CN mismatch"
+            )
+            raise ClientCertError(detail="Certificate not found in database")
 
     async def require_cn(self, request: Request | WebSocket):
         cert = await self.get_cert_info(request)

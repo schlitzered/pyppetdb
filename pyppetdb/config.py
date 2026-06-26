@@ -173,6 +173,9 @@ class ConfigCA(BaseModel):
     autoSignNodeIfExists: bool = False
     certificateValidityDays: int = 365
     concurrentWorkers: int = 5
+    verifyCertificateRegistration: bool = True
+    verifyCertificateRegistrationCacheTtl: int = 300
+    verifyCertificateRegistrationCacheMaxsize: int = 1024
 
 
 class ConfigJobs(BaseModel):

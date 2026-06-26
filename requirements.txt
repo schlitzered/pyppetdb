@@ -55,3 +55,4 @@ Authlib==1.7.2
 idna==3.16
 urllib3==2.7.0
 structlog==25.5.0
+cachetools==7.1.4

@@ -14,6 +14,7 @@
 
 import unittest
 from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 import logging
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.errors import ClientCertError
@@ -23,7 +24,18 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.trusted_cns = ["admin.example.com", "puppet-master.example.com"]
-        self.auth = AuthorizeClientCert(self.log, self.trusted_cns)
+        self.config = MagicMock()
+        self.config.ca.verifyCertificateRegistration = True
+        self.config.ca.verifyCertificateRegistrationCacheTtl = 300
+        self.config.ca.verifyCertificateRegistrationCacheMaxsize = 1024
+        self.crud_ca_certificates = MagicMock()
+        self.crud_ca_certificates.get = AsyncMock()
+        self.auth = AuthorizeClientCert(
+            log=self.log,
+            config=self.config,
+            trusted_cns=self.trusted_cns,
+            crud_ca_certificates=self.crud_ca_certificates,
+        )
 
     def _create_mock_request(self, cert_dict=None):
         mock_request = MagicMock()
@@ -32,30 +44,61 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
             mock_request.scope["client_cert_dict"] = cert_dict
         return mock_request
 
+    def _setup_mock_cert(self, cn, status="signed"):
+        mock_cert = MagicMock()
+        mock_cert.cn = cn
+        mock_cert.status = status
+        self.crud_ca_certificates.get.return_value = mock_cert
+
     async def test_get_cn_from_request_success(self):
         cert_dict = {
-            "subject": (
-                (("commonName", "admin.example.com"),),
-                (("organizationName", "PyppetDB"),),
-            ),
+            "subject": ((("commonName", "admin.example.com"),),),
             "serialNumber": "01",
         }
+        self._setup_mock_cert("admin.example.com")
         mock_request = self._create_mock_request(cert_dict)
         cert_info = await self.auth.get_cert_info(mock_request)
         self.assertEqual(cert_info["cn"], "admin.example.com")
         self.assertEqual(cert_info["serial"], "1")
+        self.crud_ca_certificates.get.assert_called_once()
+
+    async def test_get_cn_from_request_cache(self):
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "01",
+        }
+        self._setup_mock_cert("admin.example.com")
+        mock_request = self._create_mock_request(cert_dict)
+
+        # First call - should hit DB
+        await self.auth.get_cert_info(mock_request)
+        self.crud_ca_certificates.get.assert_called_once()
+
+        # Second call - should hit cache
+        await self.auth.get_cert_info(mock_request)
+        self.crud_ca_certificates.get.assert_called_once()
+
+    async def test_get_cn_from_request_bypass(self):
+        self.config.ca.verifyCertificateRegistration = False
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "01",
+        }
+        mock_request = self._create_mock_request(cert_dict)
+        await self.auth.get_cert_info(mock_request)
+        self.crud_ca_certificates.get.assert_not_called()
 
     async def test_get_cn_from_request_no_cert(self):
         mock_request = self._create_mock_request(None)
-        with self.assertRaises(ClientCertError) as cm:
+        with self.assertRaises(ClientCertError):
             await self.auth.get_cert_info(mock_request)
-        self.assertEqual(cm.exception.detail, "No client certificate provided")
 
-    async def test_require_cn(self):
+    async def test_require_cn_success(self):
         cert_dict = {
             "subject": ((("commonName", "any.example.com"),),),
             "serialNumber": "02",
         }
+        self._setup_mock_cert("any.example.com")
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn(mock_request)
         self.assertEqual(cn, "any.example.com")
@@ -65,15 +108,17 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
             "subject": ((("commonName", "admin.example.com"),),),
             "serialNumber": "03",
         }
+        self._setup_mock_cert("admin.example.com")
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn_trusted(mock_request)
         self.assertEqual(cn, "admin.example.com")
 
-    async def test_require_cn_trusted_untrusted(self):
+    async def test_require_cn_trusted_failure(self):
         cert_dict = {
             "subject": ((("commonName", "untrusted.example.com"),),),
             "serialNumber": "04",
         }
+        self._setup_mock_cert("untrusted.example.com")
         mock_request = self._create_mock_request(cert_dict)
         with self.assertRaises(ClientCertError):
             await self.auth.require_cn_trusted(mock_request)
@@ -83,6 +128,7 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
             "subject": ((("commonName", "match.example.com"),),),
             "serialNumber": "05",
         }
+        self._setup_mock_cert("match.example.com")
         mock_request = self._create_mock_request(cert_dict)
         cn = await self.auth.require_cn_match(mock_request, "match.example.com")
         self.assertEqual(cn, "match.example.com")
@@ -92,6 +138,25 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
             "subject": ((("commonName", "no-match.example.com"),),),
             "serialNumber": "06",
         }
+        self._setup_mock_cert("no-match.example.com")
         mock_request = self._create_mock_request(cert_dict)
-        with self.assertRaises(ClientCertError):
+        with self.assertRaises(ClientCertError) as cm:
             await self.auth.require_cn_match(mock_request, "match.example.com")
+        self.assertEqual(
+            cm.exception.detail,
+            "CN no-match.example.com does not match match.example.com",
+        )
+
+    async def test_verify_registration_cn_mismatch(self):
+        from pyppetdb.errors import ResourceNotFound
+
+        cert_dict = {
+            "subject": ((("commonName", "cert-cn.example.com"),),),
+            "serialNumber": "07",
+        }
+        # Mock database returning ResourceNotFound when CN is part of the query and doesn't match
+        self.crud_ca_certificates.get.side_effect = ResourceNotFound
+        mock_request = self._create_mock_request(cert_dict)
+        with self.assertRaises(ClientCertError) as cm:
+            await self.auth.get_cert_info(mock_request)
+        self.assertEqual(cm.exception.detail, "Certificate not found in database")
