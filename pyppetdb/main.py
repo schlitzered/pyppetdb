@@ -1325,7 +1325,10 @@ def main():
         )
         return
 
-    asyncio.run(main_run())
+    try:
+        asyncio.run(main_run())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
