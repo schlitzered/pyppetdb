@@ -117,7 +117,7 @@ async def expire_scheduled_jobs_worker(
     hub: WsHub,
 ):
     log.info("starting scheduled jobs expiration worker")
-    instance_id = socket.getfqdn()
+    instance_id = f"{socket.getfqdn()}:{config.app.main.port}"
     while True:
         try:
             leader = await crud_pyppetdb_nodes.get_leader()
@@ -243,6 +243,7 @@ async def prepare_env():
         database=settings.mongodb.database,
         url=settings.mongodb.url,
     )
+    env["mongo_db"] = mongo_db
 
     crud_manager = CrudManager(log=log)
 
@@ -559,7 +560,7 @@ async def prepare_env():
 
 
 @asynccontextmanager
-async def lifespan_dev(app: FastAPI):
+async def lifespan(app: FastAPI):
     env = await prepare_env()
 
     controller = pyppetdb.controller.Controller(
@@ -598,15 +599,24 @@ async def lifespan_dev(app: FastAPI):
         redactor=env["nodes_secrets_redactor"],
         ws_hub=env["ws_hub"],
     )
-    app.include_router(controller.router_dev)
+
+    if settings.app.main.enable:
+        app.include_router(router=controller.router_main)
+    if settings.app.puppetdb.enable:
+        app.include_router(router=controller.router_puppetdb)
+    if settings.app.puppet.enable:
+        app.include_router(router=controller.router_puppet)
 
     refresh_task = None
     heartbeat_task = asyncio.create_task(
-        pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
+        coro=pyppetdb_nodes_heartbeat_worker(
+            crud=env["crud_pyppetdb_nodes"],
+            port=settings.app.main.port,
+        ),
         name="pyppetdb-nodes-heartbeat",
     )
     expire_jobs_task = asyncio.create_task(
-        expire_scheduled_jobs_worker(
+        coro=expire_scheduled_jobs_worker(
             log=env["log"],
             config=settings,
             crud_node_jobs=env["crud_node_jobs"],
@@ -616,15 +626,17 @@ async def lifespan_dev(app: FastAPI):
         name="expire-scheduled-jobs",
     )
     ws_hub_task = asyncio.create_task(
-        env["ws_hub"].run(),
+        coro=env["ws_hub"].run(),
         name="ws-hub-background",
     )
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
-            env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
+            coro=env["ca_service"].crl_refresh_worker(),
+            name="ca-crl-refresh",
         )
 
     yield
+
     if heartbeat_task:
         heartbeat_task.cancel()
     if expire_jobs_task:
@@ -635,7 +647,28 @@ async def lifespan_dev(app: FastAPI):
     if refresh_task:
         refresh_task.cancel()
 
-    await env["crud_nodes"].cleanup_remote_agents(via=socket.getfqdn())
+    instance_id = f"{socket.getfqdn()}:{settings.app.main.port}"
+    log = env["log"]
+    log.info(f"Removing PyppetDB node '{instance_id}' from database...")
+    with suppress(Exception):
+        await env["crud_pyppetdb_nodes"].delete(_id=instance_id)
+
+    await env["crud_nodes"].cleanup_remote_agents(via=instance_id)
+
+    if "ldap_pool" in env and env["ldap_pool"]:
+        log.info("Closing LDAP pool...")
+        await env["ldap_pool"].close()
+
+    if "http" in env and env["http"]:
+        log.info("Closing HTTP client...")
+        await env["http"].aclose()
+
+    if "mongo_db" in env and env["mongo_db"] is not None:
+        log.info(msg="Closing MongoDB client...")
+        env["mongo_db"].client.close()
+
+
+lifespan_dev = lifespan
 
 
 async def setup_ldap(log: logging.Logger, settings_ldap: SettingsLdap):
@@ -1122,17 +1155,20 @@ async def cli_import_puppet_ca(
     log.info("Puppet CA import complete.")
 
 
-app_dev = FastAPI(
-    title="pyppetdb all in one dev server",
+app = FastAPI(
+    title="pyppetdb",
     version=version,
-    lifespan=lifespan_dev,
+    lifespan=lifespan,
 )
-app_dev.add_middleware(
-    SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
+app.add_middleware(
+    middleware_class=SessionMiddleware,
+    secret_key=settings.app.secretkey,
+    max_age=3600,
 )
+app_dev = app
 
 
-@app_dev.middleware("http")
+@app.middleware("http")
 async def add_process_time_header(request, call_next):
     start_time = time.time()
     response = await call_next(request)
@@ -1141,201 +1177,57 @@ async def add_process_time_header(request, call_next):
     return response
 
 
-def main_run_get_app(
-    app_name: str,
-    controller: pyppetdb.controller.Controller,
-) -> uvicorn.Server | None:
-    _settings = getattr(settings.app, f"{app_name}")
-    if not _settings.enable:
-        return None
-    app = FastAPI(
-        title=f"pyppetdb {app_name} server",
-        version=version,
-    )
-    app.add_middleware(
-        SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600
-    )
-    app.include_router(getattr(controller, f"router_{app_name}"))
-
-    ssl_ca = _settings.ssl.ca if _settings.ssl else None
-    if not ssl_ca and _settings.ssl and app_name == "main":
-        if settings.app.puppet.ssl and settings.app.puppet.ssl.ca:
-            ssl_ca = settings.app.puppet.ssl.ca
-
-    config = uvicorn.Config(
-        app,
-        host=_settings.host,
-        port=_settings.port,
-        log_config=None,
-        ssl_ca_certs=ssl_ca,
-        ssl_certfile=_settings.ssl.cert if _settings.ssl else None,
-        ssl_keyfile=_settings.ssl.key if _settings.ssl else None,
-        ssl_cert_reqs=ssl.CERT_OPTIONAL if _settings.ssl else ssl.CERT_NONE,
-        http=ClientCertProtocol if _settings.ssl else "auto",
-        ws=ClientCertWebSocketsProtocol if _settings.ssl else "auto",
-    )
-    config.install_signal_handlers = False
-    return uvicorn.Server(config)
-
-
-async def pyppetdb_nodes_heartbeat_worker(crud: CrudPyppetDBNodes):
-    _id = socket.getfqdn()
+async def pyppetdb_nodes_heartbeat_worker(
+    crud: CrudPyppetDBNodes,
+    port: int,
+):
+    _id = f"{socket.getfqdn()}:{port}"
     while True:
         try:
             await crud.heartbeat_update(_id=_id)
         except Exception as e:
-            logging.getLogger("pyppetdb").error(
-                f"Error updating heartbeat for {_id}: {e}"
+            logging.getLogger(name="pyppetdb").error(
+                msg=f"Error updating heartbeat for {_id}: {e}"
             )
-        await asyncio.sleep(10)
+        await asyncio.sleep(delay=10)
 
 
 async def main_run():
-    env = await prepare_env()
-    log = env["log"]
-    controller = pyppetdb.controller.Controller(
-        log=env["log"],
-        authorize_pyppetdb=env["authorize_pyppetdb"],
-        authorize_client_cert_puppet=env["authorize_client_cert_puppet"],
-        authorize_client_cert_pdb=env["authorize_client_cert_pdb"],
-        crud_ldap=env["crud_ldap"],
-        crud_hiera_key_models_static=env["crud_hiera_key_models_static"],
-        crud_hiera_key_models_dynamic=env["crud_hiera_key_models_dynamic"],
-        crud_hiera_keys=env["crud_hiera_keys"],
-        crud_hiera_levels=env["crud_hiera_levels"],
-        crud_hiera_level_data=env["crud_hiera_level_data"],
-        crud_hiera_lookup_cache=env["crud_hiera_lookup_cache"],
-        crud_job_definitions=env["crud_job_definitions"],
-        crud_jobs=env["crud_jobs"],
-        crud_node_jobs=env["crud_node_jobs"],
-        crud_nodes=env["crud_nodes"],
-        crud_nodes_catalog_cache=env["crud_nodes_catalog_cache"],
-        crud_nodes_catalogs=env["crud_nodes_catalogs"],
-        crud_nodes_groups=env["crud_nodes_groups"],
-        crud_nodes_reports=env["crud_nodes_reports"],
-        crud_nodes_secrets_redactor=env["crud_nodes_secrets_redactor"],
-        crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
-        crud_teams=env["crud_teams"],
-        crud_users=env["crud_users"],
-        crud_users_credentials=env["crud_users_credentials"],
-        crud_ca_authorities=env["crud_ca_authorities"],
-        crud_ca_spaces=env["crud_ca_spaces"],
-        crud_ca_certificates=env["crud_ca_certificates"],
-        ca_service=env["ca_service"],
-        crud_oauth=env["crud_oauth"],
-        http=env["http"],
-        config=settings,
-        pyhiera=env["pyhiera"],
-        redactor=env["nodes_secrets_redactor"],
-        ws_hub=env["ws_hub"],
+    _settings = settings.app.main
+
+    ssl_cert = None
+    ssl_key = None
+    ssl_ca = None
+    ssl_enabled = False
+
+    if _settings.ssl:
+        ssl_enabled = True
+        ssl_cert = _settings.ssl.cert
+        ssl_key = _settings.ssl.key
+        ssl_ca = _settings.ssl.ca
+
+    if not ssl_enabled and settings.app.puppet.ssl:
+        ssl_enabled = True
+        ssl_cert = settings.app.puppet.ssl.cert
+        ssl_key = settings.app.puppet.ssl.key
+        ssl_ca = settings.app.puppet.ssl.ca
+    elif ssl_enabled and not ssl_ca and settings.app.puppet.ssl and settings.app.puppet.ssl.ca:
+        ssl_ca = settings.app.puppet.ssl.ca
+
+    config = uvicorn.Config(
+        app=app,
+        host=_settings.host,
+        port=_settings.port,
+        log_config=None,
+        ssl_ca_certs=ssl_ca,
+        ssl_certfile=ssl_cert,
+        ssl_keyfile=ssl_key,
+        ssl_cert_reqs=ssl.CERT_OPTIONAL if ssl_enabled else ssl.CERT_NONE,
+        http=ClientCertProtocol if ssl_enabled else "auto",
+        ws=ClientCertWebSocketsProtocol if ssl_enabled else "auto",
     )
-    apps = list()
-    apps_tasks = list()
-    for app_name in ("main", "puppet", "puppetdb"):
-        app = main_run_get_app(app_name, controller)
-        if app:
-            apps.append(app)
-            apps_tasks.append(
-                asyncio.create_task(app.serve(), name=f"uvicorn-{app_name}")
-            )
-
-    worker_tasks = list()
-    worker_tasks.append(
-        asyncio.create_task(
-            pyppetdb_nodes_heartbeat_worker(env["crud_pyppetdb_nodes"]),
-            name="pyppetdb-nodes-heartbeat",
-        )
-    )
-    worker_tasks.append(
-        asyncio.create_task(
-            expire_scheduled_jobs_worker(
-                log=env["log"],
-                config=settings,
-                crud_node_jobs=env["crud_node_jobs"],
-                crud_pyppetdb_nodes=env["crud_pyppetdb_nodes"],
-                hub=env["ws_hub"],
-            ),
-            name="expire-scheduled-jobs",
-        )
-    )
-    worker_tasks.append(
-        asyncio.create_task(
-            env["ws_hub"].run(),
-            name="ws-hub-background",
-        )
-    )
-    if settings.ca.enableCrlRefresh:
-        worker_tasks.append(
-            asyncio.create_task(
-                env["ca_service"].crl_refresh_worker(), name="ca-crl-refresh"
-            )
-        )
-
-    if not apps:
-        log.fatal("no apps configured")
-        sys.exit(1)
-
-    stop_event = asyncio.Event()
-
-    def request_stop():
-        log.info("Shutdown requested, stopping apps...")
-        for _app in apps:
-            _app.should_exit = True
-        stop_event.set()
-
-    all_tasks = (
-        apps_tasks
-        + worker_tasks
-        + [asyncio.create_task(stop_event.wait(), name="stop-event")]
-    )
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, request_stop)
-
-    try:
-        await asyncio.wait(
-            all_tasks,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        if not stop_event.is_set():
-            request_stop()
-
-        env["ws_hub"].stop()
-
-        for t in worker_tasks + [all_tasks[-1]]:
-            if not t.done():
-                t.cancel()
-                with suppress(asyncio.CancelledError):
-                    await t
-
-        try:
-            await asyncio.wait_for(asyncio.gather(*apps_tasks), timeout=10)
-        except asyncio.TimeoutError:
-            log.warning("Apps did not stop in time, forcing shutdown...")
-    finally:
-        for t in all_tasks:
-            if not t.done():
-                t.cancel()
-                with suppress(asyncio.CancelledError):
-                    await t
-
-        instance_id = socket.getfqdn()
-        log.info(f"Removing PyppetDB node '{instance_id}' from database...")
-        with suppress(Exception):
-            await env["crud_pyppetdb_nodes"].delete(_id=instance_id)
-
-        await env["crud_nodes"].cleanup_remote_agents(via=instance_id)
-
-        if "ldap_pool" in env and env["ldap_pool"]:
-            log.info("Closing LDAP pool...")
-            await env["ldap_pool"].close()
-
-        if "http" in env and env["http"]:
-            log.info("Closing HTTP client...")
-            await env["http"].aclose()
-
-        log.info("Shutdown complete.")
+    server = uvicorn.Server(config=config)
+    await server.serve()
 
 
 def _build_parser() -> argparse.ArgumentParser:

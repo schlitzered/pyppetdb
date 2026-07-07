@@ -95,12 +95,28 @@ class WsInterAPI:
 
     async def _authenticate(self, cn: str) -> bool:
         try:
-            node = await self._crud_pyppetdb_nodes.get(
-                _id=cn,
+            try:
+                node = await self._crud_pyppetdb_nodes.get(
+                    _id=cn,
+                    fields=["id", "heartbeat"],
+                )
+                now = datetime.now()
+                if (now - node.heartbeat).total_seconds() <= 60:
+                    return True
+            except Exception:
+                pass
+
+            import re
+            escaped_cn = re.escape(cn)
+            nodes = await self._crud_pyppetdb_nodes.search(
+                _id=f"^{escaped_cn}(:|$)",
                 fields=["id", "heartbeat"],
             )
             now = datetime.now()
-            return (now - node.heartbeat).total_seconds() <= 60
+            for node in nodes.result:
+                if node.heartbeat and (now - node.heartbeat).total_seconds() <= 60:
+                    return True
+            return False
         except Exception:
             return False
 
@@ -247,7 +263,17 @@ class WsInterAPI:
                     await asyncio.sleep(delay=0.1)
 
     async def _remote_api_client(self, via: str):
+        host = via
         port = self._config.app.main.port
+
+        if ":" in via:
+            parts = via.split(":", 1)
+            host = parts[0]
+            try:
+                port = int(parts[1])
+            except ValueError:
+                pass
+
         ssl_cert = self._config.app.main.ssl.cert if self._config.app.main.ssl else None
         ssl_key = self._config.app.main.ssl.key if self._config.app.main.ssl else None
         ssl_ca = self._config.app.main.ssl.ca if self._config.app.main.ssl else None
@@ -255,7 +281,7 @@ class WsInterAPI:
         if not ssl_cert or not ssl_key:
             return
 
-        url = f"wss://{via}:{port}/api/v1/ws/inter_api/"
+        url = f"wss://{host}:{port}/api/v1/ws/inter_api/"
         ssl_context = ssl.create_default_context(
             purpose=ssl.Purpose.SERVER_AUTH, cafile=ssl_ca
         )

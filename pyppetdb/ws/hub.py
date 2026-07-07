@@ -52,7 +52,7 @@ class WsHub:
         self._log = log
         self._config = config
         self._crud_nodes = crud_nodes
-        self._via = socket.getfqdn()
+        self._via = f"{socket.getfqdn()}:{self._config.app.main.port}"
 
         self._subscriptions: Dict[str, Set[Any]] = {}
         self._job_run_id_to_via: Dict[str, str] = {}
