@@ -38,6 +38,9 @@ class TestWsInterAPIUnit(unittest.IsolatedAsyncioTestCase):
 
         self.mock_authorize_client_cert = MagicMock()
         self.mock_crud_pyppetdb_nodes = MagicMock()
+        self.mock_crud_pyppetdb_nodes.get = AsyncMock(
+            return_value=MagicMock(port=None)
+        )
 
         self.inter_api = WsInterAPI(
             log=self.log,
@@ -97,3 +100,29 @@ class TestWsInterAPIUnit(unittest.IsolatedAsyncioTestCase):
 
             # Verify it was removed from the remote_conns dictionary
             self.assertNotIn(via, self.inter_api._remote_conns)
+
+    async def test_authenticate_success(self):
+        from datetime import datetime
+        mock_node = MagicMock()
+        mock_node.heartbeat = datetime.now()
+        self.mock_crud_pyppetdb_nodes.get = AsyncMock(return_value=mock_node)
+
+        result = await self.inter_api._authenticate("node1")
+        self.assertTrue(result)
+
+    async def test_authenticate_port_success(self):
+        from datetime import datetime
+        self.mock_crud_pyppetdb_nodes.get = AsyncMock(side_effect=Exception("not found"))
+
+        mock_node = MagicMock()
+        mock_node.heartbeat = datetime.now()
+        mock_search_res = MagicMock()
+        mock_search_res.result = [mock_node]
+        self.mock_crud_pyppetdb_nodes.search = AsyncMock(return_value=mock_search_res)
+
+        result = await self.inter_api._authenticate("node1")
+        self.assertTrue(result)
+        self.mock_crud_pyppetdb_nodes.search.assert_called_once_with(
+            _id="^node1(:|$)",
+            fields=["id", "heartbeat"],
+        )

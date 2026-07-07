@@ -86,7 +86,7 @@ class CAService:
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
         self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
-        self._instance_id = socket.getfqdn()
+        self._instance_id = f"{socket.getfqdn()}:{self._config.app.main.port}"
         self._executor = ThreadPoolExecutor(
             max_workers=self._config.ca.concurrentWorkers
         )

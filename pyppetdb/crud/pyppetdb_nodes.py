@@ -56,8 +56,11 @@ class CrudPyppetDBNodes(CrudMongo):
             index_name="ttl_heartbeat",
         )
 
-    async def heartbeat_update(self, _id: str) -> None:
-        now = datetime.now(timezone.utc)
+    async def heartbeat_update(
+        self,
+        _id: str,
+    ) -> None:
+        now = datetime.now(tz=timezone.utc)
         await self.coll.update_one(
             filter={"id": _id},
             update={

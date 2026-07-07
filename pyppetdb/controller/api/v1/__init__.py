@@ -136,8 +136,16 @@ class ControllerApiV1:
         self._log = log
         self._config = config
 
+        ws_controller = ControllerApiV1Ws(
+            log=log,
+            config=self._config,
+            authorize=authorize,
+            authorize_client_cert=authorize_client_cert_puppet,
+            ws_hub=ws_hub,
+        )
+
         self.router.include_router(
-            ControllerApiV1Authenticate(
+            router=ControllerApiV1Authenticate(
                 log=log,
                 authorize=authorize,
                 crud_users=crud_users,
@@ -147,16 +155,54 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1HieraKeyModelsStatic(
+            router=ControllerApiV1CAAuthorities(
                 log=log,
                 authorize=authorize,
-                crud_hiera_key_models_static=crud_hiera_key_models_static,
+                crud_authorities=crud_ca_authorities,
+                crud_teams=crud_teams,
+                ca_service=ca_service,
             ).router,
             responses={404: {"description": "Not found"}},
         )
 
         self.router.include_router(
-            ControllerApiV1HieraKeyModelsDynamic(
+            router=ControllerApiV1CAAuthoritiesCerts(
+                log=log,
+                authorize=authorize,
+                crud_authorities=crud_ca_authorities,
+                crud_certificates=crud_ca_certificates,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1CASpaces(
+                log=log,
+                authorize=authorize,
+                crud_ca_spaces=crud_ca_spaces,
+                crud_ca_authorities=crud_ca_authorities,
+                crud_ca_certificates=crud_ca_certificates,
+                crud_teams=crud_teams,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1CASpacesCerts(
+                log=log,
+                authorize=authorize,
+                crud_certificates=crud_ca_certificates,
+                crud_authorities=crud_ca_authorities,
+                crud_spaces=crud_ca_spaces,
+                ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1HieraKeyModelsDynamic(
                 log=log,
                 authorize=authorize,
                 crud_hiera_key_models_dynamic=crud_hiera_key_models_dynamic,
@@ -166,7 +212,16 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1HieraKeys(
+            router=ControllerApiV1HieraKeyModelsStatic(
+                log=log,
+                authorize=authorize,
+                crud_hiera_key_models_static=crud_hiera_key_models_static,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1HieraKeys(
                 log=log,
                 authorize=authorize,
                 crud_hiera_key_models_static=crud_hiera_key_models_static,
@@ -180,18 +235,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1HieraLevels(
-                log=log,
-                authorize=authorize,
-                crud_hiera_levels=crud_hiera_levels,
-                crud_hiera_level_data=crud_hiera_level_data,
-                crud_hiera_lookup_cache=crud_hiera_lookup_cache,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1HieraLevelData(
+            router=ControllerApiV1HieraLevelData(
                 log=log,
                 authorize=authorize,
                 crud_hiera_key_models_static=crud_hiera_key_models_static,
@@ -206,7 +250,18 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1HieraLookup(
+            router=ControllerApiV1HieraLevels(
+                log=log,
+                authorize=authorize,
+                crud_hiera_levels=crud_hiera_levels,
+                crud_hiera_level_data=crud_hiera_level_data,
+                crud_hiera_lookup_cache=crud_hiera_lookup_cache,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1HieraLookup(
                 log=log,
                 authorize=authorize,
                 crud_hiera_lookup_cache=crud_hiera_lookup_cache,
@@ -217,7 +272,49 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1Nodes(
+            router=ControllerApiV1JobsJobs(
+                log=log,
+                config=self._config,
+                authorize=authorize,
+                crud_jobs_definitions=crud_job_definitions,
+                crud_jobs=crud_jobs,
+                crud_nodes=crud_nodes,
+                crud_jobs_node_jobs=crud_node_jobs,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1JobsDefinitions(
+                log=log,
+                authorize=authorize,
+                crud_jobs_definitions=crud_job_definitions,
+                crud_teams=crud_teams,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1JobsNodesJobs(
+                log=log,
+                authorize=authorize,
+                crud_jobs_node_jobs=crud_node_jobs,
+                manager=ws_controller.ws_hub,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1JobsNodesJobsLogs(
+                log=log,
+                authorize=authorize,
+                manager=ws_controller.ws_hub,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1Nodes(
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
@@ -234,7 +331,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1NodesCatalogs(
+            router=ControllerApiV1NodesCatalogs(
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
@@ -244,7 +341,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1NodesGroups(
+            router=ControllerApiV1NodesGroups(
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
@@ -255,7 +352,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1NodesReports(
+            router=ControllerApiV1NodesReports(
                 log=log,
                 authorize=authorize,
                 crud_nodes=crud_nodes,
@@ -265,7 +362,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1NodesSecretsRedactor(
+            router=ControllerApiV1NodesSecretsRedactor(
                 log=log,
                 authorize=authorize,
                 crud_nodes_secrets_redactor=crud_nodes_secrets_redactor,
@@ -274,7 +371,28 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1Teams(
+            router=ControllerApiV1Permissions(
+                log=log,
+                authorize=authorize,
+                crud_ca_authorities=crud_ca_authorities,
+                crud_ca_spaces=crud_ca_spaces,
+                crud_hiera_keys=crud_hiera_keys,
+                crud_jobs_definitions=crud_job_definitions,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1PyppetDBNodes(
+                log=log,
+                authorize=authorize,
+                crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1Teams(
                 log=log,
                 authorize=authorize,
                 crud_nodes_groups=crud_nodes_groups,
@@ -289,7 +407,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1Users(
+            router=ControllerApiV1Users(
                 log=log,
                 authorize=authorize,
                 crud_teams=crud_teams,
@@ -300,7 +418,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1UsersCredentials(
+            router=ControllerApiV1UsersCredentials(
                 log=log,
                 authorize=authorize,
                 crud_users=crud_users,
@@ -310,125 +428,7 @@ class ControllerApiV1:
         )
 
         self.router.include_router(
-            ControllerApiV1CAAuthorities(
-                log=log,
-                authorize=authorize,
-                crud_authorities=crud_ca_authorities,
-                crud_teams=crud_teams,
-                ca_service=ca_service,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1CAAuthoritiesCerts(
-                log=log,
-                authorize=authorize,
-                crud_authorities=crud_ca_authorities,
-                crud_certificates=crud_ca_certificates,
-                ca_service=ca_service,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1CASpaces(
-                log=log,
-                authorize=authorize,
-                crud_ca_spaces=crud_ca_spaces,
-                crud_ca_authorities=crud_ca_authorities,
-                crud_ca_certificates=crud_ca_certificates,
-                crud_teams=crud_teams,
-                ca_service=ca_service,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1CASpacesCerts(
-                log=log,
-                authorize=authorize,
-                crud_certificates=crud_ca_certificates,
-                crud_authorities=crud_ca_authorities,
-                crud_spaces=crud_ca_spaces,
-                ca_service=ca_service,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1PyppetDBNodes(
-                log=log,
-                authorize=authorize,
-                crud_pyppetdb_nodes=crud_pyppetdb_nodes,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1Permissions(
-                log=log,
-                authorize=authorize,
-                crud_ca_authorities=crud_ca_authorities,
-                crud_ca_spaces=crud_ca_spaces,
-                crud_hiera_keys=crud_hiera_keys,
-                crud_jobs_definitions=crud_job_definitions,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1JobsDefinitions(
-                log=log,
-                authorize=authorize,
-                crud_jobs_definitions=crud_job_definitions,
-                crud_teams=crud_teams,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1JobsJobs(
-                log=log,
-                config=self._config,
-                authorize=authorize,
-                crud_jobs_definitions=crud_job_definitions,
-                crud_jobs=crud_jobs,
-                crud_nodes=crud_nodes,
-                crud_jobs_node_jobs=crud_node_jobs,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        ws_controller = ControllerApiV1Ws(
-            log=log,
-            config=self._config,
-            authorize=authorize,
-            authorize_client_cert=authorize_client_cert_puppet,
-            ws_hub=ws_hub,
-        )
-
-        self.router.include_router(
-            ControllerApiV1JobsNodesJobs(
-                log=log,
-                authorize=authorize,
-                crud_jobs_node_jobs=crud_node_jobs,
-                manager=ws_controller.ws_hub,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ControllerApiV1JobsNodesJobsLogs(
-                log=log,
-                authorize=authorize,
-                manager=ws_controller.ws_hub,
-            ).router,
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router.include_router(
-            ws_controller.router,
+            router=ws_controller.router,
             responses={404: {"description": "Not found"}},
         )
 
