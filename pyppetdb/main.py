@@ -29,7 +29,6 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 import logging
 import secrets
-import signal
 import socket
 import ssl
 import string
