@@ -78,56 +78,58 @@ from pyppetdb.crud.hiera_keys import CrudHieraKeys
 from pyppetdb.crud.jobs_definitions import CrudJobsDefinitions
 from pyppetdb.model.permissions import PermissionsGet
 
-STATIC_PERMISSIONS = sorted([
-    PERM_CA_GET,
-    PERM_CA_AUTHORITIES_CREATE,
-    PERM_CA_AUTHORITIES_UPDATE,
-    PERM_CA_AUTHORITIES_DELETE,
-    PERM_CA_SPACES_CREATE,
-    PERM_CA_SPACES_UPDATE,
-    PERM_CA_SPACES_DELETE,
-    PERM_HIERA_GET,
-    PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE,
-    PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE,
-    PERM_HIERA_KEYS_CREATE,
-    PERM_HIERA_KEYS_UPDATE,
-    PERM_HIERA_KEYS_DELETE,
-    PERM_HIERA_LEVELS_CREATE,
-    PERM_HIERA_LEVELS_UPDATE,
-    PERM_HIERA_LEVELS_DELETE,
-    PERM_HIERA_LEVEL_DATA_CREATE,
-    PERM_HIERA_LEVEL_DATA_UPDATE,
-    PERM_HIERA_LEVEL_DATA_DELETE,
-    PERM_JOBS_GET,
-    PERM_JOBS_JOB_CREATE,
-    PERM_JOBS_DEFINITION_CREATE,
-    PERM_JOBS_DEFINITION_UPDATE,
-    PERM_JOBS_DEFINITION_DELETE,
-    PERM_NODES_CREATE,
-    PERM_NODES_UPDATE,
-    PERM_NODES_DELETE,
-    PERM_NODES_CATALOG_CACHE_DELETE,
-    PERM_NODES_GROUPS_CREATE,
-    PERM_NODES_GROUPS_UPDATE,
-    PERM_NODES_GROUPS_DELETE,
-    PERM_NODES_GROUPS_GET,
-    PERM_NODES_SECRETS_REDACTOR_CREATE,
-    PERM_NODES_SECRETS_REDACTOR_DELETE,
-    PERM_PYPPETDB_NODES_GET,
-    PERM_PYPPETDB_NODES_DELETE,
-    PERM_TEAMS_CREATE,
-    PERM_TEAMS_UPDATE,
-    PERM_TEAMS_DELETE,
-    PERM_TEAMS_GET,
-    PERM_USERS_CREATE,
-    PERM_USERS_UPDATE,
-    PERM_USERS_DELETE,
-    PERM_USERS_GET,
-    PERM_USERS_CREDENTIALS_CREATE,
-    PERM_USERS_CREDENTIALS_UPDATE,
-    PERM_USERS_CREDENTIALS_DELETE,
-    PERM_USERS_CREDENTIALS_GET,
-])
+STATIC_PERMISSIONS = sorted(
+    [
+        PERM_CA_GET,
+        PERM_CA_AUTHORITIES_CREATE,
+        PERM_CA_AUTHORITIES_UPDATE,
+        PERM_CA_AUTHORITIES_DELETE,
+        PERM_CA_SPACES_CREATE,
+        PERM_CA_SPACES_UPDATE,
+        PERM_CA_SPACES_DELETE,
+        PERM_HIERA_GET,
+        PERM_HIERA_KEY_MODELS_DYNAMIC_CREATE,
+        PERM_HIERA_KEY_MODELS_DYNAMIC_DELETE,
+        PERM_HIERA_KEYS_CREATE,
+        PERM_HIERA_KEYS_UPDATE,
+        PERM_HIERA_KEYS_DELETE,
+        PERM_HIERA_LEVELS_CREATE,
+        PERM_HIERA_LEVELS_UPDATE,
+        PERM_HIERA_LEVELS_DELETE,
+        PERM_HIERA_LEVEL_DATA_CREATE,
+        PERM_HIERA_LEVEL_DATA_UPDATE,
+        PERM_HIERA_LEVEL_DATA_DELETE,
+        PERM_JOBS_GET,
+        PERM_JOBS_JOB_CREATE,
+        PERM_JOBS_DEFINITION_CREATE,
+        PERM_JOBS_DEFINITION_UPDATE,
+        PERM_JOBS_DEFINITION_DELETE,
+        PERM_NODES_CREATE,
+        PERM_NODES_UPDATE,
+        PERM_NODES_DELETE,
+        PERM_NODES_CATALOG_CACHE_DELETE,
+        PERM_NODES_GROUPS_CREATE,
+        PERM_NODES_GROUPS_UPDATE,
+        PERM_NODES_GROUPS_DELETE,
+        PERM_NODES_GROUPS_GET,
+        PERM_NODES_SECRETS_REDACTOR_CREATE,
+        PERM_NODES_SECRETS_REDACTOR_DELETE,
+        PERM_PYPPETDB_NODES_GET,
+        PERM_PYPPETDB_NODES_DELETE,
+        PERM_TEAMS_CREATE,
+        PERM_TEAMS_UPDATE,
+        PERM_TEAMS_DELETE,
+        PERM_TEAMS_GET,
+        PERM_USERS_CREATE,
+        PERM_USERS_UPDATE,
+        PERM_USERS_DELETE,
+        PERM_USERS_GET,
+        PERM_USERS_CREDENTIALS_CREATE,
+        PERM_USERS_CREDENTIALS_UPDATE,
+        PERM_USERS_CREDENTIALS_DELETE,
+        PERM_USERS_CREDENTIALS_GET,
+    ]
+)
 
 
 class ControllerApiV1Permissions:
@@ -180,33 +182,23 @@ class ControllerApiV1Permissions:
             limit=1000,
         )
         for authority in authorities.result:
-            dynamic.append(
-                PERM_CA_AUTHORITIES_CERTS_UPDATE.format(ca_id=authority.id)
-            )
+            dynamic.append(PERM_CA_AUTHORITIES_CERTS_UPDATE.format(ca_id=authority.id))
 
         spaces = await self._crud_ca_spaces.search(
             fields=["id"],
             limit=1000,
         )
         for space in spaces.result:
-            dynamic.append(
-                PERM_CA_SPACES_CERTS_UPDATE.format(space_id=space.id)
-            )
+            dynamic.append(PERM_CA_SPACES_CERTS_UPDATE.format(space_id=space.id))
 
         keys = await self._crud_hiera_keys.search(
             fields=["id"],
             limit=1000,
         )
         for key in keys.result:
-            dynamic.append(
-                PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC.format(key_id=key.id)
-            )
-            dynamic.append(
-                PERM_HIERA_LEVEL_DATA_UPDATE_DYNAMIC.format(key_id=key.id)
-            )
-            dynamic.append(
-                PERM_HIERA_LEVEL_DATA_DELETE_DYNAMIC.format(key_id=key.id)
-            )
+            dynamic.append(PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC.format(key_id=key.id))
+            dynamic.append(PERM_HIERA_LEVEL_DATA_UPDATE_DYNAMIC.format(key_id=key.id))
+            dynamic.append(PERM_HIERA_LEVEL_DATA_DELETE_DYNAMIC.format(key_id=key.id))
 
         definitions = await self._crud_jobs_definitions.search(
             fields=["id"],

@@ -1210,7 +1210,12 @@ async def main_run():
         ssl_cert = settings.app.puppet.ssl.cert
         ssl_key = settings.app.puppet.ssl.key
         ssl_ca = settings.app.puppet.ssl.ca
-    elif ssl_enabled and not ssl_ca and settings.app.puppet.ssl and settings.app.puppet.ssl.ca:
+    elif (
+        ssl_enabled
+        and not ssl_ca
+        and settings.app.puppet.ssl
+        and settings.app.puppet.ssl.ca
+    ):
         ssl_ca = settings.app.puppet.ssl.ca
 
     config = uvicorn.Config(

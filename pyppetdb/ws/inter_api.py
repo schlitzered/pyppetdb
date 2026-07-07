@@ -107,6 +107,7 @@ class WsInterAPI:
                 pass
 
             import re
+
             escaped_cn = re.escape(cn)
             nodes = await self._crud_pyppetdb_nodes.search(
                 _id=f"^{escaped_cn}(:|$)",

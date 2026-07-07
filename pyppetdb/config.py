@@ -110,7 +110,6 @@ class ConfigAppPuppetdb(BaseModel):
         return v
 
 
-
 class ConfigApp(BaseModel):
     main: ConfigAppMain = ConfigAppMain()
     puppet: ConfigAppPuppet = ConfigAppPuppet()
