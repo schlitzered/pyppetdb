@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-import typing
+from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
@@ -25,7 +25,6 @@ from pyppetdb.crud.common import CrudMongo
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.model.common import filter_complex_search
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.hiera_level_data import HieraLevelDataGet
 from pyppetdb.model.hiera_level_data import HieraLevelDataGetMulti
@@ -178,17 +177,17 @@ class CrudHieraLevelData(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        key_id: typing.Optional[str] = None,
-        level_id: typing.Optional[str] = None,
-        _id_list: typing.Optional[list[str]] = None,
-        fact: typing.Optional[filter_complex_search] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
-        query: typing.Optional[dict] = None,
+        _id: Optional[str] = None,
+        key_id: Optional[str] = None,
+        level_id: Optional[str] = None,
+        _id_list: Optional[list[str]] = None,
+        fact: Optional[set[str]] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        query: Optional[dict] = None,
     ) -> HieraLevelDataGetMulti:
         if not query:
             query = {}

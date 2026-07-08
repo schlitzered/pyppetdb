@@ -15,9 +15,10 @@
 import logging
 import uuid
 import datetime
-import typing
-import pymongo
+from typing import Optional
+
 from motor.motor_asyncio import AsyncIOMotorCollection
+import pymongo
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
@@ -81,14 +82,14 @@ class CrudJobs(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        definition_id: typing.Optional[str] = None,
-        created_by: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        definition_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> JobGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

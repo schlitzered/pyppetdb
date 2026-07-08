@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import typing
+from typing import Optional
+
 import pymongo
+from bson.objectid import ObjectId
 
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.jobs_definitions import JobDefinitionGet
@@ -45,7 +47,7 @@ class CrudJobsDefinitions(CrudMongo):
         result = await self._get(query=query, fields=fields)
         return JobDefinitionGet(**result)
 
-    async def resource_exists(self, _id: str) -> str:
+    async def resource_exists(self, _id: str) -> ObjectId:
         query = {"id": _id}
         return await self._resource_exists(query=query)
 
@@ -64,12 +66,12 @@ class CrudJobsDefinitions(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> JobDefinitionGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

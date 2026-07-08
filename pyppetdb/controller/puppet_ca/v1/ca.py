@@ -107,7 +107,13 @@ class ControllerPuppetCaV1CA:
 
         try:
             cert_doc = await self._crud_certificates.get_by_cn(
-                space_id="puppet-ca", cn=nodename, status="signed"
+                space_id="puppet-ca",
+                cn=nodename,
+                fields=[
+                    "id",
+                    "certificate",
+                ],
+                status="signed",
             )
         except ResourceNotFound:
             cert_doc = None
@@ -121,7 +127,13 @@ class ControllerPuppetCaV1CA:
         await self.authorize_client_cert.require_cn_trusted(request)
         try:
             cert_doc = await self._crud_certificates.get_by_cn(
-                space_id="puppet-ca", cn=nodename, status="requested"
+                space_id="puppet-ca",
+                cn=nodename,
+                fields=[
+                    "id",
+                    "csr",
+                ],
+                status="requested",
             )
         except ResourceNotFound:
             cert_doc = None
@@ -202,7 +214,14 @@ class ControllerPuppetCaV1CA:
         await self.authorize_client_cert.require_cn_trusted(request)
         try:
             cert_doc = await self._crud_certificates.get_by_cn(
-                space_id="puppet-ca", cn=nodename
+                space_id="puppet-ca",
+                cn=nodename,
+                fields=[
+                    "id",
+                    "cn",
+                    "status",
+                    "fingerprint",
+                ],
             )
         except ResourceNotFound:
             cert_doc = None

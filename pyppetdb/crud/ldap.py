@@ -14,6 +14,7 @@
 
 import asyncio
 import logging
+import typing
 
 import bonsai.asyncio
 import bonsai.errors
@@ -103,7 +104,8 @@ class CrudLdap:
         user_name = self.ldap_user_pattern.format(user)
         client.set_credentials("SIMPLE", user_name, password)
         try:
-            async with client.connect(is_async=True) as conn:
+            conn_ctx: typing.Any = client.connect(is_async=True)
+            async with conn_ctx as conn:
                 user = await conn.search(
                     self.ldap_base_dn,
                     bonsai.LDAPSearchScope.SUBTREE,

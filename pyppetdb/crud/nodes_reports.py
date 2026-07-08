@@ -14,7 +14,7 @@
 
 from datetime import datetime
 import logging
-import typing
+from typing import Optional
 
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -38,7 +38,7 @@ class NodesReportsRedactor:
         self.log = log
         self._redactor = redactor
 
-    def redact(self, data: typing.Any) -> typing.Any:
+    def redact(self, data: dict) -> dict:
         if not isinstance(data, dict):
             return data
 
@@ -46,21 +46,19 @@ class NodesReportsRedactor:
         if not isinstance(report, dict):
             return data
 
-        # 1. report.logs: only redact "message" field of each object
         logs = report.get("logs")
-        if isinstance(logs, typing.List):
+        if isinstance(logs, list):
             for log_entry in logs:
                 if isinstance(log_entry, dict) and "message" in log_entry:
                     log_entry["message"] = self._redactor.redact(log_entry["message"])
 
-        # 2. report.resources.[].events.[].new_value, old_value, message
         resources = report.get("resources")
-        if isinstance(resources, typing.List):
+        if isinstance(resources, list):
             for resource in resources:
                 if not isinstance(resource, dict):
                     continue
                 events = resource.get("events")
-                if isinstance(events, typing.List):
+                if isinstance(events, list):
                     for event in events:
                         if not isinstance(event, dict):
                             continue
@@ -123,36 +121,26 @@ class CrudNodesReports(CrudMongo):
         data["id"] = _id
         data["node_id"] = node_id
 
-        result = await self._create(
-            fields=fields, payload=data, return_none=return_none
-        )
         if return_none:
+            await self._create_base(payload=data)
             return None
+        result = await self._create(fields=fields, payload=data)
         return NodeReportGet(**result)
 
     async def delete(
         self,
         _id: datetime,
         node_id: str,
-        placement: typing.Optional[dict[str, str]] = None,
     ) -> DataDelete:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         await self._delete(query=query)
         return DataDelete()
 
-    async def delete_all_from_node(
-        self, node_id: str, placement: typing.Optional[dict[str, str]] = None
-    ):
-        query = {
-            "node_id": node_id,
-        }
-        if placement:
-            query["placement"] = placement
+    async def delete_all_from_node(self, node_id: str):
+        query = {"node_id": node_id}
         await self._coll.delete_many(filter=query)
 
     async def get(
@@ -160,14 +148,11 @@ class CrudNodesReports(CrudMongo):
         _id: datetime,
         node_id: str,
         fields: list,
-        placement: typing.Optional[dict[str, str]] = None,
     ) -> NodeReportGet:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         result = await self._get(query=query, fields=fields)
         return NodeReportGet(**result)
 
@@ -175,31 +160,25 @@ class CrudNodesReports(CrudMongo):
         self,
         _id: datetime,
         node_id: str,
-        placement: typing.Optional[dict[str, str]] = None,
     ) -> ObjectId:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         return await self._resource_exists(query=query)
 
     async def search(
         self,
         node_id: str,
-        report_catalog_uuid: typing.Optional[str] = None,
-        report_status: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
-        placement: typing.Optional[dict[str, str]] = None,
+        report_catalog_uuid: Optional[str] = None,
+        report_status: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> NodeReportGetMulti:
         query = {"node_id": node_id}
-        if placement:
-            query["placement"] = placement
         self._filter_literal(query, "report.catalog_uuid", report_catalog_uuid)
         self._filter_re(query, "report.status", report_status)
 

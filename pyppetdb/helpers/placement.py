@@ -11,14 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Any
+from typing import Dict
 
-import typing
 from pyppetdb.config import Config
 
 
-def calculate_placement(
-    config: Config, facts: typing.Dict[str, typing.Any]
-) -> typing.Dict[str, str]:
+def calculate_placement(config: Config, facts: Dict[Any, Any]) -> Dict[str, str]:
     placement = {}
     for fact in config.mongodb.placementFacts:
         value = facts.get(fact, "unknown")

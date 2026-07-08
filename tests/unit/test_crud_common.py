@@ -13,11 +13,14 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 import logging
 import pymongo.errors
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.errors import DuplicateResource, ResourceNotFound, BackendError
+from pyppetdb.errors import DuplicateResource
+from pyppetdb.errors import ResourceNotFound
+from pyppetdb.errors import BackendError
 
 
 class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
@@ -34,7 +37,10 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         )
         self.crud._get_by_obj_id = AsyncMock(return_value={"id": "r1"})
 
-        result = await self.crud._create({"id": "r1"})
+        result = await self.crud._create(
+            payload={"id": "r1"},
+            fields=["id"],
+        )
         self.assertEqual(result, {"id": "r1"})
         self.mock_coll.insert_one.assert_called_once()
 
@@ -43,14 +49,20 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
             side_effect=pymongo.errors.DuplicateKeyError("msg")
         )
         with self.assertRaises(DuplicateResource):
-            await self.crud._create({"id": "r1"})
+            await self.crud._create(
+                payload={"id": "r1"},
+                fields=["id"],
+            )
 
     async def test_create_backend_error(self):
         self.mock_coll.insert_one = AsyncMock(
             side_effect=pymongo.errors.ConnectionFailure("msg")
         )
         with self.assertRaises(BackendError):
-            await self.crud._create({"id": "r1"})
+            await self.crud._create(
+                payload={"id": "r1"},
+                fields=["id"],
+            )
 
     async def test_delete_success(self):
         self.mock_coll.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))

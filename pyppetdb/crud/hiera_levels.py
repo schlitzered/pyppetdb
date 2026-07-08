@@ -14,7 +14,7 @@
 
 import asyncio
 import logging
-import typing
+from typing import Optional
 
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -211,13 +211,13 @@ class CrudHieraLevels(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        priority: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        priority: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> HieraLevelGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

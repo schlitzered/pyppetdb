@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import asyncio
-import hashlib
-import logging
-import typing
 from datetime import datetime
 from datetime import timezone
+import hashlib
+import logging
+from typing import Optional
 
 import ahocorasick
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -60,7 +60,7 @@ class NodesSecretsRedactor:
         self._secrets_count += 1
         self.log.info(f"Secret added to automaton. Total: {self._secrets_count}")
 
-    def rebuild(self, cleartext_secrets: typing.List[str]):
+    def rebuild(self, cleartext_secrets: list[str]):
         new_automaton = ahocorasick.Automaton()
         count = 0
         unique_secrets = {s for s in cleartext_secrets if s}
@@ -109,7 +109,7 @@ class NodesSecretsRedactor:
 
         return "".join(result)
 
-    def redact(self, data: typing.Any) -> typing.Any:
+    def redact(self, data: dict | list | str | tuple) -> dict | list | str | tuple:
         if self._secrets_count == 0:
             return data
 
@@ -121,7 +121,7 @@ class NodesSecretsRedactor:
                 self._redact_string(str(k)): self.redact(v) for k, v in data.items()
             }
 
-        elif isinstance(data, typing.List):
+        elif isinstance(data, list):
             return [self.redact(item) for item in data]
 
         elif isinstance(data, tuple):
@@ -140,7 +140,7 @@ class CrudNodesSecretsRedactorCache:
         self._coll = coll
         self._log = log
         self._redactor = redactor
-        self._cache: typing.Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
         self._initialized = False
 
     @property
@@ -291,12 +291,12 @@ class CrudNodesSecretsRedactor(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        fields: typing.Optional[typing.List[str]] = None,
-        sort: typing.Optional[str] = "id",
-        sort_order: typing.Optional[str] = "ascending",
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        fields: Optional[list[str]] = None,
+        sort: Optional[str] = "id",
+        sort_order: Optional[str] = "ascending",
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> NodesSecretsRedactorGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

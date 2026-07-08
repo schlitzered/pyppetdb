@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import typing
 import datetime
+from typing import List
+from typing import Optional
+
 import pymongo
 
 from pyppetdb.crud.common import CrudMongo
@@ -80,9 +82,7 @@ class CrudJobsNodeJobs(CrudMongo):
         ]
         await self.coll.insert_many(documents=docs)
 
-    async def expire_scheduled_jobs(
-        self, timeout_seconds: int
-    ) -> typing.List[NodeJobGet]:
+    async def expire_scheduled_jobs(self, timeout_seconds: int) -> List[NodeJobGet]:
         threshold = datetime.datetime.now() - datetime.timedelta(
             seconds=timeout_seconds
         )
@@ -106,7 +106,7 @@ class CrudJobsNodeJobs(CrudMongo):
             update={"$set": {"status": "canceled"}},
         )
 
-    async def get_oldest_scheduled(self, node_id: str) -> typing.Optional[NodeJobGet]:
+    async def get_oldest_scheduled(self, node_id: str) -> Optional[NodeJobGet]:
         cursor = self.coll.find(filter={"node_id": node_id, "status": "scheduled"})
         cursor.sort([("_id", pymongo.ASCENDING)])
         result = await cursor.to_list(length=1)
@@ -138,14 +138,14 @@ class CrudJobsNodeJobs(CrudMongo):
 
     async def search(
         self,
-        job_id: typing.Optional[str] = None,
-        node_id: typing.Optional[str] = None,
-        status: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        job_id: Optional[str] = None,
+        node_id: Optional[str] = None,
+        status: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> JobsNodeJobGetMulti:
         query = {}
         self._filter_re(query, "job_id", job_id)

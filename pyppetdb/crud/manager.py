@@ -14,6 +14,7 @@
 
 import logging
 from typing import List
+
 from pyppetdb.crud.common import CrudMongo
 
 

@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import logging
 import datetime
-import typing
-import pymongo
+import logging
+from typing import Optional
+
 from motor.motor_asyncio import AsyncIOMotorCollection
+import pymongo
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
@@ -88,7 +89,7 @@ class CrudCACertificates(CrudMongo):
         payload: CACertificatePutInternal,
         fields: list,
         upsert: bool = False,
-        set_on_insert: dict = None,
+        set_on_insert: Optional[dict] = None,
     ) -> CACertificateGet:
         data = payload.model_dump(exclude_unset=True)
         result = await self._update(
@@ -135,8 +136,8 @@ class CrudCACertificates(CrudMongo):
         self,
         _id: str,
         fields: list,
-        status: typing.Optional[CAStatus] = None,
-        cn: typing.Optional[str] = None,
+        status: Optional[CAStatus] = None,
+        cn: Optional[str] = None,
     ) -> CACertificateGet:
         query = {"id": _id}
         if status:
@@ -154,8 +155,8 @@ class CrudCACertificates(CrudMongo):
         self,
         space_id: str,
         cn: str,
-        status: typing.Optional[CAStatus] = None,
-        fields: typing.Optional[list] = None,
+        fields: list,
+        status: Optional[CAStatus] = None,
     ) -> CACertificateGet:
         query = {"space_id": space_id, "cn": cn}
         if status:
@@ -167,7 +168,7 @@ class CrudCACertificates(CrudMongo):
         self,
         space_id: str,
         cn: str,
-        status: typing.Optional[CAStatus] = None,
+        status: Optional[CAStatus] = None,
     ) -> None:
         query = {"space_id": space_id, "cn": cn}
         if status:
@@ -200,18 +201,18 @@ class CrudCACertificates(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        space_id: typing.Optional[str] = None,
-        ca_id: typing.Optional[str] = None,
-        cn: typing.Optional[str] = None,
-        status: typing.Optional[CAStatus] = None,
-        fingerprint: typing.Optional[str] = None,
-        serial_number: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        space_id: Optional[str] = None,
+        ca_id: Optional[str] = None,
+        cn: Optional[str] = None,
+        status: Optional[CAStatus] = None,
+        fingerprint: Optional[str] = None,
+        serial_number: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> CACertificateGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

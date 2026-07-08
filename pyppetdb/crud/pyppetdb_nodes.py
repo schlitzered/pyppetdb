@@ -13,10 +13,10 @@
 # limitations under the License.
 
 import logging
-import typing
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import Optional
 
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -89,12 +89,12 @@ class CrudPyppetDBNodes(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[str] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[str] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> PyppetDBNodeGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

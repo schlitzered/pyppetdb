@@ -13,16 +13,15 @@
 # limitations under the License.
 
 import logging
-import typing
+from typing import Optional
+
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
 
 from pyppetdb.config import Config
-
 from pyppetdb.crud.common import CrudMongo
-
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.teams import TeamGet
@@ -114,15 +113,15 @@ class CrudTeams(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        ldap_group: typing.Optional[str] = None,
-        permissions: typing.Optional[str] = None,
-        users: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        ldap_group: Optional[str] = None,
+        permissions: Optional[str] = None,
+        users: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> TeamGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

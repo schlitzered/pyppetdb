@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
+
 import pymongo
 
 from pyppetdb.errors import QueryParamValidationError
 
-from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.common import filter_complex_search_pattern
 
 
@@ -64,7 +65,7 @@ class FilterMixIn(object):
     def _filter_complex_search(
         query: dict,
         base_attribute: str,
-        complex_search: filter_complex_search,
+        complex_search: Optional[set[str]],
     ):
         def str_to_bool(s: str):
             _true = ["1", "true", "True"]

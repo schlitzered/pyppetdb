@@ -693,7 +693,7 @@ class CAService:
     ) -> CACertificateGet:
         try:
             cert_req = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cn, status="requested"
+                space_id=space_id, cn=cn, status="requested", fields=["id"]
             )
             return await self.process_requested_certificate(str(cert_req.id))
         except ResourceNotFound:
@@ -776,7 +776,15 @@ class CAService:
     async def renew_certificate(self, space_id: str, cn: str) -> CACertificateGet:
         try:
             old_cert = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cn, status="signed"
+                space_id=space_id,
+                cn=cn,
+                fields=[
+                    "id",
+                    "certificate",
+                    "csr",
+                    "status",
+                ],
+                status="signed",
             )
         except ResourceNotFound:
             raise ResourceNotFound(
@@ -900,7 +908,9 @@ class CAService:
         self, space_id: str, cn: str, payload: CACertificatePut, fields: list
     ) -> CACertificateGet:
         try:
-            cert = await self._crud_certificates.get_by_cn(space_id=space_id, cn=cn)
+            cert = await self._crud_certificates.get_by_cn(
+                space_id=space_id, cn=cn, fields=["id"]
+            )
             cert_id = str(cert.id)
         except ResourceNotFound:
             raise ResourceNotFound(
