@@ -158,7 +158,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
             try:
                 node = await self._crud_nodes.get(_id=nodename, fields=["facts_inject"])
                 if node and node.facts_inject:
-                    facts_json = json.loads(urllib.parse.unquote(facts_raw))
+                    facts_json = json.loads(urllib.parse.unquote(str(facts_raw)))
                     facts_json.setdefault("values", {})["pyppetdb"] = node.facts_inject
                     body = dict(body)
                     body["facts"] = urllib.parse.quote(
@@ -184,7 +184,7 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                 and (facts_raw := body.get("facts"))
             ):
                 try:
-                    facts_dict = json.loads(urllib.parse.unquote(facts_raw)).get(
+                    facts_dict = json.loads(urllib.parse.unquote(str(facts_raw))).get(
                         "values", {}
                     )
                     placement = calculate_placement(self.config, facts_dict)

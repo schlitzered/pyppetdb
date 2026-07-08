@@ -14,16 +14,15 @@
 
 import asyncio
 import logging
-import typing
+from typing import Optional
+
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
 
 from pyppetdb.config import Config
-
 from pyppetdb.crud.common import CrudMongo
-
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_groups import NodeGroupGet
@@ -265,15 +264,15 @@ class CrudNodesGroups(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        nodes: typing.Optional[str] = None,
-        teams: typing.Optional[str] = None,
-        teams_list: typing.Optional[list[str]] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        nodes: Optional[str] = None,
+        teams: Optional[str] = None,
+        teams_list: Optional[list[str]] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> NodeGroupGetMulti:
         query = {}
         self._filter_list(query, "teams", teams_list)

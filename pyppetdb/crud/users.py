@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import logging
-import typing
+from typing import Optional
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -23,13 +23,10 @@ import pymongo
 import pymongo.errors
 
 from pyppetdb.config import Config
-
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.ldap import CrudLdap
-
 from pyppetdb.errors import AuthenticationError
 from pyppetdb.errors import BackendError
-
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.authenticate import AuthenticatePost
@@ -180,12 +177,12 @@ class CrudUsers(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> UserGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

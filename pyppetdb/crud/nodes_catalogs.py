@@ -14,7 +14,7 @@
 
 from datetime import datetime
 import logging
-import typing
+from typing import Optional
 
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -25,7 +25,6 @@ from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 
-from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_catalogs import NodeCatalogGet
 from pyppetdb.model.nodes_catalogs import NodeCatalogGetMulti
@@ -37,7 +36,7 @@ class NodesCatalogsRedactor:
         self.log = log
         self._redactor = redactor
 
-    def redact(self, data: typing.Any) -> typing.Any:
+    def redact(self, data: dict) -> dict:
         if not isinstance(data, dict):
             return data
 
@@ -47,14 +46,12 @@ class NodesCatalogsRedactor:
 
         for resources_key in ["resources", "resources_exported"]:
             resources = catalog.get(resources_key)
-            if isinstance(resources, typing.List):
+            if isinstance(resources, list):
                 for resource in resources:
                     if not isinstance(resource, dict):
                         continue
                     parameters = resource.get("parameters")
                     if isinstance(parameters, dict):
-                        # Redact only values in parameters, and we use the base redactor for the value
-                        # Note: we don't redact the keys of the parameters here.
                         for k, v in parameters.items():
                             parameters[k] = self._redactor.redact(v)
         return data
@@ -115,50 +112,25 @@ class CrudNodesCatalogs(CrudMongo):
         data["id"] = _id
         data["node_id"] = node_id
 
-        result = await self._create(
-            fields=fields, payload=data, return_none=return_none
-        )
         if return_none:
+            await self._create_base(payload=data)
             return None
+        result = await self._create(fields=fields, payload=data)
         return NodeCatalogGet(**result)
 
-    async def delete(
-        self,
-        _id: datetime,
-        node_id: str,
-        placement: typing.Optional[dict[str, str]] = None,
-    ) -> DataDelete:
-        query = {
-            "id": _id,
-            "node_id": node_id,
-        }
-        if placement:
-            query["placement"] = placement
-        await self._delete(query=query)
-        return DataDelete()
-
-    async def delete_all_from_node(
-        self, node_id: str, placement: typing.Optional[dict[str, str]] = None
-    ):
-        query = {
-            "node_id": node_id,
-        }
-        if placement:
-            query["placement"] = placement
+    async def delete_all_from_node(self, node_id: str):
+        query = {"node_id": node_id}
         await self._coll.delete_many(filter=query)
 
     async def drop_created_no_report_ttl(
         self,
         _id: datetime,
         node_id: str,
-        placement: typing.Optional[dict[str, str]] = None,
     ):
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         await self._coll.update_one(
             filter=query,
             update={"$unset": {"created_no_report_ttl": ""}},
@@ -169,14 +141,11 @@ class CrudNodesCatalogs(CrudMongo):
         _id: datetime | str,
         node_id: str,
         fields: list,
-        placement: typing.Optional[dict[str, str]] = None,
     ) -> NodeCatalogGet:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         result = await self._get(query=query, fields=fields)
         return NodeCatalogGet(**result)
 
@@ -184,30 +153,24 @@ class CrudNodesCatalogs(CrudMongo):
         self,
         _id: datetime,
         node_id: str,
-        placement: typing.Optional[dict[str, str]] = None,
     ) -> ObjectId:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        if placement:
-            query["placement"] = placement
         return await self._resource_exists(query=query)
 
     async def search(
         self,
         node_id: str,
-        catalog_status: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
-        placement: typing.Optional[dict[str, str]] = None,
+        catalog_status: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> NodeCatalogGetMulti:
         query = {"node_id": node_id}
-        if placement:
-            query["placement"] = placement
         self._filter_re(query, "catalog.status", catalog_status)
 
         result = await self._search(

@@ -102,7 +102,15 @@ class CrudHieraKeyModelsStatic(Crud, ProjectionMixIn):
         total = len(items)
         if sort:
             reverse = sort_order == "descending"
-            items.sort(key=lambda item: getattr(item, sort), reverse=reverse)
+
+            def _sort_key(item: HieraKeyModelGet) -> str:
+                res = getattr(item, str(sort))
+                return res if isinstance(res, str) else ""
+
+            items.sort(
+                key=_sort_key,
+                reverse=reverse,
+            )
 
         if isinstance(page, int) and page and limit:
             start = page * limit

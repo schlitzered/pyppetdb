@@ -18,7 +18,10 @@ import hashlib
 import json
 import logging
 import random
-import typing
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Set
 import zlib
 
 from cryptography.fernet import Fernet
@@ -29,7 +32,6 @@ import pymongo.errors
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.common import DataDelete
-from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCacheGet
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCachePutInternal
 from pyppetdb.errors import ResourceNotFound
@@ -53,12 +55,12 @@ class NodesDataProtector:
     def decrypt_string(self, ciphertext: str) -> str:
         return self._fernet.decrypt(ciphertext.encode()).decode()
 
-    def encrypt_obj(self, data: typing.Any) -> bytes:
+    def encrypt_obj(self, data: Any) -> bytes:
         serialized = json.dumps(data, separators=(",", ":")).encode()
         compressed = zlib.compress(serialized)
         return self._fernet.encrypt(compressed)
 
-    def decrypt_obj(self, encrypted_data: bytes) -> typing.Any:
+    def decrypt_obj(self, encrypted_data: bytes) -> Any:
         try:
             decrypted = self._fernet.decrypt(encrypted_data)
             decompressed = zlib.decompress(decrypted)
@@ -117,7 +119,7 @@ class CrudNodesCatalogCache(CrudMongo):
     async def get_catalog(
         self,
         node_id: str,
-    ) -> typing.Any | None:
+    ) -> Any | None:
         query = {"id": node_id}
         try:
             result = await self._coll.find_one(filter=query, projection={"catalog": 1})
@@ -132,9 +134,9 @@ class CrudNodesCatalogCache(CrudMongo):
     async def upsert(
         self,
         node_id: str,
-        facts: typing.Dict[str, str],
-        catalog: typing.Any,
-        placement: typing.Optional[typing.Dict[str, str]] = None,
+        facts: dict[str, str],
+        catalog: Any,
+        placement: Optional[dict[str, str]] = None,
     ) -> None:
         ttl_seconds = self.config.app.puppet.catalogCacheTTL
         random_factor = random.uniform(0.75, 1.25)
@@ -172,8 +174,8 @@ class CrudNodesCatalogCache(CrudMongo):
 
     async def get_cached_node_ids(
         self,
-        node_ids: typing.List[str],
-    ) -> typing.Set[str]:
+        node_ids: List[str],
+    ) -> Set[str]:
         if not node_ids:
             return set()
 
@@ -186,9 +188,9 @@ class CrudNodesCatalogCache(CrudMongo):
 
     async def delete_many_by_filter(
         self,
-        node_id: typing.Optional[str] = None,
-        environment: typing.Optional[str] = None,
-        fact: typing.Optional[filter_complex_search] = None,
+        node_id: Optional[str] = None,
+        environment: Optional[str] = None,
+        fact: Optional[set[str]] = None,
     ) -> int:
         query = {}
         self._filter_literal(query, "id", node_id)

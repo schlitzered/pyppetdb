@@ -117,7 +117,9 @@ class CrudMongo(
                 f"Failed to setup schema validation for {self.resource_type}: {e}"
             )
 
-    def _convert_to_mongo_schema(self, schema: dict, definitions: dict = None) -> dict:
+    def _convert_to_mongo_schema(
+        self, schema: dict, definitions: Optional[dict] = None
+    ) -> dict:
         if definitions is None:
             definitions = {}
 
@@ -230,7 +232,7 @@ class CrudMongo(
 
                 for existing in existing_indices:
                     ext_key = existing.get("key")
-                    ext_name = existing.get("name")
+                    ext_name = existing["name"]
 
                     if ext_key == target_key and ext_name != target_name:
                         self.log.info(
@@ -330,7 +332,7 @@ class CrudMongo(
 
         if existing_index:
             current_ttl = existing_index.get("expireAfterSeconds")
-            current_name = existing_index.get("name")
+            current_name = existing_index["name"]
             key_spec = existing_index.get("key", {})
             current_field = next(iter(key_spec.keys()), None)
 
@@ -359,24 +361,27 @@ class CrudMongo(
             name=index_name,
         )
 
-    async def _create(
+    async def _create_base(
         self,
         payload: dict,
-        fields: list = None,
-        return_none: bool = False,
-    ) -> dict | None:
-        if "_version" not in payload:
-            payload["_version"] = 1
+    ) -> ObjectId:
+        payload["_version"] = 1
         try:
             _id = await self._coll.insert_one(payload)
-            if return_none:
-                return None
-            return await self._get_by_obj_id(_id=_id.inserted_id, fields=fields)
+            return _id.inserted_id
         except pymongo.errors.DuplicateKeyError:
             raise DuplicateResource
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError()
+
+    async def _create(
+        self,
+        payload: dict,
+        fields: list,
+    ) -> dict:
+        _id = await self._create_base(payload)
+        return await self._get_by_obj_id(_id=_id, fields=fields)
 
     async def _delete(self, query: dict) -> dict:
         try:
@@ -452,7 +457,7 @@ class CrudMongo(
         payload: dict,
         fields: list,
         upsert=False,
-        set_on_insert: dict = None,
+        set_on_insert: Optional[dict] = None,
     ) -> dict:
         update = {"$set": {}}
         for k, v in payload.items():

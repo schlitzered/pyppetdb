@@ -18,6 +18,7 @@ import asyncio
 import typing
 from typing import Optional
 import pymongo
+from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
 
 from pyppetdb.config import Config
@@ -252,7 +253,7 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
-    async def resource_exists(self, _id: str) -> str:
+    async def resource_exists(self, _id: str) -> ObjectId:
         query = {"id": _id}
         return await self._resource_exists(query=query)
 

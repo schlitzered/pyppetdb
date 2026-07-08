@@ -12,24 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyppetdb.crud.common import CrudMongo
 import asyncio
-import typing
+import logging
+from typing import Optional
+
+from bson.objectid import ObjectId
+from motor.motor_asyncio import AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorClientSession
 import pymongo
+
+from pyppetdb.ca.validation_protector import CAValidationProtector
+from pyppetdb.config import Config
+from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost
 from pyppetdb.model.ca_spaces import CASpaceGetMulti
 from pyppetdb.model.ca_spaces import CASpacePutInternal
+from pyppetdb.model.ca_validation import CAValidationConfig
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import DataDelete
-
-from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
-from pyppetdb.config import Config
-import logging
-from typing import Optional
-from pyppetdb.errors import QueryParamValidationError
-from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
-from pyppetdb.ca.validation_protector import CAValidationProtector
-from pyppetdb.model.ca_validation import CAValidationConfig
 
 
 class CrudCASpacesCache:
@@ -216,7 +218,7 @@ class CrudCASpaces(CrudMongo):
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CASpaceGet(**result)
 
-    async def resource_exists(self, _id: str) -> str:
+    async def resource_exists(self, _id: str) -> ObjectId:
         query = {"id": _id}
         return await self._resource_exists(query=query)
 
@@ -242,13 +244,13 @@ class CrudCASpaces(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        ca_id: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        ca_id: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> CASpaceGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

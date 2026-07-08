@@ -14,10 +14,11 @@
 
 import asyncio
 import logging
-import typing
+from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
+import pymongo.errors
 
 from pyhiera.keys import PyHieraKeyBase
 from pyhiera.errors import PyHieraError
@@ -104,7 +105,7 @@ class CrudHieraModelsDynamicAdapter:
         elif operation == "delete":
             model_id = self._doc_to_model_id.pop(doc_id, None)
             if model_id:
-                self.model_unregister(model_id)
+                self.model_unregister(str(model_id))
 
         else:
             self.log.warning(f"Unhandled operation type: {operation}")
@@ -262,12 +263,12 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
+        _id: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> HieraKeyModelGetMulti:
         query = {}
         self._filter_re(query, "id", _id)

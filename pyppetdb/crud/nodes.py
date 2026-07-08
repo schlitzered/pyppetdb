@@ -13,8 +13,9 @@
 # limitations under the License.
 
 import logging
-import typing
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
+from typing import Optional
 
 from bson.objectid import ObjectId
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -27,7 +28,6 @@ from pyppetdb.crud.common import CrudMongo
 
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.nodes import NodeGet
 from pyppetdb.model.nodes import NodeGetMulti
 from pyppetdb.model.nodes import NodeGetMultiMeta
@@ -59,7 +59,7 @@ class PuppetDBASTParser:
             "in": self._translate_in,
         }
 
-    def parse(self, ast: list) -> typing.Optional[dict]:
+    def parse(self, ast: list) -> Optional[dict]:
         if not ast or not isinstance(ast, list):
             return None
         res = self._translate(ast)
@@ -67,7 +67,7 @@ class PuppetDBASTParser:
             return None
         return self._cleanup(res)
 
-    def _translate(self, node: list) -> typing.Optional[dict]:
+    def _translate(self, node: list) -> Optional[dict]:
         if not isinstance(node, list) or not node:
             return None
         op = node[0]
@@ -76,7 +76,7 @@ class PuppetDBASTParser:
             return handler(node)
         return None
 
-    def _translate_and(self, node: list) -> typing.Optional[dict]:
+    def _translate_and(self, node: list) -> Optional[dict]:
         translated = [self._translate(x) for x in node[1:]]
         valid = [x for x in translated if x is not None]
         if not valid:
@@ -85,7 +85,7 @@ class PuppetDBASTParser:
             return valid[0]
         return {"$and": valid}
 
-    def _translate_or(self, node: list) -> typing.Optional[dict]:
+    def _translate_or(self, node: list) -> Optional[dict]:
         translated = [self._translate(x) for x in node[1:]]
         valid = [x for x in translated if x is not None]
         if not valid:
@@ -94,7 +94,7 @@ class PuppetDBASTParser:
             return valid[0]
         return {"$or": valid}
 
-    def _translate_not(self, node: list) -> typing.Optional[dict]:
+    def _translate_not(self, node: list) -> Optional[dict]:
         if len(node) != 2:
             return None
         translated = self._translate(node[1])
@@ -109,7 +109,7 @@ class PuppetDBASTParser:
                 return {k: {"$ne": v}}
         return {"$nor": [translated]}
 
-    def _translate_comparison(self, node: list) -> typing.Optional[dict]:
+    def _translate_comparison(self, node: list) -> Optional[dict]:
         if len(node) != 3:
             return None
         op = node[0]
@@ -146,7 +146,7 @@ class PuppetDBASTParser:
             )
         return None
 
-    def _translate_in(self, node: list) -> typing.Optional[dict]:
+    def _translate_in(self, node: list) -> Optional[dict]:
         if len(node) != 3:
             return None
         field = node[1]
@@ -158,7 +158,8 @@ class PuppetDBASTParser:
             return {target: {"$in": val[1]}}
         return None
 
-    def _map_field(self, field) -> typing.Optional[str]:
+    @staticmethod
+    def _map_field(field) -> Optional[str]:
         if isinstance(field, str):
             if field.startswith("fact_"):
                 path = field.replace("fact_", "", 1).replace("__", ".")
@@ -266,7 +267,7 @@ class CrudNodes(CrudMongo):
                     )
                 )
 
-    def translate_resource_query(self, ast: list) -> typing.Optional[dict]:
+    def translate_resource_query(self, ast: list) -> Optional[dict]:
         return self._ast_parser.parse(ast)
 
     async def query_exported_resources(self, query: dict) -> list:
@@ -313,17 +314,11 @@ class CrudNodes(CrudMongo):
             },
         )
 
-    async def get(
-        self,
-        _id: str,
-        fields: list,
-        user_node_groups: typing.Optional[list[str]] = None,
-        outdated_threshold: typing.Optional[str] = None,
+    @staticmethod
+    def _compute_report_status(
+        node: NodeGet,
+        outdated_threshold: Optional[str] = None,
     ) -> NodeGet:
-        query = {"id": _id}
-        self._filter_list(query, "node_groups", user_node_groups)
-        result = await self._get(query=query, fields=fields)
-
         if outdated_threshold:
             threshold_dt = datetime.fromisoformat(
                 outdated_threshold.replace("Z", "+00:00")
@@ -331,10 +326,13 @@ class CrudNodes(CrudMongo):
         else:
             threshold_dt = datetime.now() - timedelta(hours=4)
 
-        report = result.get("report")
-        report_status = report.get("status") if report else None
-        disabled = result.get("disabled", False)
-        change_report = result.get("change_report")
+        report = node.report
+        if report:
+            report_status = report.status
+        else:
+            report_status = None
+        disabled = node.disabled
+        change_report = node.change_report
 
         if (
             disabled is not True
@@ -347,14 +345,30 @@ class CrudNodes(CrudMongo):
         else:
             status_computed = report_status
 
-        result["report_status_computed"] = status_computed
+        node.report_status_computed = status_computed
+        return node
 
-        return NodeGet(**result)
+    async def get(
+        self,
+        _id: str,
+        fields: list,
+        user_node_groups: Optional[list[str]] = None,
+        outdated_threshold: Optional[str] = None,
+    ) -> NodeGet:
+        query = {"id": _id}
+        self._filter_list(query, "node_groups", user_node_groups)
+        result = await self._get(query=query, fields=fields)
+        result = NodeGet(**result)
+
+        return self._compute_report_status(
+            node=result,
+            outdated_threshold=outdated_threshold,
+        )
 
     async def resource_exists(
         self,
         _id: str,
-        user_node_groups: typing.Optional[list[str]] = None,
+        user_node_groups: Optional[list[str]] = None,
     ) -> ObjectId:
         query = {"id": _id}
         self._filter_list(query, "node_groups", user_node_groups)
@@ -363,12 +377,12 @@ class CrudNodes(CrudMongo):
     async def exported_resources(
         self,
         resource_type: str,
-        user_node_groups: typing.Optional[list[str]] = None,
-        resource_title: typing.Optional[str] = None,
-        resource_tags: typing.Optional[list[str]] = None,
-        disabled: typing.Optional[bool] = None,
-        fact: typing.Optional[filter_complex_search] = None,
-        environment: typing.Optional[str] = None,
+        user_node_groups: Optional[list[str]] = None,
+        resource_title: Optional[str] = None,
+        resource_tags: Optional[list[str]] = None,
+        disabled: Optional[bool] = None,
+        fact: Optional[set[str]] = None,
+        environment: Optional[str] = None,
     ) -> NodeGetCatalogResources:
         query = {}
         self._filter_list(query, "node_groups", user_node_groups)
@@ -412,12 +426,12 @@ class CrudNodes(CrudMongo):
 
     async def distinct_fact_values(
         self,
-        user_node_groups: typing.Optional[list[str]] = None,
-        fact_id: typing.Optional[str] = None,
-        disabled: typing.Optional[bool] = None,
-        fact: typing.Optional[filter_complex_search] = None,
-        environment: typing.Optional[str] = None,
-        report_status: typing.Optional[str] = None,
+        user_node_groups: Optional[list[str]] = None,
+        fact_id: Optional[str] = None,
+        disabled: Optional[bool] = None,
+        fact: Optional[set] = None,
+        environment: Optional[str] = None,
+        report_status: Optional[str] = None,
     ) -> NodeGetDistinctFactValues:
         if not fact_id or fact_id.endswith("."):
             return NodeGetDistinctFactValues(
@@ -454,14 +468,14 @@ class CrudNodes(CrudMongo):
 
     async def count(
         self,
-        user_node_groups: typing.Optional[list[str]] = None,
-        disabled: typing.Optional[bool] = None,
-        environment: typing.Optional[str] = None,
-        fact: typing.Optional[filter_complex_search] = None,
-        report_status: typing.Optional[str] = None,
-        remote_agent_connected: typing.Optional[bool] = None,
-        remote_agent_via: typing.Optional[str] = None,
-        query: typing.Optional[dict] = None,
+        user_node_groups: Optional[list[str]] = None,
+        disabled: Optional[bool] = None,
+        environment: Optional[str] = None,
+        fact: Optional[set[str]] = None,
+        report_status: Optional[str] = None,
+        remote_agent_connected: Optional[bool] = None,
+        remote_agent_via: Optional[str] = None,
+        query: Optional[dict] = None,
     ) -> int:
         if not query:
             query = {}
@@ -476,21 +490,21 @@ class CrudNodes(CrudMongo):
 
     async def search(
         self,
-        _id: typing.Optional[str] = None,
-        user_node_groups: typing.Optional[list[str]] = None,
-        disabled: typing.Optional[bool] = None,
-        environment: typing.Optional[str] = None,
-        fact: typing.Optional[filter_complex_search] = None,
-        report_status: typing.Optional[str] = None,
-        outdated_threshold: typing.Optional[str] = None,
-        remote_agent_connected: typing.Optional[bool] = None,
-        remote_agent_via: typing.Optional[str] = None,
-        fields: typing.Optional[list] = None,
-        sort: typing.Optional[str] = None,
-        sort_order: typing.Optional[sort_order_literal] = None,
-        page: typing.Optional[int] = None,
-        limit: typing.Optional[int] = None,
-        query: typing.Optional[dict] = None,
+        _id: Optional[str] = None,
+        user_node_groups: Optional[list[str]] = None,
+        disabled: Optional[bool] = None,
+        environment: Optional[str] = None,
+        fact: Optional[set[str]] = None,
+        report_status: Optional[str] = None,
+        outdated_threshold: Optional[str] = None,
+        remote_agent_connected: Optional[bool] = None,
+        remote_agent_via: Optional[str] = None,
+        fields: Optional[list] = None,
+        sort: Optional[str] = None,
+        sort_order: Optional[sort_order_literal] = None,
+        page: Optional[int] = None,
+        limit: Optional[int] = None,
+        query: Optional[dict] = None,
     ) -> NodeGetMulti:
         if not query:
             query = {}
@@ -578,11 +592,7 @@ class CrudNodes(CrudMongo):
         if not results:
             return NodeGetMulti(
                 result=[],
-                meta=NodeGetMultiMeta(
-                    result_size=0,
-                    page=page,
-                    limit=limit,
-                ),
+                meta=NodeGetMultiMeta(result_size=0),
             )
 
         agg_result = results[0]
@@ -638,8 +648,11 @@ class CrudNodes(CrudMongo):
         data = payload.model_dump()
         data["id"] = _id
 
-        result = await self._create(payload=data, fields=fields)
-        return NodeGet(**result)
+        result = await self._create(
+            payload=data,
+            fields=fields,
+        )
+        return self._compute_report_status(node=NodeGet(**result))
 
     async def update(
         self,
@@ -653,17 +666,20 @@ class CrudNodes(CrudMongo):
         data = payload.model_dump()
 
         result = await self._update(
-            query=query, fields=fields, payload=data, upsert=upsert
+            query=query,
+            fields=fields,
+            payload=data,
+            upsert=upsert,
         )
         if return_none:
             return None
-        return NodeGet(**result)
+        return self._compute_report_status(node=NodeGet(**result))
 
     async def update_remote_agent_status(
         self,
         node_id: str,
         connected: bool,
-        via: typing.Optional[str] = None,
+        via: Optional[str] = None,
     ):
         update_data = {
             "remote_agent.connected": connected,

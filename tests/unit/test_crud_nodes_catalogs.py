@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 import logging
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 
@@ -26,13 +27,6 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_redactor = MagicMock()
         self.crud = CrudNodesCatalogs(
             self.mock_config, self.log, self.mock_coll, self.mock_redactor
-        )
-
-    async def test_delete(self):
-        self.crud._delete = AsyncMock()
-        await self.crud.delete(_id="cat1", node_id="node1")
-        self.crud._delete.assert_called_once_with(
-            query={"id": "cat1", "node_id": "node1"}
         )
 
     async def test_delete_all_from_node(self):
