@@ -62,7 +62,7 @@ class IntegrationTestBase(unittest.TestCase):
         )
 
         from fastapi import FastAPI
-        from pyppetdb.main import lifespan_dev
+        from pyppetdb.main import lifespan
         from pyppetdb.main import settings
         from pyppetdb.main import version
         from starlette.middleware.sessions import SessionMiddleware
@@ -72,7 +72,7 @@ class IntegrationTestBase(unittest.TestCase):
         app = FastAPI(
             title="pyppetdb all in one dev server",
             version=version,
-            lifespan=lifespan_dev,
+            lifespan=lifespan,
         )
         app.add_middleware(
             SessionMiddleware, secret_key=settings.app.secretkey, max_age=3600

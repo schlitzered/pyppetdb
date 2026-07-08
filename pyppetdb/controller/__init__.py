@@ -95,7 +95,6 @@ class Controller:
         ws_hub,
     ):
         self._log = log
-        self._router_dev = APIRouter()
         self._router_main = APIRouter()
         self._router_puppet = APIRouter()
         self._router_puppetdb = APIRouter()
@@ -171,20 +170,9 @@ class Controller:
             authorize_client_cert=authorize_client_cert_puppet,
         ).router
 
-        self.router_dev.include_router(
-            router_main,
-            prefix="/api",
-            responses={404: {"description": "Not found"}},
-        )
         self.router_main.include_router(
             router_main,
             prefix="/api",
-            responses={404: {"description": "Not found"}},
-        )
-
-        self.router_dev.include_router(
-            router_oauth,
-            prefix="/oauth",
             responses={404: {"description": "Not found"}},
         )
         self.router_main.include_router(
@@ -193,36 +181,18 @@ class Controller:
             responses={404: {"description": "Not found"}},
         )
 
-        self.router_dev.include_router(
-            router_pdb,
-            prefix="/pdb",
-            responses={404: {"description": "Not found"}},
-        )
         self.router_puppetdb.include_router(
             router_pdb,
             prefix="/pdb",
             responses={404: {"description": "Not found"}},
         )
-
-        self.router_dev.include_router(
-            router_puppet,
-        )
         self.router_puppet.include_router(
             router_puppet,
-        )
-
-        self.router_dev.include_router(
-            router_puppet_ca,
-            prefix="/puppet-ca",
         )
         self.router_puppet.include_router(
             router_puppet_ca,
             prefix="/puppet-ca",
         )
-
-    @property
-    def router_dev(self):
-        return self._router_dev
 
     @property
     def router_main(self):
