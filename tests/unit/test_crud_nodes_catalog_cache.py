@@ -34,29 +34,25 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
             protector=self.mock_protector,
         )
 
-    async def test_get_cached(self):
-        self.crud._get = AsyncMock(return_value={"id": "node1"})
-        result = await self.crud.get("node1", fields=[])
-        self.assertTrue(result.cached)
-        self.assertEqual(result.id, "node1")
 
-    async def test_get_not_cached(self):
-        self.crud._get = AsyncMock(side_effect=ResourceNotFound)
-        result = await self.crud.get("node1", fields=[])
-        self.assertFalse(result.cached)
-        self.assertEqual(result.id, "node1")
 
-    async def test_get_catalog_success(self):
+    async def test_get_success(self):
         self.mock_coll.find_one = AsyncMock(return_value={"catalog": "encrypted_data"})
         self.mock_protector.decrypt_obj.return_value = {"resources": []}
 
-        catalog = await self.crud.get_catalog("node1")
+        catalog = await self.crud.get(
+            node_id="node1",
+            placement={},
+        )
         self.assertEqual(catalog, {"resources": []})
         self.mock_protector.decrypt_obj.assert_called_once_with("encrypted_data")
 
-    async def test_get_catalog_none(self):
+    async def test_get_none(self):
         self.mock_coll.find_one = AsyncMock(return_value=None)
-        catalog = await self.crud.get_catalog("node1")
+        catalog = await self.crud.get(
+            node_id="node1",
+            placement={},
+        )
         self.assertIsNone(catalog)
 
     async def test_upsert(self):

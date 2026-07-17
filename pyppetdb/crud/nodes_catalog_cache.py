@@ -32,9 +32,7 @@ import pymongo.errors
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.model.common import DataDelete
-from pyppetdb.model.nodes_catalog_cache import NodeCatalogCacheGet
 from pyppetdb.model.nodes_catalog_cache import NodeCatalogCachePutInternal
-from pyppetdb.errors import ResourceNotFound
 
 from pyppetdb.helpers.placement import calculate_placement
 
@@ -87,13 +85,15 @@ class CrudNodesCatalogCache(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
-                    [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
+                    keys=[
+                        ("placement", pymongo.ASCENDING),
+                        ("id", pymongo.ASCENDING),
+                    ],
+                    unique=True,
+                    name="idx_placement_id",
                 ),
                 pymongo.IndexModel(
-                    [("placement", pymongo.ASCENDING)], name="idx_placement"
-                ),
-                pymongo.IndexModel(
-                    [("ttl", pymongo.ASCENDING)],
+                    keys=[("ttl", pymongo.ASCENDING)],
                     expireAfterSeconds=0,
                     name="ttl_catalog_cache",
                 ),
@@ -106,23 +106,16 @@ class CrudNodesCatalogCache(CrudMongo):
     async def get(
         self,
         node_id: str,
-        fields: list,
-    ) -> NodeCatalogCacheGet:
-        query = {"id": node_id}
-        try:
-            result = await self._get(query=query, fields=fields)
-            result["cached"] = True
-            return NodeCatalogCacheGet(**result)
-        except ResourceNotFound:
-            return NodeCatalogCacheGet(id=node_id, cached=False)
-
-    async def get_catalog(
-        self,
-        node_id: str,
+        placement: dict[str, str],
     ) -> Any | None:
         query = {"id": node_id}
+        if placement:
+            query["placement"] = placement
         try:
-            result = await self._coll.find_one(filter=query, projection={"catalog": 1})
+            result = await self._coll.find_one(
+                filter=query,
+                projection={"catalog": 1},
+            )
             if result and result.get("catalog"):
                 return self._protector.decrypt_obj(result.get("catalog"))
         except pymongo.errors.ConnectionFailure as err:
@@ -167,8 +160,11 @@ class CrudNodesCatalogCache(CrudMongo):
     async def delete(
         self,
         node_id: str,
+        placement: dict[str, str],
     ) -> DataDelete:
         query = {"id": node_id}
+        if placement:
+            query["placement"] = placement
         await self._delete(query=query)
         return DataDelete()
 
@@ -199,3 +195,13 @@ class CrudNodesCatalogCache(CrudMongo):
 
         result = await self.coll.delete_many(filter=query)
         return result.deleted_count
+
+    async def update_placement(
+        self,
+        node_id: str,
+        placement: dict[str, str],
+    ):
+        await self._coll.update_many(
+            filter={"id": node_id},
+            update={"$set": {"placement": placement}},
+        )

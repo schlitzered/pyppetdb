@@ -131,45 +131,64 @@ class CrudNodesReports(CrudMongo):
         self,
         _id: datetime,
         node_id: str,
+        placement: dict[str, str],
     ) -> DataDelete:
         query = {
             "id": _id,
             "node_id": node_id,
         }
+        if placement:
+            query["placement"] = placement
         await self._delete(query=query)
         return DataDelete()
 
-    async def delete_all_from_node(self, node_id: str):
+    async def delete_all_from_node(
+        self,
+        node_id: str,
+        placement: dict[str, str],
+    ):
         query = {"node_id": node_id}
+        if placement:
+            query["placement"] = placement
         await self._coll.delete_many(filter=query)
 
     async def get(
         self,
         _id: datetime,
         node_id: str,
+        placement: dict[str, str],
         fields: list,
     ) -> NodeReportGet:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        result = await self._get(query=query, fields=fields)
+        if placement:
+            query["placement"] = placement
+        result = await self._get(
+            query=query,
+            fields=fields,
+        )
         return NodeReportGet(**result)
 
     async def resource_exists(
         self,
         _id: datetime,
         node_id: str,
+        placement: dict[str, str],
     ) -> ObjectId:
         query = {
             "id": _id,
             "node_id": node_id,
         }
+        if placement:
+            query["placement"] = placement
         return await self._resource_exists(query=query)
 
     async def search(
         self,
         node_id: str,
+        placement: dict[str, str],
         report_catalog_uuid: Optional[str] = None,
         report_status: Optional[str] = None,
         fields: Optional[list] = None,
@@ -179,8 +198,18 @@ class CrudNodesReports(CrudMongo):
         limit: Optional[int] = None,
     ) -> NodeReportGetMulti:
         query = {"node_id": node_id}
-        self._filter_literal(query, "report.catalog_uuid", report_catalog_uuid)
-        self._filter_re(query, "report.status", report_status)
+        if placement:
+            query["placement"] = placement
+        self._filter_literal(
+            query=query,
+            field="report.catalog_uuid",
+            selector=report_catalog_uuid,
+        )
+        self._filter_re(
+            query=query,
+            field="report.status",
+            selector=report_status,
+        )
 
         result = await self._search(
             query=query,
@@ -191,3 +220,13 @@ class CrudNodesReports(CrudMongo):
             limit=limit,
         )
         return NodeReportGetMulti(**result)
+
+    async def update_placement(
+        self,
+        node_id: str,
+        placement: dict[str, str],
+    ):
+        await self._coll.update_many(
+            filter={"node_id": node_id},
+            update={"$set": {"placement": placement}},
+        )

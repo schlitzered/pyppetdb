@@ -30,9 +30,13 @@ from pyppetdb.config import Config
 from pyppetdb.authorize import AuthorizeClientCert
 
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+
+from pyppetdb.helpers.placement import calculate_placement
+from pyppetdb.errors import ResourceNotFound
 
 from pyppetdb.model.pdb_facts import PuppetDBFacts
 from pyppetdb.model.nodes import NodePutInternal
@@ -48,6 +52,7 @@ class ControllerPdbCmdV1:
         log: logging.Logger,
         config: Config,
         crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
@@ -57,6 +62,7 @@ class ControllerPdbCmdV1:
         self._http = None
         self._config = config
         self._crud_nodes = crud_nodes
+        self._crud_nodes_catalog_cache = crud_nodes_catalog_cache
         self._crud_nodes_catalogs = crud_nodes_catalogs
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
@@ -90,6 +96,10 @@ class ControllerPdbCmdV1:
     @property
     def crud_nodes_catalogs(self):
         return self._crud_nodes_catalogs
+
+    @property
+    def crud_nodes_catalog_cache(self):
+        return self._crud_nodes_catalog_cache
 
     @property
     def crud_nodes_group(self):
@@ -164,12 +174,9 @@ class ControllerPdbCmdV1:
             )
             result["node_groups"] = groups
             asyncio.create_task(
-                self.crud_nodes.update(
-                    _id=certname,
+                self._update_facts_and_placement_async(
+                    node_id=certname,
                     payload=NodePutInternal(**result),
-                    fields=["id"],
-                    upsert=True,
-                    return_none=True,
                 )
             )
         elif command == "replace_catalog":
@@ -193,7 +200,7 @@ class ControllerPdbCmdV1:
                 )
             )
             if self.config.app.main.storeHistory.catalog:
-                placement = await self.crud_nodes.get_placement(certname)
+                placement = await self.crud_nodes.get_placement(_id=certname)
                 asyncio.create_task(
                     self.crud_nodes_catalogs.create(
                         _id=data_decomp["catalog_uuid"],
@@ -231,7 +238,7 @@ class ControllerPdbCmdV1:
                     return_none=True,
                 )
             )
-            placement = await self.crud_nodes.get_placement(certname)
+            placement = await self.crud_nodes.get_placement(_id=certname)
             asyncio.create_task(
                 self.crud_nodes_reports.create(
                     _id=_datetime,
@@ -250,15 +257,17 @@ class ControllerPdbCmdV1:
                 if self.config.app.main.storeHistory.catalogUnchanged:
                     asyncio.create_task(
                         self.crud_nodes_catalogs.drop_created_no_report_ttl(
-                            node_id=certname,
                             _id=data_decomp["catalog_uuid"],
+                            node_id=certname,
+                            placement=placement,
                         )
                     )
                 elif result["report"]["status"] != "unchanged":
                     asyncio.create_task(
                         self.crud_nodes_catalogs.drop_created_no_report_ttl(
-                            node_id=certname,
                             _id=data_decomp["catalog_uuid"],
+                            node_id=certname,
+                            placement=placement,
                         )
                     )
 
@@ -284,3 +293,41 @@ class ControllerPdbCmdV1:
             headers=headers,
             content=body,
         )
+
+    async def _update_facts_and_placement_async(
+        self,
+        node_id: str,
+        payload: NodePutInternal,
+    ):
+        old_placement = {}
+        try:
+            old_placement = await self.crud_nodes.get_placement(_id=node_id)
+        except ResourceNotFound:
+            pass
+
+        await self.crud_nodes.update(
+            _id=node_id,
+            payload=payload,
+            fields=["id"],
+            upsert=True,
+            return_none=True,
+        )
+
+        if payload.facts is not None:
+            new_placement = calculate_placement(
+                config=self.config,
+                facts=payload.facts,
+            )
+            if old_placement != new_placement:
+                await self.crud_nodes_reports.update_placement(
+                    node_id=node_id,
+                    placement=new_placement,
+                )
+                await self.crud_nodes_catalogs.update_placement(
+                    node_id=node_id,
+                    placement=new_placement,
+                )
+                await self.crud_nodes_catalog_cache.update_placement(
+                    node_id=node_id,
+                    placement=new_placement,
+                )

@@ -97,10 +97,12 @@ class ControllerApiV1NodesReports:
         await self.crud_nodes.resource_exists(
             _id=node_id, user_node_groups=user_node_groups
         )
+        placement = await self.crud_nodes.get_placement(_id=node_id)
         return await self.crud_nodes_reports.get(
             _id=report_id,
             node_id=node_id,
             fields=list(fields),
+            placement=placement,
         )
 
     async def search(
@@ -129,6 +131,7 @@ class ControllerApiV1NodesReports:
         await self.crud_nodes.resource_exists(
             _id=node_id, user_node_groups=user_node_groups
         )
+        placement = await self.crud_nodes.get_placement(_id=node_id)
         return await self.crud_nodes_reports.search(
             node_id=node_id,
             report_catalog_uuid=report_catalog_uuid,
@@ -138,4 +141,5 @@ class ControllerApiV1NodesReports:
             sort_order=sort_order,
             page=page,
             limit=limit,
+            placement=placement,
         )

@@ -41,14 +41,20 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
 
+        self.mock_cache = MagicMock()
+        self.mock_cache.update_placement = AsyncMock()
+        self.mock_catalogs.update_placement = AsyncMock()
+        self.mock_reports.update_placement = AsyncMock()
+
         self.controller = ControllerPdbCmdV1(
-            self.log,
-            self.mock_config,
-            self.mock_nodes,
-            self.mock_catalogs,
-            self.mock_groups,
-            self.mock_reports,
-            self.mock_auth_cert,
+            log=self.log,
+            config=self.mock_config,
+            crud_nodes=self.mock_nodes,
+            crud_nodes_catalog_cache=self.mock_cache,
+            crud_nodes_catalogs=self.mock_catalogs,
+            crud_nodes_groups=self.mock_groups,
+            crud_nodes_reports=self.mock_reports,
+            authorize_client_cert=self.mock_auth_cert,
         )
 
     async def test_replace_facts(self):
@@ -172,5 +178,48 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             command="unknown",
             producer_timestamp="2026-03-06T00:00:00Z",
             version=1,
+        )
+
+    async def test_replace_facts_placement_propagation(self):
+        mock_request = MagicMock()
+        data = {
+            "certname": "node1",
+            "environment": "prod",
+            "values": {"provider": "gcp"},
+            "producer_timestamp": "2026-03-06T00:00:00Z",
+            "producer": "pm1",
+        }
+        mock_request.body = AsyncMock(return_value=json.dumps(data).encode())
+        mock_request.headers = {}
+
+        self.mock_config.mongodb.placementFacts = ["provider"]
+        self.mock_nodes.get_placement = AsyncMock(return_value={"provider": "aws"})
+        self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])
+        self.mock_nodes.update = AsyncMock()
+        self.mock_reports.update_placement = AsyncMock()
+        self.mock_catalogs.update_placement = AsyncMock()
+        self.mock_cache.update_placement = AsyncMock()
+
+        await self.controller.create(
+            request=mock_request,
+            certname="node1",
+            command="replace_facts",
+            producer_timestamp="2026-03-06T00:00:00Z",
+            version=1,
+        )
+
+        await asyncio.sleep(0.1)
+        self.mock_nodes.update.assert_called_once()
+        self.mock_reports.update_placement.assert_called_once_with(
+            node_id="node1",
+            placement={"provider": "gcp"},
+        )
+        self.mock_catalogs.update_placement.assert_called_once_with(
+            node_id="node1",
+            placement={"provider": "gcp"},
+        )
+        self.mock_cache.update_placement.assert_called_once_with(
+            node_id="node1",
+            placement={"provider": "gcp"},
         )
         # Should not raise

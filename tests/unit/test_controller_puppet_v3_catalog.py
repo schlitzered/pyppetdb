@@ -30,6 +30,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_cache = MagicMock()
         self.mock_cache.upsert = AsyncMock()
         self.mock_nodes = AsyncMock()
+        self.mock_nodes.get_placement = AsyncMock(return_value={})
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
         self.mock_auth_cert.require_cn_match = AsyncMock()
@@ -50,15 +51,18 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_post_cached(self):
-        self.mock_cache.get_catalog = AsyncMock(return_value={"resources": []})
+        self.mock_cache.get = AsyncMock(return_value={"resources": []})
         mock_request = MagicMock()
 
         result = await self.controller.post(mock_request, "node1")
         self.assertEqual(result, {"resources": []})
-        self.mock_cache.get_catalog.assert_called_once_with(node_id="node1")
+        self.mock_cache.get.assert_called_once_with(
+            node_id="node1",
+            placement={},
+        )
 
     async def test_post_not_cached_proxy_and_store(self):
-        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        self.mock_cache.get = AsyncMock(return_value=None)
         self.mock_cache.upsert = AsyncMock()
         self.mock_nodes.get = AsyncMock(return_value=None)
 
@@ -94,7 +98,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         from pyppetdb.model.nodes import NodeGet
         import urllib.parse
 
-        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        self.mock_cache.get = AsyncMock(return_value=None)
 
         # Mock node with facts_inject
         mock_node = MagicMock(spec=NodeGet)
@@ -125,7 +129,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
     async def test_post_node_not_found_no_injection(self):
         from pyppetdb.errors import ResourceNotFound
 
-        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        self.mock_cache.get = AsyncMock(return_value=None)
         self.mock_nodes.get.side_effect = ResourceNotFound()
 
         mock_response = MagicMock(spec=httpx.Response)
@@ -153,7 +157,7 @@ class TestControllerPuppetV3CatalogUnit(unittest.IsolatedAsyncioTestCase):
         from pyppetdb.model.nodes import NodeGet
         import urllib.parse
 
-        self.mock_cache.get_catalog = AsyncMock(return_value=None)
+        self.mock_cache.get = AsyncMock(return_value=None)
         mock_node = MagicMock(spec=NodeGet)
         mock_node.facts_inject = {"location": "Frankfurt"}
         self.mock_nodes.get = AsyncMock(return_value=mock_node)

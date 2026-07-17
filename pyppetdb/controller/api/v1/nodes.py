@@ -213,8 +213,15 @@ class ControllerApiV1Nodes:
         )
 
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
-        await self.crud_nodes_catalogs.delete_all_from_node(node_id=node_id)
-        await self.crud_nodes_reports.delete_all_from_node(node_id=node_id)
+        placement = await self.crud_nodes.get_placement(_id=node_id)
+        await self.crud_nodes_catalogs.delete_all_from_node(
+            node_id=node_id,
+            placement=placement,
+        )
+        await self.crud_nodes_reports.delete_all_from_node(
+            node_id=node_id,
+            placement=placement,
+        )
         await self.crud_jobs.remove_node_from_jobs(node_id=node_id)
         await self.crud_node_jobs.delete_by_node(node_id=node_id)
 

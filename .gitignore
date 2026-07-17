@@ -2,6 +2,7 @@
 .coverage
 GEMINI.md
 api_secret.txt
+scripts/
 .env
 *.pyc
 .idea

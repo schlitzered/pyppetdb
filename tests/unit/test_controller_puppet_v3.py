@@ -41,6 +41,8 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_auth_cert.require_cn_match = AsyncMock()
         self.mock_auth_cert.require_cn = AsyncMock()
         self.mock_crud_catalog_cache = AsyncMock()
+        self.mock_crud_nodes = AsyncMock()
+        self.mock_crud_nodes.get_placement = AsyncMock(return_value={})
 
         self.mock_config.app.puppet.serverurl = "http://puppetmaster"
         self.mock_config.app.puppet.catalogCache = True
@@ -48,35 +50,37 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
 
     async def test_catalog_post_cached(self):
         controller = ControllerPuppetV3Catalog(
-            self.log,
-            self.mock_config,
-            self.mock_http,
-            self.mock_auth_cert,
-            None,
-            self.mock_crud_catalog_cache,
+            log=self.log,
+            config=self.mock_config,
+            http=self.mock_http,
+            authorize_client_cert=self.mock_auth_cert,
+            crud_nodes=self.mock_crud_nodes,
+            crud_nodes_catalog_cache=self.mock_crud_catalog_cache,
         )
         mock_request = MagicMock()
-        self.mock_crud_catalog_cache.get_catalog.return_value = {
+        self.mock_crud_catalog_cache.get.return_value = {
             "name": "node1",
             "resources": [],
         }
 
         result = await controller.post(mock_request, "node1")
         self.assertEqual(result, {"name": "node1", "resources": []})
-        self.mock_crud_catalog_cache.get_catalog.assert_called_once_with(
-            node_id="node1"
+        self.mock_crud_catalog_cache.get.assert_called_once_with(
+            node_id="node1",
+            placement={},
         )
 
     async def test_catalog_post_not_cached(self):
         mock_crud_nodes = AsyncMock()
         mock_crud_nodes.get.return_value = None
+        mock_crud_nodes.get_placement = AsyncMock(return_value={})
         controller = ControllerPuppetV3Catalog(
-            self.log,
-            self.mock_config,
-            self.mock_http,
-            self.mock_auth_cert,
-            mock_crud_nodes,
-            self.mock_crud_catalog_cache,
+            log=self.log,
+            config=self.mock_config,
+            http=self.mock_http,
+            authorize_client_cert=self.mock_auth_cert,
+            crud_nodes=mock_crud_nodes,
+            crud_nodes_catalog_cache=self.mock_crud_catalog_cache,
         )
         mock_request = MagicMock()
         mock_request.query_params = {}
@@ -87,7 +91,7 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         )
         mock_request.form = AsyncMock(return_value={"facts": facts_json})
 
-        self.mock_crud_catalog_cache.get_catalog.return_value = None
+        self.mock_crud_catalog_cache.get.return_value = None
 
         catalog_data = {"name": "node1", "resources": []}
         mock_response = MagicMock(spec=httpx.Response)
@@ -114,12 +118,12 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
 
     async def test_catalog_get_not_allowed(self):
         controller = ControllerPuppetV3Catalog(
-            self.log,
-            self.mock_config,
-            self.mock_http,
-            self.mock_auth_cert,
-            None,
-            self.mock_crud_catalog_cache,
+            log=self.log,
+            config=self.mock_config,
+            http=self.mock_http,
+            authorize_client_cert=self.mock_auth_cert,
+            crud_nodes=self.mock_crud_nodes,
+            crud_nodes_catalog_cache=self.mock_crud_catalog_cache,
         )
         mock_request = MagicMock()
         with self.assertRaises(HTTPException) as cm:

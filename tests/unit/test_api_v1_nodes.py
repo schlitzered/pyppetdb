@@ -30,6 +30,7 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_authorize = MagicMock()
         self.mock_crud_nodes = MagicMock()
+        self.mock_crud_nodes.get_placement = AsyncMock(return_value={})
         self.mock_crud_catalog_cache = MagicMock()
         self.mock_crud_catalogs = MagicMock()
         self.mock_crud_groups = MagicMock()
@@ -91,10 +92,12 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1"
         )
         self.mock_crud_catalogs.delete_all_from_node.assert_called_once_with(
-            node_id="node1"
+            node_id="node1",
+            placement={},
         )
         self.mock_crud_reports.delete_all_from_node.assert_called_once_with(
-            node_id="node1"
+            node_id="node1",
+            placement={},
         )
         self.mock_crud_jobs.remove_node_from_jobs.assert_called_once_with(
             node_id="node1"

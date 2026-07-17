@@ -20,7 +20,11 @@ from pyppetdb.config import Config
 def calculate_placement(config: Config, facts: Dict[Any, Any]) -> Dict[str, str]:
     placement = {}
     for fact in config.mongodb.placementFacts:
-        value = facts.get(fact, "unknown")
+        value = facts
+        for key in fact.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        if value is None:
+            value = "unknown"
         if not isinstance(value, str):
             value = str(value)
         placement[fact] = value
