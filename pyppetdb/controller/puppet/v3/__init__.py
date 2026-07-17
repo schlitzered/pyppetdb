@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import typing
 
 from fastapi import APIRouter
 import httpx
