@@ -144,6 +144,7 @@ class Controller:
             log=log,
             config=config,
             crud_nodes=crud_nodes,
+            crud_nodes_catalog_cache=crud_nodes_catalog_cache,
             crud_nodes_catalogs=crud_nodes_catalogs,
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,

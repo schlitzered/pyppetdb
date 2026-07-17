@@ -99,10 +99,12 @@ class ControllerApiV1NodesCatalogs:
         await self.crud_nodes.resource_exists(
             _id=node_id, user_node_groups=user_node_groups
         )
+        placement = await self.crud_nodes.get_placement(_id=node_id)
         return await self.crud_nodes_catalogs.get(
             _id=catalog_id,
             node_id=node_id,
             fields=list(fields),
+            placement=placement,
         )
 
     async def search(
@@ -130,6 +132,7 @@ class ControllerApiV1NodesCatalogs:
         await self.crud_nodes.resource_exists(
             _id=node_id, user_node_groups=user_node_groups
         )
+        placement = await self.crud_nodes.get_placement(_id=node_id)
         return await self.crud_nodes_catalogs.search(
             node_id=node_id,
             catalog_status=catalog_status,
@@ -138,4 +141,5 @@ class ControllerApiV1NodesCatalogs:
             sort_order=sort_order,
             page=page,
             limit=limit,
+            placement=placement,
         )

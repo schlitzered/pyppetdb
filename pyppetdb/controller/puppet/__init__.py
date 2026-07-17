@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import logging
-import typing
 
 from fastapi import APIRouter
 import httpx
@@ -32,8 +31,8 @@ class ControllerPuppet:
         config: Config,
         http: httpx.AsyncClient,
         authorize_client_cert: AuthorizeClientCert,
-        crud_nodes: typing.Optional[CrudNodes] = None,
-        crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
+        crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
     ):
         self._log = log
         self._router = APIRouter()

@@ -15,7 +15,8 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
-from pyppetdb.crud.nodes import CrudNodes, NodePutInternal
+from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes import NodePutInternal
 
 
 class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
@@ -128,9 +129,14 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(has_match)
 
     async def test_update(self):
+        self.crud.get_placement = AsyncMock(return_value={})
         self.crud._update = AsyncMock(return_value={"id": "node1"})
         payload = NodePutInternal(disabled=True)
-        await self.crud.update(_id="node1", payload=payload, fields=[])
+        await self.crud.update(
+            _id="node1",
+            payload=payload,
+            fields=[],
+        )
         self.crud._update.assert_called_once()
 
     async def test_update_nodegroup(self):

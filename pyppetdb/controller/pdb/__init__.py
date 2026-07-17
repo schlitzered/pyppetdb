@@ -22,6 +22,7 @@ from pyppetdb.controller.pdb.cmd import ControllerPdbCmd
 from pyppetdb.controller.pdb.query import ControllerPdbQuery
 
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
@@ -33,6 +34,7 @@ class ControllerPdb:
         log: logging.Logger,
         config: Config,
         crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
@@ -46,6 +48,7 @@ class ControllerPdb:
                 log=log,
                 config=config,
                 crud_nodes=crud_nodes,
+                crud_nodes_catalog_cache=crud_nodes_catalog_cache,
                 crud_nodes_catalogs=crud_nodes_catalogs,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,

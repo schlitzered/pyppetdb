@@ -20,6 +20,7 @@ from pyppetdb.config import Config
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes
+from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
@@ -31,6 +32,7 @@ class ControllerPdbCmd:
         log: logging.Logger,
         config: Config,
         crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
@@ -44,6 +46,7 @@ class ControllerPdbCmd:
                 log=log,
                 config=config,
                 crud_nodes=crud_nodes,
+                crud_nodes_catalog_cache=crud_nodes_catalog_cache,
                 crud_nodes_catalogs=crud_nodes_catalogs,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,

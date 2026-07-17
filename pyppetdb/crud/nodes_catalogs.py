@@ -118,19 +118,28 @@ class CrudNodesCatalogs(CrudMongo):
         result = await self._create(fields=fields, payload=data)
         return NodeCatalogGet(**result)
 
-    async def delete_all_from_node(self, node_id: str):
+    async def delete_all_from_node(
+        self,
+        node_id: str,
+        placement: dict[str, str],
+    ):
         query = {"node_id": node_id}
+        if placement:
+            query["placement"] = placement
         await self._coll.delete_many(filter=query)
 
     async def drop_created_no_report_ttl(
         self,
         _id: datetime,
         node_id: str,
+        placement: dict[str, str],
     ):
         query = {
             "id": _id,
             "node_id": node_id,
         }
+        if placement:
+            query["placement"] = placement
         await self._coll.update_one(
             filter=query,
             update={"$unset": {"created_no_report_ttl": ""}},
@@ -140,29 +149,39 @@ class CrudNodesCatalogs(CrudMongo):
         self,
         _id: datetime | str,
         node_id: str,
+        placement: dict[str, str],
         fields: list,
     ) -> NodeCatalogGet:
         query = {
             "id": _id,
             "node_id": node_id,
         }
-        result = await self._get(query=query, fields=fields)
+        if placement:
+            query["placement"] = placement
+        result = await self._get(
+            query=query,
+            fields=fields,
+        )
         return NodeCatalogGet(**result)
 
     async def resource_exists(
         self,
         _id: datetime,
         node_id: str,
+        placement: dict[str, str],
     ) -> ObjectId:
         query = {
             "id": _id,
             "node_id": node_id,
         }
+        if placement:
+            query["placement"] = placement
         return await self._resource_exists(query=query)
 
     async def search(
         self,
         node_id: str,
+        placement: dict[str, str],
         catalog_status: Optional[str] = None,
         fields: Optional[list] = None,
         sort: Optional[str] = None,
@@ -171,7 +190,13 @@ class CrudNodesCatalogs(CrudMongo):
         limit: Optional[int] = None,
     ) -> NodeCatalogGetMulti:
         query = {"node_id": node_id}
-        self._filter_re(query, "catalog.status", catalog_status)
+        if placement:
+            query["placement"] = placement
+        self._filter_re(
+            query=query,
+            field="catalog.status",
+            selector=catalog_status,
+        )
 
         result = await self._search(
             query=query,
@@ -182,3 +207,13 @@ class CrudNodesCatalogs(CrudMongo):
             limit=limit,
         )
         return NodeCatalogGetMulti(**result)
+
+    async def update_placement(
+        self,
+        node_id: str,
+        placement: dict[str, str],
+    ):
+        await self._coll.update_many(
+            filter={"node_id": node_id},
+            update={"$set": {"placement": placement}},
+        )

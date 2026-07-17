@@ -31,7 +31,10 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_delete_all_from_node(self):
         self.mock_coll.delete_many = AsyncMock()
-        await self.crud.delete_all_from_node(node_id="node1")
+        await self.crud.delete_all_from_node(
+            node_id="node1",
+            placement={},
+        )
         self.mock_coll.delete_many.assert_called_once_with(filter={"node_id": "node1"})
 
     async def test_create(self):
@@ -53,22 +56,38 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get(self):
         self.crud._get = AsyncMock(return_value={"id": "cat1", "node_id": "node1"})
-        await self.crud.get(_id="cat1", node_id="node1", fields=[])
+        await self.crud.get(
+            _id="cat1",
+            node_id="node1",
+            placement={},
+            fields=[],
+        )
         self.crud._get.assert_called_once()
 
     async def test_resource_exists(self):
         self.crud._resource_exists = AsyncMock(return_value=True)
-        await self.crud.resource_exists(_id="cat1", node_id="node1")
+        await self.crud.resource_exists(
+            _id="cat1",
+            node_id="node1",
+            placement={},
+        )
         self.crud._resource_exists.assert_called_once()
 
     async def test_drop_created_no_report_ttl(self):
         self.mock_coll.update_one = AsyncMock()
-        await self.crud.drop_created_no_report_ttl(_id="cat1", node_id="node1")
+        await self.crud.drop_created_no_report_ttl(
+            _id="cat1",
+            node_id="node1",
+            placement={},
+        )
         self.mock_coll.update_one.assert_called_once()
 
     async def test_search(self):
         self.crud._search = AsyncMock(
             return_value={"result": [], "meta": {"result_size": 0}}
         )
-        await self.crud.search(node_id="node1")
+        await self.crud.search(
+            node_id="node1",
+            placement={},
+        )
         self.crud._search.assert_called_once()

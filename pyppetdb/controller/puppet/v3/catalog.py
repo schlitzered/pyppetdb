@@ -41,8 +41,8 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         config: Config,
         http: httpx.AsyncClient,
         authorize_client_cert: AuthorizeClientCert,
-        crud_nodes: typing.Optional[CrudNodes] = None,
-        crud_nodes_catalog_cache: typing.Optional[CrudNodesCatalogCache] = None,
+        crud_nodes: CrudNodes,
+        crud_nodes_catalog_cache: CrudNodesCatalogCache,
     ):
         super().__init__(
             config=config,
@@ -118,7 +118,10 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
     ):
         try:
             await self.crud_nodes_catalog_cache.upsert(
-                node_id=node_id, facts=facts, catalog=catalog, placement=placement
+                node_id=node_id,
+                facts=facts,
+                catalog=catalog,
+                placement=placement,
             )
             self.log.debug(f"Cached catalog for node {node_id}")
         except Exception as e:
@@ -138,8 +141,10 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
         await self.authorize_client_cert.require_cn_match(request, nodename)
 
         if self.config.app.puppet.catalogCache:
-            if cached_catalog := await self.crud_nodes_catalog_cache.get_catalog(
-                node_id=nodename
+            placement = await self.crud_nodes.get_placement(_id=nodename)
+            if cached_catalog := await self.crud_nodes_catalog_cache.get(
+                node_id=nodename,
+                placement=placement,
             ):
                 self.log.debug(f"Serving cached catalog for node {nodename}")
                 return cached_catalog
@@ -193,7 +198,10 @@ class ControllerPuppetV3Catalog(ControllerPuppetV3Base):
                     )
                     asyncio.create_task(
                         self._store_to_cache_async(
-                            nodename, filtered_facts, response.json(), placement
+                            node_id=nodename,
+                            facts=filtered_facts,
+                            catalog=response.json(),
+                            placement=placement,
                         )
                     )
                 except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:

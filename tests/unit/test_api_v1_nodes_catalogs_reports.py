@@ -25,6 +25,7 @@ class TestApiV1NodesCatalogsReportsUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_authorize = MagicMock()
         self.mock_crud_nodes = MagicMock()
+        self.mock_crud_nodes.get_placement = AsyncMock(return_value={})
         self.mock_crud_catalogs = MagicMock()
         self.mock_crud_reports = MagicMock()
 
@@ -50,12 +51,18 @@ class TestApiV1NodesCatalogsReportsUnit(unittest.IsolatedAsyncioTestCase):
 
         mock_request = MagicMock()
         await self.catalogs_controller.get(
-            node_id="node1", catalog_id="cat1", request=mock_request, fields=set()
+            node_id="node1",
+            catalog_id="cat1",
+            request=mock_request,
+            fields=set(),
         )
 
         self.mock_crud_nodes.resource_exists.assert_called_once()
         self.mock_crud_catalogs.get.assert_called_once_with(
-            _id="cat1", node_id="node1", fields=[]
+            _id="cat1",
+            node_id="node1",
+            fields=[],
+            placement={},
         )
 
     async def test_get_report(self):
@@ -67,12 +74,18 @@ class TestApiV1NodesCatalogsReportsUnit(unittest.IsolatedAsyncioTestCase):
         now = datetime.now()
         mock_request = MagicMock()
         await self.reports_controller.get(
-            node_id="node1", report_id=now, request=mock_request, fields=set()
+            node_id="node1",
+            report_id=now,
+            request=mock_request,
+            fields=set(),
         )
 
         self.mock_crud_nodes.resource_exists.assert_called_once()
         self.mock_crud_reports.get.assert_called_once_with(
-            _id=now, node_id="node1", fields=[]
+            _id=now,
+            node_id="node1",
+            fields=[],
+            placement={},
         )
 
     async def test_search_catalogs(self):
@@ -85,13 +98,23 @@ class TestApiV1NodesCatalogsReportsUnit(unittest.IsolatedAsyncioTestCase):
         await self.catalogs_controller.search(
             node_id="node1",
             request=mock_request,
+            catalog_status=None,
             fields=set(),
             sort="id",
             sort_order="ascending",
             page=0,
             limit=10,
         )
-        self.mock_crud_catalogs.search.assert_called_once()
+        self.mock_crud_catalogs.search.assert_called_once_with(
+            node_id="node1",
+            catalog_status=None,
+            fields=[],
+            sort="id",
+            sort_order="ascending",
+            page=0,
+            limit=10,
+            placement={},
+        )
 
     async def test_search_reports(self):
         self.mock_authorize.require_user = AsyncMock()
@@ -103,10 +126,22 @@ class TestApiV1NodesCatalogsReportsUnit(unittest.IsolatedAsyncioTestCase):
         await self.reports_controller.search(
             node_id="node1",
             request=mock_request,
+            report_catalog_uuid=None,
+            report_status=None,
             fields=set(),
             sort="id",
             sort_order="ascending",
             page=0,
             limit=10,
         )
-        self.mock_crud_reports.search.assert_called_once()
+        self.mock_crud_reports.search.assert_called_once_with(
+            node_id="node1",
+            report_catalog_uuid=None,
+            report_status=None,
+            fields=[],
+            sort="id",
+            sort_order="ascending",
+            page=0,
+            limit=10,
+            placement={},
+        )
