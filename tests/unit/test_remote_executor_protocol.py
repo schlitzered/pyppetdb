@@ -76,12 +76,14 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
     async def test_handle_log_message(self):
         self.mock_redactor.redact.side_effect = lambda text: text
 
-        mock_log_entry = MagicMock()
-        mock_log_entry.model_dump.return_value = {"line_nr": 1, "msg": "test log"}
+        mock_log_entry_1 = MagicMock()
+        mock_log_entry_1.model_dump.return_value = {"line_nr": 1, "msg": "test log 1"}
+        mock_log_entry_2 = MagicMock()
+        mock_log_entry_2.model_dump.return_value = {"line_nr": 2, "msg": "test log 2"}
 
         mock_body = MagicMock()
         mock_body.job_id = "job1"
-        mock_body.logs = [mock_log_entry]
+        mock_body.logs = [mock_log_entry_1, mock_log_entry_2]
 
         await asyncio.wait_for(
             self.protocol._log_handler.handle_log_message(
@@ -90,7 +92,16 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
             timeout=1.0,
         )
 
+        # The whole batch must be forwarded in a single broadcast call.
         self.mock_manager.broadcast_local_log.assert_called_once()
+        _, kwargs = self.mock_manager.broadcast_local_log.call_args
+        self.assertEqual(
+            kwargs["log_entries"],
+            [
+                {"line_nr": 1, "msg": "test log 1"},
+                {"line_nr": 2, "msg": "test log 2"},
+            ],
+        )
 
     async def test_handle_finish(self):
         body = MagicMock()

@@ -62,14 +62,20 @@ class RemoteExecutorLogHandler:
             )
             return
 
+        log_entries = []
         for log_entry in body.logs:
             entry_dict = log_entry.model_dump()
             entry_dict["msg"] = self._redactor.redact(entry_dict["msg"])
-            await self._manager.broadcast_local_log(
-                node_id=self._node_id,
-                job_id=body.job_id,
-                log_entry=entry_dict,
-            )
+            log_entries.append(entry_dict)
+
+        if not log_entries:
+            return
+
+        await self._manager.broadcast_local_log(
+            node_id=self._node_id,
+            job_id=body.job_id,
+            log_entries=log_entries,
+        )
 
 
 class RemoteExecutorJobManager:

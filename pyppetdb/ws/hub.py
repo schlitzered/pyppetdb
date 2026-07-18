@@ -107,14 +107,16 @@ class WsHub:
     def job_run_id_to_via(self):
         return self._job_run_id_to_via
 
-    async def broadcast_local_log(self, node_id: str, job_id: str, log_entry: Dict):
+    async def broadcast_local_log(
+        self, node_id: str, job_id: str, log_entries: List[Dict]
+    ):
         job_run_id = f"{job_id}:{node_id}"
         if job_run_id in self._subscriptions:
             msg = WsMessage(
                 msg_type="log_message",
                 msg_body=WsMsgBodyLogMessage(
                     job_run_id=job_run_id,
-                    logs=[log_entry],
+                    logs=log_entries,
                 ),
             )
             await self._broadcast_to_subscribers(job_run_id, msg.model_dump_json())
