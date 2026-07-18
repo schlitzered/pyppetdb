@@ -88,3 +88,90 @@ class TestApiV1HieraLookupUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_pyhiera.hiera.key_data_get.assert_called_once()
         self.mock_cache.set_cached.assert_called_once()
+
+    async def test_lookup_merge_uses_merge_backend(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_cache.get_cached = AsyncMock(return_value=None)
+        self.mock_cache.set_cached = AsyncMock()
+
+        result = MagicMock()
+        result.model_dump = MagicMock(return_value={"data": "merged-value"})
+        self.mock_pyhiera.hiera.key_data_get_merge = AsyncMock(return_value=result)
+        self.mock_pyhiera.hiera.key_data_get = AsyncMock()
+
+        out = await self.controller.lookup(
+            request=MagicMock(), key_id="mykey", merge=True, fact={"os:linux"}
+        )
+
+        self.assertEqual(out.data, "merged-value")
+        self.mock_pyhiera.hiera.key_data_get_merge.assert_called_once()
+        self.mock_pyhiera.hiera.key_data_get.assert_not_called()
+        _, kwargs = self.mock_cache.set_cached.call_args
+        self.assertTrue(kwargs["merge"])
+
+    async def test_lookup_key_error_unknown_model_raises_422(self):
+        from pyhiera.errors import PyHieraError
+
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_cache.get_cached = AsyncMock(return_value=None)
+        self.mock_pyhiera.hiera.key_data_get = AsyncMock(
+            side_effect=PyHieraError("Key mykey has no data")
+        )
+        self.mock_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:gone")
+        )
+        self.mock_pyhiera.hiera.key_models = {}  # model not registered
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.controller.lookup(
+                request=MagicMock(), key_id="mykey", merge=False, fact={"os:linux"}
+            )
+        self.assertIn("key model dynamic:gone not found", ctx.exception.detail)
+
+    async def test_lookup_key_error_missing_key_raises_422(self):
+        from pyhiera.errors import PyHieraError
+        from pyppetdb.errors import ResourceNotFound
+
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_cache.get_cached = AsyncMock(return_value=None)
+        self.mock_pyhiera.hiera.key_data_get = AsyncMock(
+            side_effect=PyHieraError("Key mykey not found")
+        )
+        self.mock_keys.get = AsyncMock(side_effect=ResourceNotFound())
+
+        with self.assertRaises(QueryParamValidationError):
+            await self.controller.lookup(
+                request=MagicMock(), key_id="mykey", merge=False, fact={"os:linux"}
+            )
+
+    async def test_lookup_key_error_known_model_falls_through(self):
+        from pyhiera.errors import PyHieraError
+
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_cache.get_cached = AsyncMock(return_value=None)
+        self.mock_pyhiera.hiera.key_data_get = AsyncMock(
+            side_effect=PyHieraError("Key mykey blew up")
+        )
+        self.mock_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:known")
+        )
+        self.mock_pyhiera.hiera.key_models = {"dynamic:known": MagicMock()}
+
+        with self.assertRaises(QueryParamValidationError):
+            await self.controller.lookup(
+                request=MagicMock(), key_id="mykey", merge=False, fact={"os:linux"}
+            )
+
+    async def test_lookup_backend_error_raises_422(self):
+        from pyhiera.errors import PyHieraBackendError
+
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_cache.get_cached = AsyncMock(return_value=None)
+        self.mock_pyhiera.hiera.key_data_get = AsyncMock(
+            side_effect=PyHieraBackendError("backend down")
+        )
+
+        with self.assertRaises(QueryParamValidationError):
+            await self.controller.lookup(
+                request=MagicMock(), key_id="mykey", merge=False, fact={"os:linux"}
+            )

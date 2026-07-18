@@ -70,32 +70,150 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.require_perm.assert_called_once()
         self.mock_crud_keys.create.assert_called_once()
 
-    async def test_update_key_with_validation(self):
+    def _wire_key_model(self, model_id="dynamic:new", validate_side_effect=None):
+        """Register a real key model in pyhiera whose validate() we control.
+
+        NOTE: the controller reads ``pyhiera.hiera.key_models`` (snake_case).
+        The previous version of this test set ``keyModels`` (camelCase), which
+        because of MagicMock auto-vivification silently passed validation
+        without ever exercising it. We use a real dict here so the cascade is
+        actually driven.
+        """
+        instance = MagicMock()
+        instance.validate = MagicMock(side_effect=validate_side_effect)
+        model_type = MagicMock(return_value=instance)
+        self.mock_pyhiera.hiera.key_models = {model_id: model_type}
+        return model_type, instance
+
+    async def test_update_new_model_revalidates_all_level_data(self):
         self.mock_authorize.require_perm = AsyncMock()
-        # Mock current key
         self.mock_crud_keys.get = AsyncMock(
             return_value=MagicMock(key_model_id="dynamic:old")
         )
-        # Mock _key_model_exists for new model
-        self.mock_crud_dynamic.get = AsyncMock()
+        self.mock_crud_dynamic.get = AsyncMock()  # new model exists
+        _, instance = self._wire_key_model("dynamic:new")
 
-        # Mock existing data validation cascade
-        mock_level_data = MagicMock()
-        mock_level_data.result = [MagicMock(data={"foo": "bar"})]
-        self.mock_crud_level_data.search = AsyncMock(return_value=mock_level_data)
-
-        # Mock validation success
-        self.mock_pyhiera.hiera.keyModels = {"dynamic:new": MagicMock()}
+        level_data = MagicMock()
+        level_data.result = [
+            MagicMock(data={"foo": "bar"}),
+            MagicMock(data={"baz": "qux"}),
+        ]
+        self.mock_crud_level_data.search = AsyncMock(return_value=level_data)
         self.mock_crud_keys.update = AsyncMock()
 
         data = HieraKeyPut(key_model_id="dynamic:new")
-        mock_request = MagicMock()
         await self.controller.update(
-            request=mock_request, data=data, key_id="key1", fields=set()
+            request=MagicMock(), data=data, key_id="key1", fields=set()
         )
 
-        self.mock_authorize.require_perm.assert_called_once()
+        # every existing level_data row must be re-validated against the new model
         self.mock_crud_level_data.search.assert_called_once()
+        self.assertEqual(instance.validate.call_count, 2)
+        self.mock_crud_keys.update.assert_called_once()
+
+    async def test_update_new_model_invalid_data_raises_422(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:old")
+        )
+        self.mock_crud_dynamic.get = AsyncMock()
+        self._wire_key_model("dynamic:new", validate_side_effect=ValueError("nope"))
+
+        level_data = MagicMock()
+        level_data.result = [MagicMock(data={"foo": "bar"})]
+        self.mock_crud_level_data.search = AsyncMock(return_value=level_data)
+        self.mock_crud_keys.update = AsyncMock()
+
+        from pyppetdb.errors import QueryParamValidationError
+
+        data = HieraKeyPut(key_model_id="dynamic:new")
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.controller.update(
+                request=MagicMock(), data=data, key_id="key1", fields=set()
+            )
+        self.assertEqual(ctx.exception.status_code, 422)
+        # existing data does not fit the new model -> the key must NOT be updated
+        self.mock_crud_keys.update.assert_not_called()
+
+    async def test_update_new_model_unknown_to_pyhiera_raises_422(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:old")
+        )
+        self.mock_crud_dynamic.get = AsyncMock()  # exists in crud ...
+        self.mock_pyhiera.hiera.key_models = {}  # ... but not registered in pyhiera
+
+        level_data = MagicMock()
+        level_data.result = [MagicMock(data={"foo": "bar"})]
+        self.mock_crud_level_data.search = AsyncMock(return_value=level_data)
+        self.mock_crud_keys.update = AsyncMock()
+
+        from pyppetdb.errors import QueryParamValidationError
+
+        data = HieraKeyPut(key_model_id="dynamic:new")
+        with self.assertRaises(QueryParamValidationError):
+            await self.controller.update(
+                request=MagicMock(), data=data, key_id="key1", fields=set()
+            )
+        self.mock_crud_keys.update.assert_not_called()
+
+    async def test_update_new_model_missing_raises_before_cascade(self):
+        from pyppetdb.errors import ResourceNotFound
+
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:old")
+        )
+        # new model does not exist at all -> _key_model_exists raises
+        self.mock_crud_dynamic.get = AsyncMock(side_effect=ResourceNotFound())
+        self.mock_crud_level_data.search = AsyncMock()
+        self.mock_crud_keys.update = AsyncMock()
+
+        data = HieraKeyPut(key_model_id="dynamic:new")
+        with self.assertRaises(ResourceNotFound):
+            await self.controller.update(
+                request=MagicMock(), data=data, key_id="key1", fields=set()
+            )
+        # must fail before touching level_data or updating the key
+        self.mock_crud_level_data.search.assert_not_called()
+        self.mock_crud_keys.update.assert_not_called()
+
+    async def test_update_same_model_skips_revalidation(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:new")
+        )
+        self.mock_crud_dynamic.get = AsyncMock()  # model still validated for existence
+        self._wire_key_model("dynamic:new")
+        self.mock_crud_level_data.search = AsyncMock()
+        self.mock_crud_keys.update = AsyncMock()
+
+        data = HieraKeyPut(key_model_id="dynamic:new")
+        await self.controller.update(
+            request=MagicMock(), data=data, key_id="key1", fields=set()
+        )
+        # unchanged model -> no expensive re-validation of existing level data
+        self.mock_crud_level_data.search.assert_not_called()
+        self.mock_crud_keys.update.assert_called_once()
+
+    async def test_update_without_model_skips_model_logic(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.get = AsyncMock(
+            return_value=MagicMock(key_model_id="dynamic:old")
+        )
+        self.mock_crud_dynamic.get = AsyncMock()
+        self.mock_crud_static.get = AsyncMock()
+        self.mock_crud_level_data.search = AsyncMock()
+        self.mock_crud_keys.update = AsyncMock()
+
+        data = HieraKeyPut(description="just a description")
+        await self.controller.update(
+            request=MagicMock(), data=data, key_id="key1", fields=set()
+        )
+        # no key_model_id in payload -> neither existence check nor cascade
+        self.mock_crud_dynamic.get.assert_not_called()
+        self.mock_crud_static.get.assert_not_called()
+        self.mock_crud_level_data.search.assert_not_called()
         self.mock_crud_keys.update.assert_called_once()
 
     async def test_delete_key(self):

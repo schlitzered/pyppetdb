@@ -161,7 +161,7 @@ class ControllerApiV1CAAuthoritiesCerts:
         )
         if not multi.result:
             raise ResourceNotFound(
-                msg=f"Certificate '{cert_id}' not found for CA '{ca_id}'"
+                details=f"Certificate '{cert_id}' not found for CA '{ca_id}'"
             )
 
         cert = multi.result[0]

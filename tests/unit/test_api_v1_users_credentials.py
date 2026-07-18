@@ -16,10 +16,13 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
-from pyppetdb.model.credentials import CredentialPost
+from pyppetdb.model.credentials import CredentialPost, CredentialPut
+from pyppetdb.errors import ResourceNotFound
 from pyppetdb.authorize import (
     PERM_USERS_CREDENTIALS_CREATE,
     PERM_USERS_CREDENTIALS_DELETE,
+    PERM_USERS_CREDENTIALS_GET,
+    PERM_USERS_CREDENTIALS_UPDATE,
 )
 
 
@@ -164,3 +167,85 @@ class TestApiV1UsersCredentialsUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_creds.update.assert_called_once_with(
             _id="cred1", owner="my-id", payload=payload, fields=[]
         )
+
+    async def test_create_credential_unknown_user_raises_404(self):
+        # non-_self create for a user that does not exist -> ResourceNotFound,
+        # and the credential must NOT be created
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_users.resource_exists = AsyncMock(side_effect=ResourceNotFound())
+        self.mock_crud_creds.create = AsyncMock()
+
+        with self.assertRaises(ResourceNotFound):
+            await self.controller.create(
+                data=CredentialPost(description="d"),
+                user_id="ghost",
+                request=MagicMock(),
+            )
+        self.mock_crud_creds.create.assert_not_called()
+
+    async def test_get_credential_other_user_requires_perm(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_authorize.get_user = AsyncMock()
+        self.mock_crud_creds.get = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.get(
+            request=mock_request,
+            user_id="alice",
+            credential_id="cred1",
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREDENTIALS_GET
+        )
+        self.mock_authorize.get_user.assert_not_called()
+        self.mock_crud_creds.get.assert_called_once_with(
+            owner="alice", _id="cred1", fields=[]
+        )
+
+    async def test_search_credentials_other_user_requires_perm(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_authorize.get_user = AsyncMock()
+        self.mock_crud_creds.search = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.search(
+            request=mock_request,
+            user_id="alice",
+            fields=set(),
+            sort="id",
+            sort_order="ascending",
+            page=0,
+            limit=10,
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREDENTIALS_GET
+        )
+        self.mock_authorize.get_user.assert_not_called()
+        _, kwargs = self.mock_crud_creds.search.call_args
+        self.assertEqual(kwargs["owner"], "alice")
+
+    async def test_update_credential_other_user_requires_perm(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_authorize.get_user = AsyncMock()
+        self.mock_crud_creds.update = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.update(
+            request=mock_request,
+            user_id="alice",
+            credential_id="cred1",
+            data=CredentialPut(description="new"),
+            fields=set(),
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_USERS_CREDENTIALS_UPDATE
+        )
+        self.mock_authorize.get_user.assert_not_called()
+        self.mock_crud_creds.update.assert_called_once()
+        _, kwargs = self.mock_crud_creds.update.call_args
+        self.assertEqual(kwargs["owner"], "alice")
+        self.assertEqual(kwargs["_id"], "cred1")

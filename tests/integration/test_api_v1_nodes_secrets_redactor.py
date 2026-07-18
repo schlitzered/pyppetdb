@@ -30,8 +30,12 @@ class ApiV1NodesSecretsRedactorIntegrationTests(IntegrationTestBase):
             json={"value": secret_value},
         )
         self.assertEqual(resp.status_code, 200)
-        secret_id = resp.json()["id"]
-        # Value is not returned in GET/POST for security
+        create_body = resp.json()
+        secret_id = create_body["id"]
+        # the plaintext secret (and its encrypted form) must never be echoed back
+        self.assertNotIn("value", create_body)
+        self.assertNotIn("value_encrypted", create_body)
+        self.assertNotIn(secret_value, resp.text)
 
         # 2. Search
         resp = self.client.get(
@@ -41,6 +45,11 @@ class ApiV1NodesSecretsRedactorIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["meta"]["result_size"], 1)
+        # no secret material leaks through the search response either
+        search_entry = resp.json()["result"][0]
+        self.assertNotIn("value", search_entry)
+        self.assertNotIn("value_encrypted", search_entry)
+        self.assertNotIn(secret_value, resp.text)
 
         # 3. Delete
         resp = self.client.delete(

@@ -510,3 +510,12 @@ class TestControllerPuppetV3Unit(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as cm:
             await controller.head_without_path(mock_request, "md5sum")
         self.assertEqual(cm.exception.status_code, 404)
+
+    async def test_file_bucket_file_head_with_path(self):
+        controller = ControllerPuppetV3FileBucketFile(
+            self.log, self.mock_config, self.mock_http, self.mock_auth_cert
+        )
+        mock_request = MagicMock()
+        with self.assertRaises(HTTPException) as cm:
+            await controller.head_with_path(mock_request, "md5sum", "/path")
+        self.assertEqual(cm.exception.status_code, 404)

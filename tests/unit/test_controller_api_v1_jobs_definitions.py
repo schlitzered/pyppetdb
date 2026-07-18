@@ -26,6 +26,7 @@ from pyppetdb.authorize import (
     PERM_JOBS_GET,
     PERM_JOBS_DEFINITION_CREATE,
     PERM_JOBS_DEFINITION_UPDATE,
+    PERM_JOBS_DEFINITION_DELETE,
 )
 
 
@@ -178,3 +179,23 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, permission=PERM_JOBS_GET
         )
         self.mock_crud.get.assert_called_once_with(_id="def1", fields=[])
+
+    async def test_delete_drops_dynamic_job_permissions(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.delete = AsyncMock(return_value={"deleted": "def1"})
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
+
+        result = await self.controller.delete(
+            request=mock_request, definition_id="def1"
+        )
+
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_JOBS_DEFINITION_DELETE
+        )
+        self.mock_crud.delete.assert_called_once_with(_id="def1")
+        # the definition's dynamic "JOB CREATE" permission must be revoked from teams
+        self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with(
+            pattern="^JOBS:JOB:def1:CREATE$"
+        )
+        self.assertEqual(result, {"deleted": "def1"})

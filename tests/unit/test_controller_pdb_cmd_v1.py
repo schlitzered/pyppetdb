@@ -223,3 +223,38 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             placement={"provider": "gcp"},
         )
         # Should not raise
+
+    async def test_proxy_to_puppetdb_strips_hop_headers(self):
+        self.mock_config.app.puppetdb.serverurl = "http://puppetdb:8081"
+        mock_http = MagicMock()
+        mock_http.post = AsyncMock()
+        self.controller._http = mock_http
+
+        request = MagicMock()
+        request.headers = {
+            "content-encoding": "gzip",
+            "x-uncompressed-length": "100",
+            "host": "pyppetdb",
+            "content-length": "5",
+            "transfer-encoding": "chunked",
+            "x-authentication": "keep-me",
+        }
+        request.query_params = {"checksum": "abc"}
+
+        await self.controller._proxy_to_puppetdb(request, b"payload")
+
+        mock_http.post.assert_called_once()
+        _, kwargs = mock_http.post.call_args
+        self.assertEqual(kwargs["url"], "http://puppetdb:8081/pdb/cmd/v1")
+        self.assertEqual(kwargs["content"], b"payload")
+        sent_headers = kwargs["headers"]
+        for stripped in (
+            "content-encoding",
+            "x-uncompressed-length",
+            "host",
+            "content-length",
+            "transfer-encoding",
+        ):
+            self.assertNotIn(stripped, sent_headers)
+        # non hop-by-hop headers are forwarded untouched
+        self.assertEqual(sent_headers["x-authentication"], "keep-me")
