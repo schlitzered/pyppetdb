@@ -293,3 +293,81 @@ class TestControllerApiV1JobsUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, permission=PERM_JOBS_GET
         )
         self.mock_crud_jobs.get.assert_called_once_with(_id="job1", fields=[])
+
+
+class TestJobsValidateParams(unittest.TestCase):
+    """Direct coverage for the _validate_params static method.
+
+    Existing tests only exercised the string/regex and int/max branches; the
+    bool, enum, float and 'unknown parameter' branches were never hit.
+    """
+
+    @staticmethod
+    def _defn(**kwargs):
+        from pyppetdb.model.jobs_definitions import JobParamDefinition
+
+        return JobParamDefinition(**kwargs)
+
+    def _validate(self, values, definitions):
+        ControllerApiV1JobsJobs._validate_params(
+            values=values, definitions=definitions, context="parameter"
+        )
+
+    # ----- bool -----
+    def test_bool_valid(self):
+        self._validate({"flag": True}, {"flag": self._defn(type="bool")})
+
+    def test_bool_invalid(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate({"flag": "yes"}, {"flag": self._defn(type="bool")})
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    # ----- enum -----
+    def test_enum_valid(self):
+        self._validate(
+            {"env": "prod"},
+            {"env": self._defn(type="enum", options=["dev", "prod"])},
+        )
+
+    def test_enum_invalid(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate(
+                {"env": "staging"},
+                {"env": self._defn(type="enum", options=["dev", "prod"])},
+            )
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    # ----- float -----
+    def test_float_accepts_float_and_int(self):
+        self._validate({"x": 1.5}, {"x": self._defn(type="float")})
+        self._validate({"x": 2}, {"x": self._defn(type="float")})
+
+    def test_float_rejects_non_number(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate({"x": "nope"}, {"x": self._defn(type="float")})
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_float_respects_min_max(self):
+        with self.assertRaises(HTTPException):
+            self._validate({"x": 0.5}, {"x": self._defn(type="float", min=1.0)})
+        with self.assertRaises(HTTPException):
+            self._validate({"x": 9.0}, {"x": self._defn(type="float", max=5.0)})
+
+    # ----- int bounds (min branch, previously only max tested) -----
+    def test_int_below_min(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate({"n": 1}, {"n": self._defn(type="int", min=5)})
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    # ----- unknown / missing -----
+    def test_unknown_parameter_rejected(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate({"surprise": "x"}, {})
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Unknown", ctx.exception.detail)
+
+    def test_missing_parameter_rejected(self):
+        with self.assertRaises(HTTPException) as ctx:
+            self._validate({}, {"required": self._defn(type="string")})
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Missing", ctx.exception.detail)

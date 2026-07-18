@@ -107,3 +107,14 @@ class TestControllerPdbQueryV4ResourcesUnit(unittest.IsolatedAsyncioTestCase):
 
         result = await self.controller.get(mock_request)
         self.assertEqual(result, [])
+
+    async def test_get_internal_malformed_query_returns_empty(self):
+        # invalid JSON in the query param must be swallowed and yield []
+        self.mock_config.app.puppetdb.resourceQueryInternal = True
+        mock_request = MagicMock()
+        mock_request.query_params = {"query": "{not valid json"}
+
+        result = await self.controller.get(mock_request)
+
+        self.assertEqual(result, [])
+        self.mock_crud_nodes.query_exported_resources.assert_not_called()

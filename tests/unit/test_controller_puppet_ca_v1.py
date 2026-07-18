@@ -351,3 +351,29 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as cm:
             await self.controller.get_crl()
         self.assertEqual(cm.exception.status_code, 500)
+
+    async def test_delete_certificate_success(self):
+        self.mock_ca_service.delete_certificate = AsyncMock()
+        mock_request = MagicMock()
+
+        result = await self.controller.delete_certificate(
+            nodename="node1", request=mock_request
+        )
+
+        self.mock_auth_cert.require_cn_trusted.assert_called_once_with(mock_request)
+        self.mock_ca_service.delete_certificate.assert_called_once_with(
+            "puppet-ca", "node1"
+        )
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 204)
+
+    async def test_delete_certificate_failure_returns_500(self):
+        self.mock_ca_service.delete_certificate = AsyncMock(
+            side_effect=Exception("boom")
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            await self.controller.delete_certificate(
+                nodename="node1", request=MagicMock()
+            )
+        self.assertEqual(ctx.exception.status_code, 500)

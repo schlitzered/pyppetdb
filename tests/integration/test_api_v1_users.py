@@ -87,3 +87,21 @@ class ApiV1UsersIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["name"], "Test User Updated")
+
+    def test_users_put_self_cannot_change_admin_flag(self):
+        # sanity: the authenticated user starts as an admin
+        before = self._db["users"].find_one({"id": "admin"})
+        self.assertTrue(before["admin"])
+
+        # a _self update must ignore the admin field entirely (privilege guard)
+        resp = self.client.put(
+            "/api/v1/users/_self",
+            headers=self._auth_headers(),
+            json={"admin": False, "name": "still admin"},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        after = self._db["users"].find_one({"id": "admin"})
+        # admin flag is untouched despite the client asking to drop it
+        self.assertTrue(after["admin"])
+        self.assertEqual(after["name"], "still admin")

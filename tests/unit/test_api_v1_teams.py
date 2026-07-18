@@ -334,3 +334,59 @@ class TestApiV1TeamsUnit(unittest.IsolatedAsyncioTestCase):
                 [PERM_CA_AUTHORITIES_CERTS_UPDATE.format(ca_id="auth1")]
             )
         self.assertIn("CA Authority 'auth1' does not exist", str(cm.exception.detail))
+
+    async def test_validate_permissions_job_definition_not_found(self):
+        self.mock_crud_jobs_definitions.resource_exists = AsyncMock(
+            side_effect=ResourceNotFound()
+        )
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.controller._validate_permissions(["JOBS:JOB:ghost:CREATE"])
+        self.assertIn("Job Definition 'ghost'", ctx.exception.detail)
+
+    async def test_validate_permissions_hiera_key_not_found(self):
+        self.mock_crud_hiera_keys.resource_exists = AsyncMock(
+            side_effect=ResourceNotFound()
+        )
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.controller._validate_permissions(
+                ["HIERA:LEVEL_DATA:ghostkey:UPDATE"]
+            )
+        self.assertIn("Hiera Key 'ghostkey'", ctx.exception.detail)
+
+    async def test_update_uses_existing_ldap_group(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        current_group = MagicMock()
+        current_group.ldap_group = "engineers"
+        current_group.permissions = None
+        self.mock_crud_teams.get = AsyncMock(return_value=current_group)
+        self.mock_crud_ldap.get_logins_from_group = AsyncMock(
+            return_value=["u1", "u2"]
+        )
+        self.mock_crud_teams.update = AsyncMock()
+
+        # payload carries no ldap_group -> the team's existing ldap_group is used
+        data = TeamPut(permissions=None)
+        await self.controller.update(
+            team_id="team1", request=MagicMock(), data=data, fields=set()
+        )
+
+        self.mock_crud_ldap.get_logins_from_group.assert_called_once_with(
+            group="engineers"
+        )
+        self.assertEqual(data.users, ["u1", "u2"])
+        self.mock_crud_teams.update.assert_called_once()
+
+    async def test_update_rejects_invalid_permissions(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        current_group = MagicMock()
+        current_group.ldap_group = ""
+        self.mock_crud_teams.get = AsyncMock(return_value=current_group)
+        self.mock_crud_teams.update = AsyncMock()
+
+        data = TeamPut(permissions=["TOTALLY:BOGUS:PERMISSION"])
+        with self.assertRaises(QueryParamValidationError):
+            await self.controller.update(
+                team_id="team1", request=MagicMock(), data=data, fields=set()
+            )
+        # invalid permissions must block the update entirely
+        self.mock_crud_teams.update.assert_not_called()
