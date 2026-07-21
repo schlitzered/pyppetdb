@@ -181,6 +181,9 @@ class CrudNodesSecretsRedactorCache:
                 f"Unexpected error in nodes_secrets_redactor change stream: {err}"
             )
 
+        await asyncio.sleep(5)
+        asyncio.create_task(self._watch_changes())
+
     async def _handle_change(self, change):
         operation = change["operationType"]
         doc_id = change["documentKey"]["_id"]

@@ -202,6 +202,7 @@ class ControllerApiV1Users:
             user_id = await self.authorize.get_user(request=request)
             user_id = user_id.id
             data.admin = None
+            data.backend = None
         else:
             await self.authorize.require_perm(
                 request=request, permission=PERM_USERS_UPDATE

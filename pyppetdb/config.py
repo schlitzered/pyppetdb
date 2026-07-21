@@ -115,7 +115,7 @@ class ConfigApp(BaseModel):
     puppetdb: ConfigAppPuppetdb = ConfigAppPuppetdb()
     loglevel: log_levels = "INFO"
     logstruct: bool = False
-    secretkey: str = "secret"
+    secretkey: str
     wssalt: str = "ws-auth"
 
 
@@ -178,7 +178,7 @@ class ConfigJobs(BaseModel):
 
 
 class Config(BaseSettings):
-    app: ConfigApp = ConfigApp()
+    app: ConfigApp
     ca: ConfigCA = ConfigCA()
     jobs: ConfigJobs = ConfigJobs()
     ldap: ConfigLdap = ConfigLdap()

@@ -77,6 +77,9 @@ class CrudNodesGroupsCache:
         except Exception as err:
             self.log.error(f"Unexpected error in nodes_groups change stream: {err}")
 
+        await asyncio.sleep(5)
+        asyncio.create_task(self._watch_changes())
+
     async def _handle_change(self, change):
         operation = change["operationType"]
         doc_id = change["documentKey"]["_id"]

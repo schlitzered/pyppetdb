@@ -124,6 +124,79 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         # Should not duplicate if it was already there
         self.assertEqual(len(dns_names), 2)
 
+    def _sign(self, csr_pem, **kwargs):
+        return CAUtils.sign_csr(
+            csr=csr_pem,
+            ca_cert=self.ca_cert_pem,
+            ca_key=self.ca_key_pem,
+            key_usages={
+                "digital_signature": True,
+                "content_commitment": False,
+                "key_encipherment": True,
+                "data_encipherment": False,
+                "key_agreement": False,
+                "key_cert_sign": False,
+                "crl_sign": False,
+                "encipher_only": False,
+                "decipher_only": False,
+            },
+            extended_key_usages=[
+                "SERVER_AUTH",
+                "CLIENT_AUTH",
+            ],
+            **kwargs,
+        )
+
+    def _dns_names(self, signed_cert_pem):
+        cert = x509.load_pem_x509_certificate(signed_cert_pem)
+        san = cert.extensions.get_extension_for_class(
+            x509.SubjectAlternativeName
+        ).value
+        return san.get_values_for_type(x509.DNSName)
+
+    def test_sign_csr_ignores_csr_sans_when_disabled(self):
+        cn = "test-node"
+        alt_names = ["alt1.example.com", "alt2.example.com"]
+        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+
+        signed_cert_pem = self._sign(csr_pem, honor_csr_sans=False)
+
+        dns_names = self._dns_names(signed_cert_pem)
+        self.assertIn(cn, dns_names)
+        self.assertNotIn("alt1.example.com", dns_names)
+        self.assertNotIn("alt2.example.com", dns_names)
+        self.assertEqual(len(dns_names), 1)
+
+    def test_sign_csr_ignores_csr_sans_but_keeps_injected(self):
+        cn = "test-node"
+        alt_names = ["attacker.example.com"]
+        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+
+        signed_cert_pem = self._sign(
+            csr_pem,
+            honor_csr_sans=False,
+            injected_sans=["trusted.example.com"],
+        )
+
+        dns_names = self._dns_names(signed_cert_pem)
+        self.assertIn(cn, dns_names)
+        self.assertIn("trusted.example.com", dns_names)
+        self.assertNotIn("attacker.example.com", dns_names)
+        self.assertEqual(len(dns_names), 2)
+
+    def test_sign_csr_honors_csr_sans_when_enabled(self):
+        cn = "test-node"
+        alt_names = ["alt1.example.com", "alt2.example.com"]
+        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+
+        signed_cert_pem = self._sign(csr_pem, honor_csr_sans=True)
+
+        dns_names = self._dns_names(signed_cert_pem)
+        self.assertIn(cn, dns_names)
+        self.assertIn("alt1.example.com", dns_names)
+        self.assertIn("alt2.example.com", dns_names)
+        self.assertEqual(len(dns_names), 3)
+
     def test_get_cert_info_sans(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]

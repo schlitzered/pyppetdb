@@ -115,7 +115,6 @@ class CAAuthorityGet(BaseModel):
     revocation_date: Optional[datetime] = None
     crl: Optional[CACRL] = None
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
-    private_key_encrypted: Optional[str] = None
 
 
 class CAAuthorityGetMulti(BaseModel):
