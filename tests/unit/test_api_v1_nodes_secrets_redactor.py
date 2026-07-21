@@ -15,6 +15,8 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_CREATE
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_DELETE
 from pyppetdb.controller.api.v1.nodes_secrets_redactor import (
     ControllerApiV1NodesSecretsRedactor,
 )
@@ -41,7 +43,9 @@ class TestApiV1NodesSecretsRedactorUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.create(request=mock_request, payload=payload)
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_SECRETS_REDACTOR_CREATE
+        )
         self.mock_crud.create.assert_called_once_with(payload=payload)
 
     async def test_delete_secret(self):
@@ -51,7 +55,9 @@ class TestApiV1NodesSecretsRedactorUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.delete(request=mock_request, secret_id="sec1")
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_NODES_SECRETS_REDACTOR_DELETE
+        )
         self.mock_crud.delete.assert_called_once_with(_id="sec1")
 
     async def test_search_secrets(self):

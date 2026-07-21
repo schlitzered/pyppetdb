@@ -69,6 +69,14 @@ class TestCrudNodesGroupsUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.search(_id="g1")
         self.crud._search.assert_called_once()
 
+    async def test_search_scopes_by_teams(self):
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
+        await self.crud.search(teams_list=["t1"])
+        query = self.crud._search.call_args[1]["query"]
+        self.assertEqual(query["teams"], {"$in": ["t1"]})
+
     async def test_update(self):
         self.crud._update = AsyncMock(return_value={"id": "g1"})
         payload = NodeGroupUpdateInternal(id="g1", teams=["t1"])

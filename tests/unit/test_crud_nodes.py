@@ -53,6 +53,40 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._resource_exists = AsyncMock(return_value=MagicMock())
         await self.crud.resource_exists(_id="node1", user_node_groups=["g1"])
         self.crud._resource_exists.assert_called_once()
+        query = self.crud._resource_exists.call_args[1]["query"]
+        self.assertEqual(query["id"], "node1")
+        self.assertEqual(query["node_groups"], {"$in": ["g1"]})
+
+    async def test_search_scopes_by_node_groups(self):
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(
+            return_value=[
+                {
+                    "meta_counts": [],
+                    "total_results": [{"count": 0}],
+                    "paginated_results": [],
+                }
+            ]
+        )
+        self.mock_coll.aggregate.return_value = mock_cursor
+
+        await self.crud.search(user_node_groups=["g1"])
+
+        pipeline = self.mock_coll.aggregate.call_args[0][0]
+        scoped = any(
+            "$match" in stage
+            and stage["$match"].get("node_groups") == {"$in": ["g1"]}
+            for stage in pipeline
+        )
+        self.assertTrue(scoped)
+
+    async def test_count_scopes_by_node_groups(self):
+        self.mock_coll.count_documents = AsyncMock(return_value=0)
+
+        await self.crud.count(user_node_groups=["g1"])
+
+        query = self.mock_coll.count_documents.call_args[0][0]
+        self.assertEqual(query["node_groups"], {"$in": ["g1"]})
 
     async def test_search(self):
         # Mock aggregation for status counts and results
