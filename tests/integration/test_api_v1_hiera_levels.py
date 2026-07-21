@@ -294,10 +294,11 @@ class HieraLevelsAuthzIntegrationTests(IntegrationTestBase):
     def test_create_granted(self):
         nu = self._make_non_admin(permissions=[PERM_HIERA_LEVELS_CREATE])
         level_id = f"lvl-{uuid.uuid4().hex}"
+        priority = 1_000_000 + (uuid.uuid4().int % 1_000_000)
         resp = self.client.post(
             f"/api/v1/hiera/levels/{level_id}",
             headers=nu.headers,
-            json={"priority": 100},
+            json={"priority": priority},
         )
         self.assertEqual(resp.status_code, 201)
         self.addCleanup(self._db["hiera_levels"].delete_many, {"id": level_id})
