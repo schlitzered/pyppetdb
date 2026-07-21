@@ -27,8 +27,6 @@ from tests.integration._dummy_http import CapturingServer
 
 
 class CAHttpValidationE2ETests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def _put_space_config(self, config):
         resp = self.client.put(

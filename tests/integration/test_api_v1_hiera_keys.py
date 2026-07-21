@@ -21,8 +21,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class TestApiV1HieraKeys(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def setUp(self):
         super().setUp()

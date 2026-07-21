@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import json
-import time
+import uuid
 from tests.integration.base import IntegrationTestBase
 
 
@@ -25,7 +25,8 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         settings.app.puppetdb.serverurl = None
 
     def test_replace_facts(self):
-        certname = "test-node-facts"
+        certname = f"node-facts-{uuid.uuid4().hex}"
+        self.addCleanup(self._db["nodes"].delete_many, {"id": certname})
         facts_data = {
             "certname": certname,
             "environment": "production",
@@ -41,18 +42,18 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        # Give some time for background task to finish
-        time.sleep(1)
-
-        # Verify in MongoDB
-        node = self._db["nodes"].find_one({"id": certname})
-        self.assertIsNotNone(node)
-        self.assertEqual(node["facts"]["os"], "Linux")
+        node = self._wait_until(
+            lambda: self._db["nodes"].find_one(
+                {"id": certname, "facts.os": "Linux"}
+            )
+        )
         self.assertEqual(node["environment"], "production")
 
     def test_replace_catalog(self):
-        certname = "test-node-catalog"
-        catalog_uuid = "uuid-1234"
+        certname = f"node-catalog-{uuid.uuid4().hex}"
+        catalog_uuid = f"uuid-{uuid.uuid4().hex}"
+        self.addCleanup(self._db["nodes"].delete_many, {"id": certname})
+        self.addCleanup(self._db["nodes_catalogs"].delete_many, {"id": catalog_uuid})
         catalog_data = {
             "certname": certname,
             "environment": "production",
@@ -82,26 +83,28 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        time.sleep(1)
-
-        # Verify in nodes collection
-        node = self._db["nodes"].find_one({"id": certname})
-        self.assertIsNotNone(node)
-        self.assertEqual(node["catalog"]["catalog_uuid"], catalog_uuid)
+        node = self._wait_until(
+            lambda: self._db["nodes"].find_one(
+                {"id": certname, "catalog.catalog_uuid": catalog_uuid}
+            )
+        )
         self.assertEqual(node["catalog"]["num_resources"], 2)
 
-        # Verify in nodes_catalogs collection (history)
-        catalog_doc = self._db["nodes_catalogs"].find_one({"id": catalog_uuid})
-        self.assertIsNotNone(catalog_doc)
+        catalog_doc = self._wait_until(
+            lambda: self._db["nodes_catalogs"].find_one({"id": catalog_uuid})
+        )
         self.assertEqual(catalog_doc["node_id"], certname)
 
     def test_store_report(self):
-        certname = "test-node-report"
-        catalog_uuid = "uuid-1234"
+        certname = f"node-report-{uuid.uuid4().hex}"
+        self.addCleanup(self._db["nodes"].delete_many, {"id": certname})
+        self.addCleanup(
+            self._db["nodes_reports"].delete_many, {"node_id": certname}
+        )
         report_data = {
             "certname": certname,
             "environment": "production",
-            "catalog_uuid": catalog_uuid,
+            "catalog_uuid": f"uuid-{uuid.uuid4().hex}",
             "status": "changed",
             "noop": False,
             "noop_pending": False,
@@ -118,14 +121,14 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        time.sleep(1)
-
-        # Verify in nodes collection
-        node = self._db["nodes"].find_one({"id": certname})
-        self.assertIsNotNone(node)
+        node = self._wait_until(
+            lambda: self._db["nodes"].find_one(
+                {"id": certname, "report.status": "changed"}
+            )
+        )
         self.assertEqual(node["report"]["status"], "changed")
 
-        # Verify in nodes_reports collection
-        report_doc = self._db["nodes_reports"].find_one({"node_id": certname})
-        self.assertIsNotNone(report_doc)
+        report_doc = self._wait_until(
+            lambda: self._db["nodes_reports"].find_one({"node_id": certname})
+        )
         self.assertEqual(report_doc["report"]["status"], "changed")

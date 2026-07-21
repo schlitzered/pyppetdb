@@ -19,8 +19,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def _http_check_config(self, secret_id):
         return {

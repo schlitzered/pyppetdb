@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import atexit
+import time
 import unittest
 import uuid
 from datetime import datetime, timezone
@@ -32,7 +33,16 @@ class IntegrationTestBase(unittest.TestCase):
 
         settings.mongodb.database = "pyppetdb_test"
 
-        cls._mongo_client = MongoClient(settings.mongodb.url)
+        cls._mongo_client = MongoClient(
+            settings.mongodb.url, serverSelectionTimeoutMS=3000
+        )
+        try:
+            cls._mongo_client.admin.command("ping")
+        except Exception as err:
+            cls._mongo_client.close()
+            raise unittest.SkipTest(
+                f"MongoDB not reachable at {settings.mongodb.url}: {err}"
+            )
         cls._db = cls._mongo_client[settings.mongodb.database]
 
         cls._db["users"].delete_many({})
@@ -81,11 +91,18 @@ class IntegrationTestBase(unittest.TestCase):
         )
 
         from pyppetdb.authorize import AuthorizeClientCert
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, patch
 
-        AuthorizeClientCert.require_cn = AsyncMock(return_value="test-node")
-        AuthorizeClientCert.require_cn_match = AsyncMock(return_value="test-node")
-        AuthorizeClientCert.require_cn_trusted = AsyncMock(return_value="test-admin")
+        for name, cn in (
+            ("require_cn", "test-node"),
+            ("require_cn_match", "test-node"),
+            ("require_cn_trusted", "test-admin"),
+        ):
+            patcher = patch.object(
+                AuthorizeClientCert, name, AsyncMock(return_value=cn)
+            )
+            patcher.start()
+            cls.addClassCleanup(patcher.stop)
 
         cls._client_ctx = TestClient(app)
         cls.client = cls._client_ctx.__enter__()
@@ -108,6 +125,18 @@ class IntegrationTestBase(unittest.TestCase):
 
     def setUp(self):
         self.client.cookies.clear()
+
+    def _auth_headers(self):
+        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
+
+    def _wait_until(self, predicate, timeout=10.0, interval=0.1):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = predicate()
+            if result:
+                return result
+            time.sleep(interval)
+        self.fail(f"condition not met within {timeout}s")
 
     def _make_non_admin(self, permissions=None):
         suffix = uuid.uuid4().hex[:8]

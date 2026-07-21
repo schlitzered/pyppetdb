@@ -26,8 +26,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class CACryptoVerificationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def _csr_pem(self, cn):
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

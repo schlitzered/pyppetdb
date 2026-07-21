@@ -19,8 +19,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1NodesGroupsIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_nodes_groups_crud_flow(self):
         # 0. Setup: Need a team and a node

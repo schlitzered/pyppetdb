@@ -20,8 +20,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1UsersIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_users_crud_flow(self):
         user_id = f"user-{uuid.uuid4().hex}"
