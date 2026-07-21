@@ -18,8 +18,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1NodesIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_nodes_crud_flow(self):
         node_id = f"node-{uuid.uuid4().hex}"
@@ -109,19 +107,22 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.json()["id"], node_id)
 
     def test_nodes_distinct_facts(self):
-        # Setup multiple nodes with some facts
+        pfx = uuid.uuid4().hex[:8]
+        fact = f"env{pfx}"
+        ids = [f"node-{pfx}-{i}" for i in range(3)]
         self._db["nodes"].insert_many(
             [
-                {"id": "n1", "facts": {"env": "prod"}, "node_groups": []},
-                {"id": "n2", "facts": {"env": "prod"}, "node_groups": []},
-                {"id": "n3", "facts": {"env": "dev"}, "node_groups": []},
+                {"id": ids[0], "facts": {fact: "prod"}, "node_groups": []},
+                {"id": ids[1], "facts": {fact: "prod"}, "node_groups": []},
+                {"id": ids[2], "facts": {fact: "dev"}, "node_groups": []},
             ]
         )
+        self.addCleanup(self._db["nodes"].delete_many, {"id": {"$in": ids}})
 
         resp = self.client.get(
             "/api/v1/nodes/_distinct_fact_values",
             headers=self._auth_headers(),
-            params={"fact_id": "env"},
+            params={"fact_id": fact},
         )
         self.assertEqual(resp.status_code, 200)
         results = {item["value"]: item["count"] for item in resp.json()["result"]}

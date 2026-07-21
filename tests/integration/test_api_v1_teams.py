@@ -19,8 +19,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1TeamsIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_teams_crud_flow(self):
         team_id = f"team-{uuid.uuid4().hex}"

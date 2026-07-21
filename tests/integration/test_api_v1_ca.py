@@ -21,8 +21,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1CAIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_ca_lifecycle(self):
         ca_id = f"ca-{uuid.uuid4().hex}"

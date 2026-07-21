@@ -23,8 +23,6 @@ from tests.integration.base import IntegrationTestBase
 class TestApiV1HieraKeyModelsStatic(IntegrationTestBase):
     """Tests for static (built-in) key models"""
 
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_search_static_models(self):
         """Test searching static key models"""
@@ -114,8 +112,6 @@ class TestApiV1HieraKeyModelsStatic(IntegrationTestBase):
 class TestApiV1HieraKeyModelsDynamic(IntegrationTestBase):
     """Tests for dynamic (user-defined) key models"""
 
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def setUp(self):
         super().setUp()

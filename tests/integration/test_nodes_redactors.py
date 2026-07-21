@@ -16,8 +16,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class TestNodesRedactors(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def _setup_node_and_secret(self, node_id, secret_value):
         # 0. Create a node directly in DB

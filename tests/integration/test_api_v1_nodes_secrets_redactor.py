@@ -19,8 +19,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1NodesSecretsRedactorIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_secrets_redactor_crud_flow(self):
         secret_value = f"secret-{uuid.uuid4().hex}"

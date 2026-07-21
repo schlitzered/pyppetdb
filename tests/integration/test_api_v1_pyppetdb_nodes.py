@@ -21,8 +21,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1PyppetDBNodesIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def _insert_node(self):
         node_id = f"pyppetdb-{uuid.uuid4().hex}:8000"

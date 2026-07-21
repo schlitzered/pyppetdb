@@ -17,8 +17,6 @@ from tests.integration.base import IntegrationTestBase
 
 
 class ApiV1UsersCredentialsIntegrationTests(IntegrationTestBase):
-    def _auth_headers(self):
-        return {"x-secret-id": "test-cred", "x-secret": "test-secret"}
 
     def test_users_credentials_crud_flow(self):
         resp = self.client.post(
