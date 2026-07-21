@@ -217,6 +217,58 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             )
         self.assertIn("External script validation failed (exit 1)", str(cm.exception))
 
+    @patch("httpx.AsyncClient.request")
+    async def test_validate_san_http_runs_without_dns_sans(self, mock_request):
+        mock_request.return_value = MagicMock(is_error=True, status_code=403)
+        csr_pem, csr_obj = self._generate_csr("test.com")
+        ca_config = CAValidationConfig(
+            san_validation=CASANValidation(
+                http_checks=[CAHTTPValidation(url="http://validate.me")]
+            )
+        )
+        with self.assertRaises(QueryParamValidationError) as cm:
+            await self.service._validate_csr(
+                csr=csr_obj,
+                cn="test.com",
+                ca_config=ca_config,
+                space_config=CAValidationConfig(),
+                ca_id="ca1",
+                space_id="space1",
+            )
+        self.assertIn(
+            "External HTTP validation failed with status 403", str(cm.exception)
+        )
+        mock_request.assert_called_once()
+
+    @patch("asyncio.create_subprocess_exec")
+    async def test_validate_san_script_runs_without_dns_sans(self, mock_exec):
+        mock_proc = MagicMock()
+        mock_proc.communicate = AsyncMock(return_value=(b"output", b"error"))
+        mock_proc.returncode = 1
+        mock_exec.return_value = mock_proc
+
+        csr_pem, csr_obj = self._generate_csr("test.com")
+        from pyppetdb.model.ca_validation import CAScriptValidation
+
+        ca_config = CAValidationConfig(
+            san_validation=CASANValidation(
+                script_checks=[
+                    CAScriptValidation(script_path="/bin/false", timeout_seconds=1)
+                ]
+            )
+        )
+        with self.assertRaises(QueryParamValidationError) as cm:
+            await self.service._validate_csr(
+                csr=csr_obj,
+                cn="test.com",
+                ca_config=ca_config,
+                space_config=CAValidationConfig(),
+                ca_id="ca1",
+                space_id="space1",
+            )
+        self.assertIn("External script validation failed (exit 1)", str(cm.exception))
+        mock_exec.assert_called_once()
+
     async def test_validate_san_multiple_configs(self):
         csr_pem, csr_obj = self._generate_csr("test.com", san=["a.example.com"])
 

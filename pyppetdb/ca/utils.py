@@ -467,12 +467,15 @@ class CAUtils:
             pass
 
         if san_extension and honor_csr_sans:
-            san_values = list(
-                san_extension.value,
-            )
             dns_names = san_extension.value.get_values_for_type(
                 type=x509.DNSName,
             )
+            san_values = [
+                x509.DNSName(
+                    value=name,
+                )
+                for name in dns_names
+            ]
             if cn not in dns_names:
                 san_values.append(
                     x509.DNSName(
