@@ -34,7 +34,9 @@ from pyppetdb.model.ca_authorities import CACRL
 from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import DataDelete
-from pyppetdb.ca.validation_protector import CAValidationProtector
+from pyppetdb.ca.config_validation import validate_secret_references
+from pyppetdb.ca.secret_resolver import extract_references
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.model.ca_validation import CAValidationConfig
 
 
@@ -48,7 +50,6 @@ class CrudCAAuthoritiesCache:
         self._coll = coll
         self._log = log
         self._protector = protector
-        self._validation_protector = CAValidationProtector(protector)
         self._cache = {}
         self._key_cache = {}
         self._doc_to_id = {}
@@ -79,10 +80,6 @@ class CrudCAAuthoritiesCache:
 
     def _process_doc(self, doc: dict) -> CAAuthorityGet:
         obj = CAAuthorityGet(**doc)
-        if obj.validation_config:
-            obj.validation_config = self._validation_protector.decrypt_config(
-                obj.validation_config
-            )
         if doc.get("private_key_encrypted"):
             try:
                 decrypted = self._protector.decrypt_string(doc["private_key_encrypted"])
@@ -141,9 +138,11 @@ class CrudCAAuthorities(CrudMongo):
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
+        crud_secrets: CrudCASecrets,
     ):
         super().__init__(config, log, coll, schema_model=CAAuthorityGet)
         self._protector = protector
+        self._crud_secrets = crud_secrets
         self._cache = CrudCAAuthoritiesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
             pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
@@ -180,40 +179,22 @@ class CrudCAAuthorities(CrudMongo):
     def protector(self):
         return self._protector
 
-    def _has_masks(self, config: CAValidationConfig) -> bool:
-        if (
-            not config
-            or not config.san_validation
-            or not config.san_validation.http_checks
-        ):
-            return False
-        for check in config.san_validation.http_checks:
-            if check.username == "*****" or check.password == "*****":
-                return True
-            if check.headers:
-                if any(h.value == "*****" for h in check.headers):
-                    return True
-        return False
-
-    async def _encrypt_validation_config(
-        self, payload: dict, ca_id: Optional[str] = None
-    ):
-        if "validation_config" in payload and payload["validation_config"]:
-            protector = CAValidationProtector(self._protector)
+    async def _validate_validation_config(self, payload: dict) -> None:
+        if payload.get("validation_config"):
             config = CAValidationConfig(**payload["validation_config"])
+            await validate_secret_references(config, self._crud_secrets)
 
-            if self._has_masks(config) and ca_id:
-                try:
-                    current = await self.get(ca_id, fields=["validation_config"])
-                    if current.validation_config:
-                        config = protector.merge_secrets(
-                            config, current.validation_config
-                        )
-                except Exception:
-                    pass
-
-            encrypted = protector.encrypt_config(config)
-            payload["validation_config"] = encrypted.model_dump()
+    async def find_referencing_ids(self, secret_id: str) -> list[str]:
+        referencing: list[str] = []
+        cursor = self.coll.find({}, {"id": 1, "validation_config": 1})
+        async for doc in cursor:
+            raw = doc.get("validation_config")
+            if not raw:
+                continue
+            config = CAValidationConfig(**raw)
+            if secret_id in extract_references(config):
+                referencing.append(doc["id"])
+        return referencing
 
     async def _create_index(self) -> None:
         await super()._create_index()
@@ -241,7 +222,7 @@ class CrudCAAuthorities(CrudMongo):
     ) -> CAAuthorityGet:
         data = payload.model_dump()
         data["id"] = _id
-        await self._encrypt_validation_config(data, ca_id=_id)
+        await self._validate_validation_config(data)
         result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
@@ -249,7 +230,7 @@ class CrudCAAuthorities(CrudMongo):
         self, _id: str, payload: CAAuthorityPutInternal, fields: list
     ) -> CAAuthorityGet:
         data = payload.model_dump(exclude_unset=True)
-        await self._encrypt_validation_config(data, ca_id=_id)
+        await self._validate_validation_config(data)
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CAAuthorityGet(**result)
 

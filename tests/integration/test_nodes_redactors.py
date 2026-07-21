@@ -36,7 +36,7 @@ class TestNodesRedactors(IntegrationTestBase):
             json={"value": secret_value},
             headers=self._auth_headers(),
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)
 
     def test_report_redaction(self):
         node_id = "test-node-report-redactor"

@@ -21,8 +21,10 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from motor.motor_asyncio import AsyncIOMotorClientSession
 import pymongo
 
-from pyppetdb.ca.validation_protector import CAValidationProtector
+from pyppetdb.ca.config_validation import validate_secret_references
+from pyppetdb.ca.secret_resolver import extract_references
 from pyppetdb.config import Config
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.errors import QueryParamValidationError
@@ -44,7 +46,6 @@ class CrudCASpacesCache:
         self._coll = coll
         self._log = log
         self._protector = protector
-        self._validation_protector = CAValidationProtector(protector)
         self._cache = {}
         self._doc_to_id = {}
         self._initialized = False
@@ -69,12 +70,7 @@ class CrudCASpacesCache:
         self._initialized = True
 
     def _process_doc(self, doc: dict) -> CASpaceGet:
-        obj = CASpaceGet(**doc)
-        if obj.validation_config:
-            obj.validation_config = self._validation_protector.decrypt_config(
-                obj.validation_config
-            )
-        return obj
+        return CASpaceGet(**doc)
 
     async def _load_initial_data(self):
         try:
@@ -120,9 +116,11 @@ class CrudCASpaces(CrudMongo):
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
+        crud_secrets: CrudCASecrets,
     ):
         super().__init__(config, log, coll, schema_model=CASpacePost)
         self._protector = protector
+        self._crud_secrets = crud_secrets
         self._cache = CrudCASpacesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
             pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
@@ -136,40 +134,22 @@ class CrudCASpaces(CrudMongo):
     def protector(self):
         return self._protector
 
-    def _has_masks(self, config: CAValidationConfig) -> bool:
-        if (
-            not config
-            or not config.san_validation
-            or not config.san_validation.http_checks
-        ):
-            return False
-        for check in config.san_validation.http_checks:
-            if check.username == "*****" or check.password == "*****":
-                return True
-            if check.headers:
-                if any(h.value == "*****" for h in check.headers):
-                    return True
-        return False
-
-    async def _encrypt_validation_config(
-        self, payload: dict, space_id: Optional[str] = None
-    ):
-        if "validation_config" in payload and payload["validation_config"]:
-            protector = CAValidationProtector(self._protector)
+    async def _validate_validation_config(self, payload: dict) -> None:
+        if payload.get("validation_config"):
             config = CAValidationConfig(**payload["validation_config"])
+            await validate_secret_references(config, self._crud_secrets)
 
-            if self._has_masks(config) and space_id:
-                try:
-                    current = await self.get(space_id, fields=["validation_config"])
-                    if current.validation_config:
-                        config = protector.merge_secrets(
-                            config, current.validation_config
-                        )
-                except Exception:
-                    pass
-
-            encrypted = protector.encrypt_config(config)
-            payload["validation_config"] = encrypted.model_dump()
+    async def find_referencing_ids(self, secret_id: str) -> list[str]:
+        referencing: list[str] = []
+        cursor = self.coll.find({}, {"id": 1, "validation_config": 1})
+        async for doc in cursor:
+            raw = doc.get("validation_config")
+            if not raw:
+                continue
+            config = CAValidationConfig(**raw)
+            if secret_id in extract_references(config):
+                referencing.append(doc["id"])
+        return referencing
 
     async def get(
         self,
@@ -206,7 +186,7 @@ class CrudCASpaces(CrudMongo):
     async def create(self, _id: str, payload: CASpacePost, fields: list) -> CASpaceGet:
         data = payload.model_dump()
         data["id"] = _id
-        await self._encrypt_validation_config(data, space_id=_id)
+        await self._validate_validation_config(data)
         result = await self._create(payload=data, fields=fields)
         return CASpaceGet(**result)
 
@@ -214,7 +194,7 @@ class CrudCASpaces(CrudMongo):
         self, _id: str, payload: CASpacePutInternal, fields: list
     ) -> CASpaceGet:
         data = payload.model_dump(exclude_unset=True)
-        await self._encrypt_validation_config(data, space_id=_id)
+        await self._validate_validation_config(data)
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CASpaceGet(**result)
 

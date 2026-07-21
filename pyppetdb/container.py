@@ -40,6 +40,7 @@ from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.credentials import CrudCredentials
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
@@ -240,12 +241,22 @@ class AppContainer:
             )
         )
 
+        self.crud_ca_secrets = self.crud_manager.register(
+            crud=CrudCASecrets(
+                config=config,
+                log=log,
+                coll=mongo_db["ca_secrets"],
+                protector=self.nodes_data_protector,
+            )
+        )
+
         self.crud_ca_authorities = self.crud_manager.register(
             crud=CrudCAAuthorities(
                 config=config,
                 log=log,
                 coll=mongo_db["ca_authorities"],
                 protector=self.nodes_data_protector,
+                crud_secrets=self.crud_ca_secrets,
             )
         )
 
@@ -255,6 +266,7 @@ class AppContainer:
                 log=log,
                 coll=mongo_db["ca_spaces"],
                 protector=self.nodes_data_protector,
+                crud_secrets=self.crud_ca_secrets,
             )
         )
 
@@ -273,6 +285,7 @@ class AppContainer:
             crud_spaces=self.crud_ca_spaces,
             crud_certificates=self.crud_ca_certificates,
             crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
+            crud_secrets=self.crud_ca_secrets,
         )
 
         self.authorize_client_cert_puppet = AuthorizeClientCert(

@@ -21,6 +21,8 @@ import uuid
 import os
 import re
 import json
+import ssl
+import tempfile
 import httpx
 import socket
 from concurrent.futures import ThreadPoolExecutor
@@ -32,12 +34,16 @@ from pyppetdb.config import Config
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.ca.utils import CAUtils
+from pyppetdb.ca.secret_resolver import find_check_references
+from pyppetdb.ca.secret_resolver import resolve_check
 from pyppetdb.errors import (
     ResourceNotFound,
     QueryParamValidationError,
     DuplicateResource,
+    MissingSecretReference,
 )
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
@@ -79,6 +85,7 @@ class CAService:
         crud_spaces: CrudCASpaces,
         crud_certificates: CrudCACertificates,
         crud_pyppetdb_nodes: CrudPyppetDBNodes,
+        crud_secrets: CrudCASecrets,
     ):
         self._log = log
         self._config = config
@@ -86,6 +93,7 @@ class CAService:
         self._crud_spaces = crud_spaces
         self._crud_certificates = crud_certificates
         self._crud_pyppetdb_nodes = crud_pyppetdb_nodes
+        self._crud_secrets = crud_secrets
         self._instance_id = f"{socket.getfqdn()}:{self._config.app.main.port}"
         self._executor = ThreadPoolExecutor(
             max_workers=self._config.ca.concurrentWorkers
@@ -233,6 +241,35 @@ class CAService:
                 config=script_check,
             )
 
+    @staticmethod
+    def _build_tls_verify(config: CAHTTPValidation):
+        client_cert_present = bool(config.client_cert and config.client_key)
+        if not config.ca_cert and not client_cert_present:
+            return config.verify_ssl
+
+        ctx = ssl.create_default_context()
+        if config.ca_cert:
+            ctx.load_verify_locations(cadata=config.ca_cert)
+        if not config.verify_ssl:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        if client_cert_present:
+            cert_fd, cert_path = tempfile.mkstemp(suffix=".pem")
+            key_fd, key_path = tempfile.mkstemp(suffix=".pem")
+            try:
+                with os.fdopen(cert_fd, "wb") as fh:
+                    fh.write(config.client_cert.encode())
+                with os.fdopen(key_fd, "wb") as fh:
+                    fh.write(config.client_key.encode())
+                ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+            finally:
+                for path in (cert_path, key_path):
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+        return ctx
+
     async def _execute_http_validation(
         self,
         cn: str,
@@ -241,6 +278,20 @@ class CAService:
         ca_id: str,
         space_id: str,
     ):
+        refs = find_check_references(config)
+        if refs:
+            secret_map = await self._crud_secrets.get_values(refs)
+            try:
+                config = resolve_check(config, secret_map)
+            except MissingSecretReference as err:
+                self.log.error(
+                    f"HTTP validation for CN '{cn}' references unknown secret "
+                    f"'{err.secret_id}'"
+                )
+                raise QueryParamValidationError(
+                    msg="HTTP validation references an unknown secret"
+                )
+
         body = {"cn": cn, "sans": sans}
         if config.body_template:
             try:
@@ -268,7 +319,7 @@ class CAService:
             )
 
         client_kwargs = {
-            "verify": config.verify_ssl,
+            "verify": self._build_tls_verify(config),
             "timeout": config.timeout_seconds,
         }
 

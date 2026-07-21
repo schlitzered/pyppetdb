@@ -38,6 +38,8 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
         self.crud_pyppetdb_nodes = MagicMock()
+        self.crud_secrets = AsyncMock()
+        self.crud_secrets.get_values = AsyncMock(return_value={})
         self.service = CAService(
             log=self.log,
             config=self.config,
@@ -45,6 +47,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
             crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
+            crud_secrets=self.crud_secrets,
         )
 
     def _generate_csr(self, cn, san=None):
@@ -168,7 +171,7 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
                         username="user1",
                         password="pass1",
                         headers=[
-                            CAHTTPHeader(name="X-Secret", value="secret", secret=True)
+                            CAHTTPHeader(name="X-Secret", value="secret")
                         ],
                     )
                 ]

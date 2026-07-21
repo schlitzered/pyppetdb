@@ -23,7 +23,6 @@ from pydantic import model_validator
 class CAHTTPHeader(BaseModel):
     name: str
     value: str
-    secret: bool = False
 
 
 class CAHTTPValidation(BaseModel):
@@ -47,9 +46,7 @@ class CAHTTPValidation(BaseModel):
             headers = data["headers"]
             if isinstance(headers, dict):
                 # Convert old Dict[str, str] to List[CAHTTPHeader]
-                data["headers"] = [
-                    {"name": k, "value": v, "secret": False} for k, v in headers.items()
-                ]
+                data["headers"] = [{"name": k, "value": v} for k, v in headers.items()]
         return data
 
 
