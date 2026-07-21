@@ -12,62 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Resolution of ``$secrets[<id>]`` references in CA validation configs.
-
-Secrets live in their own ``ca_secrets`` collection and are referenced from a
-CA authority / space ``validation_config`` using a GitHub-Actions-like syntax:
-
-    "Authorization": "Bearer $secrets[GITHUB_TOKEN]"
-
-References may be embedded anywhere inside a string. A literal ``$secrets[...]``
-is written by doubling the leading dollar sign: ``$$secrets[FOO]`` resolves to
-the literal text ``$secrets[FOO]`` and is *not* treated as a reference.
-
-References are allowed in HTTP-check header values, the basic-auth ``password``,
-the ``body_template`` and ``client_key``. They are intentionally *not* allowed
-in ``url`` (URLs can end up in logs) or ``username`` (treated as plain text).
-"""
-
 import re
 from typing import Optional
 
+from pyppetdb.errors import MissingSecretReference
 from pyppetdb.model.ca_validation import CAValidationConfig
 
-# Grammar for a secret id. Kept in sync with CA_SECRET_ID_PATTERN in
-# pyppetdb.model.ca_secrets.
 _SECRET_ID = r"[A-Za-z0-9_-]+"
 
-# Matches both a real reference ("$secrets[ID]") and an escaped literal
-# ("$$secrets[ID]"). Group 1 is the leading dollar run, group 2 the id.
 _REF_RE = re.compile(r"(\$\$?)secrets\[(" + _SECRET_ID + r")\]")
 
 
-class MissingSecretReference(Exception):
-    """Raised when a ``$secrets[<id>]`` reference cannot be resolved."""
-
-    def __init__(self, secret_id: str):
-        self.secret_id = secret_id
-        super().__init__(f"unknown secret reference: {secret_id}")
-
-
 def find_references(text: Optional[str]) -> set[str]:
-    """Return the set of secret ids referenced (non-escaped) in ``text``."""
     refs: set[str] = set()
     if not text:
         return refs
     for match in _REF_RE.finditer(text):
-        if match.group(1) == "$":  # a real reference, not an escaped literal
+        if match.group(1) == "$":
             refs.add(match.group(2))
     return refs
 
 
 def resolve_string(text: Optional[str], secret_map: dict[str, str]) -> Optional[str]:
-    """Substitute every reference in ``text`` with its value from ``secret_map``.
-
-    Escaped literals (``$$secrets[..]``) are unescaped to ``$secrets[..]``.
-    Raises :class:`MissingSecretReference` (fail-closed) if a referenced id is
-    not present in ``secret_map``.
-    """
     if not text:
         return text
 
@@ -83,7 +49,6 @@ def resolve_string(text: Optional[str], secret_map: dict[str, str]) -> Optional[
 
 
 def _check_secret_strings(check) -> list[str]:
-    """The strings of a single HTTP check that may contain secret references."""
     values: list[str] = []
     if check.password:
         values.append(check.password)
@@ -99,7 +64,6 @@ def _check_secret_strings(check) -> list[str]:
 
 
 def find_check_references(check) -> set[str]:
-    """Return every secret id referenced by a single HTTP check."""
     refs: set[str] = set()
     for value in _check_secret_strings(check):
         refs.update(find_references(value))
@@ -107,7 +71,6 @@ def find_check_references(check) -> set[str]:
 
 
 def resolve_check(check, secret_map: dict[str, str]):
-    """Return a deep copy of a single HTTP check with references resolved."""
     resolved = check.model_copy(deep=True)
     if resolved.password:
         resolved.password = resolve_string(resolved.password, secret_map)
@@ -123,7 +86,6 @@ def resolve_check(check, secret_map: dict[str, str]):
 
 
 def extract_references(config: CAValidationConfig) -> set[str]:
-    """Return every secret id referenced across a whole validation config."""
     refs: set[str] = set()
     if not config or not config.san_validation or not config.san_validation.http_checks:
         return refs
@@ -133,7 +95,6 @@ def extract_references(config: CAValidationConfig) -> set[str]:
 
 
 def extract_url_references(config: CAValidationConfig) -> set[str]:
-    """Return secret ids referenced from ``url`` fields (which are forbidden)."""
     refs: set[str] = set()
     if not config or not config.san_validation or not config.san_validation.http_checks:
         return refs
@@ -145,12 +106,6 @@ def extract_url_references(config: CAValidationConfig) -> set[str]:
 def resolve_config(
     config: CAValidationConfig, secret_map: dict[str, str]
 ) -> CAValidationConfig:
-    """Return a deep copy of ``config`` with all secret references resolved.
-
-    The input config is left untouched so cached / stored objects keep their
-    reference form. Raises :class:`MissingSecretReference` if any reference is
-    unresolved.
-    """
     resolved = config.model_copy(deep=True)
     if not resolved.san_validation or not resolved.san_validation.http_checks:
         return resolved

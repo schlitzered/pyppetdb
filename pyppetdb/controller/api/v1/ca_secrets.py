@@ -155,7 +155,6 @@ class ControllerApiV1CASecrets:
         await self._authorize.require_perm(
             request=request, permission=PERM_CA_SECRETS_DELETE
         )
-        # make sure the secret exists before scanning for references
         await self._crud_secrets.resource_exists(_id=secret_id)
 
         authorities = await self._crud_authorities.find_referencing_ids(secret_id)

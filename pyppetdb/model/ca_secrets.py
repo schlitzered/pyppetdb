@@ -20,9 +20,6 @@ from typing import get_args as typing_get_args
 from pydantic import BaseModel
 from pyppetdb.model.common import MetaMulti
 
-# The character set allowed for CA secret ids. Kept in sync with the reference
-# grammar in pyppetdb.ca.secret_resolver so every id can be referenced as
-# "$secrets[<id>]" without ambiguity.
 CA_SECRET_ID_PATTERN = r"^[A-Za-z0-9_-]+$"
 
 filter_literal = Literal[
@@ -66,8 +63,6 @@ class CASecretPutInternal(BaseModel):
 
 
 class CASecretGet(BaseModel):
-    # Deliberately never exposes the secret value (neither cleartext nor the
-    # encrypted representation). Secrets are write-only via the API.
     id: Optional[str] = None
     description: Optional[str] = None
     created: Optional[datetime] = None

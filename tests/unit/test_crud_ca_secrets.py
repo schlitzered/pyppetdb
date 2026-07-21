@@ -39,7 +39,6 @@ class TestCrudCASecretsUnit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.config = MagicMock()
         self.coll = MagicMock()
-        # real protector so encryption is actually exercised
         self.protector = NodesDataProtector(
             app_secret_key="unit-test-key", log=self.log
         )
@@ -65,7 +64,6 @@ class TestCrudCASecretsUnit(unittest.IsolatedAsyncioTestCase):
             fields=["id"],
         )
 
-        # value stored is encrypted, not the cleartext
         self.assertIn("secret_encrypted", captured)
         self.assertNotEqual(captured["secret_encrypted"], "supersecret")
         self.assertEqual(
@@ -80,7 +78,6 @@ class TestCrudCASecretsUnit(unittest.IsolatedAsyncioTestCase):
             return_value={
                 "id": "TOKEN",
                 "description": "d",
-                # even if the backend echoed these back, the model must drop them
                 "secret_encrypted": "enc",
             }
         )

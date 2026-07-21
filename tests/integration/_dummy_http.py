@@ -12,13 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test helpers: a real local HTTP(S) server that records incoming requests,
-plus self-signed certificate generation for TLS/mTLS wire tests.
-
-Not a test module itself (filename does not match ``test_*``), so it is not
-collected by the test runner.
-"""
-
 import datetime
 import http.server
 import ipaddress
@@ -60,17 +53,11 @@ class _CaptureHandler(http.server.BaseHTTPRequestHandler):
     do_POST = _capture
     do_PUT = _capture
 
-    def log_message(self, *args):  # silence request logging
+    def log_message(self, *args):
         pass
 
 
 class CapturingServer:
-    """Context manager running a real threaded HTTP(S) server on 127.0.0.1.
-
-    Records every request in ``.captured`` (list of dicts). Pass an
-    ``ssl.SSLContext`` to serve HTTPS (and optionally require a client cert).
-    """
-
     def __init__(self, tls_ctx=None):
         self._server = http.server.ThreadingHTTPServer(
             ("127.0.0.1", 0), _CaptureHandler
@@ -103,7 +90,6 @@ class CapturingServer:
 
 
 def self_signed_cert(cn, san_dns=None, san_ip=None):
-    """Return (cert_pem, key_pem) for a short-lived self-signed certificate."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -136,8 +122,6 @@ def self_signed_cert(cn, san_dns=None, san_ip=None):
 
 
 def server_tls_context(server_cert_pem, server_key_pem, client_ca_pem=None):
-    """Build a server-side ssl.SSLContext; require a client cert if
-    ``client_ca_pem`` is given (mTLS)."""
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     cert_fd, cert_path = tempfile.mkstemp(suffix=".pem")
     key_fd, key_path = tempfile.mkstemp(suffix=".pem")

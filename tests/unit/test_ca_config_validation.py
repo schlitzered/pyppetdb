@@ -43,7 +43,6 @@ class TestValidateSecretReferences(unittest.IsolatedAsyncioTestCase):
                 headers=[CAHTTPHeader(name="Authorization", value="$secrets[H]")],
             )
         )
-        # should not raise
         await validate_secret_references(config, self.crud_secrets)
         self.crud_secrets.existing_ids.assert_awaited_once()
 
@@ -67,7 +66,6 @@ class TestValidateSecretReferences(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(QueryParamValidationError) as ctx:
             await validate_secret_references(config, self.crud_secrets)
         self.assertIn("url", str(ctx.exception.detail).lower())
-        # must fail before ever consulting the store
         self.crud_secrets.existing_ids.assert_not_awaited()
 
     async def test_literal_password_rejected(self):

@@ -12,15 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stage 2 end-to-end test: configure the ``puppet-ca`` space with an HTTP
-validation check pointing at a real local server, submit a CSR through the
-puppet-ca endpoint (autosign) and assert the webhook receiver actually got the
-secret-resolved header and the {{cn}}/{{sans}} body.
-
-Requires MongoDB with change streams (the space validation_config is read from
-an in-memory cache that is refreshed via change stream).
-"""
-
 import json
 import time
 import uuid
@@ -48,8 +39,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200)
 
     def _wait_space_http_checks(self, present, timeout=20):
-        """Poll until the cached space config has/lacks http_checks (the signing
-        path reads the space config from the change-stream-backed cache)."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             resp = self.client.get(
@@ -78,9 +67,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
         return csr.public_bytes(serialization.Encoding.PEM).decode()
 
     def _reset_space_and_secret(self, secret_id):
-        # reset the shared space config so later tests don't hit the (now dead)
-        # dummy URL, then remove the secret. NOTE: must not be named `_cleanup`
-        # – that name is a classmethod on IntegrationTestBase (atexit hook).
         self._put_space_config({})
         self._wait_space_http_checks(present=False)
         self.client.delete(
@@ -92,7 +78,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
         nodename = f"node-{uuid.uuid4().hex}"
 
         with CapturingServer() as server:
-            # 1. create the secret the webhook header will reference
             resp = self.client.post(
                 f"/api/v1/ca/secrets/{secret_id}",
                 headers=self._auth_headers(),
@@ -101,7 +86,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
             self.assertEqual(resp.status_code, 201)
             self.addCleanup(self._reset_space_and_secret, secret_id)
 
-            # 2. point the puppet-ca space at our dummy webhook
             self._put_space_config(
                 {
                     "san_validation": {
@@ -127,8 +111,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
             settings.ca.autoSign = True
             self.addCleanup(setattr, settings.ca, "autoSign", False)
 
-            # 3. submit a CSR (with a SAN so the http_check runs) -> autosign
-            #    triggers the webhook synchronously during signing
             csr_pem = self._make_csr(nodename, sans=[nodename])
             resp = self.client.put(
                 f"/puppet-ca/v1/certificate_request/{nodename}",
@@ -138,7 +120,6 @@ class CAHttpValidationE2ETests(IntegrationTestBase):
             self.assertEqual(resp.status_code, 200)
             self.assertTrue(resp.text.startswith("-----BEGIN CERTIFICATE-----"))
 
-            # 4. the webhook receiver got exactly the resolved request
             self.assertEqual(len(server.captured), 1)
             req = server.captured[0]
             self.assertEqual(req["method"], "POST")

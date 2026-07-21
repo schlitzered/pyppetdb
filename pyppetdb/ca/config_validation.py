@@ -12,16 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Save-time validation of secret references in a CA validation config.
-
-Enforces three rules before a validation_config is persisted:
-
-* ``url`` fields must not reference secrets (they can leak into logs).
-* the basic-auth ``password`` must be a secret reference, not a literal (we no
-  longer encrypt the config at rest, so a literal would be stored in cleartext).
-* every referenced secret id must exist in the ``ca_secrets`` collection.
-"""
-
 from pyppetdb.ca.secret_resolver import extract_references
 from pyppetdb.ca.secret_resolver import extract_url_references
 from pyppetdb.ca.secret_resolver import find_references

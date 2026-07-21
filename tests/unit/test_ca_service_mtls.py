@@ -64,7 +64,6 @@ class TestBuildTlsVerify(unittest.TestCase):
         self.assertEqual(verify.verify_mode, ssl.CERT_NONE)
 
     def test_client_cert_without_key_is_not_mtls(self):
-        # only mTLS when BOTH cert and key are present
         self.assertIs(
             self._build(client_cert=self.client_cert, verify_ssl=True), True
         )
@@ -73,7 +72,6 @@ class TestBuildTlsVerify(unittest.TestCase):
         before = set(glob.glob(f"{tempfile.gettempdir()}/*.pem"))
         self._build(client_cert=self.client_cert, client_key=self.client_key)
         after = set(glob.glob(f"{tempfile.gettempdir()}/*.pem"))
-        # no private key material left behind on disk
         self.assertEqual(before, after)
 
 

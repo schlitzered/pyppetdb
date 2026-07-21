@@ -86,7 +86,6 @@ class TestCAServiceSecretResolution(unittest.IsolatedAsyncioTestCase):
             await self.service._execute_http_validation(
                 cn="node1", sans=["node1"], config=check, ca_id="ca", space_id="sp"
             )
-        # the HTTP request must never be attempted when a secret is missing
         self.assertNotIn("request", _captured)
 
     @patch("pyppetdb.ca.service.httpx.AsyncClient", _FakeClient)

@@ -12,12 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stage 1 wire tests: drive ``CAService._execute_http_validation`` against a
-real local HTTP(S) server and assert that exactly the expected request arrives
-(secret-resolved headers, {{cn}}/{{sans}} body, {cert_cn} url, and a real mTLS
-handshake). No MongoDB required – the service is built with mocked cruds.
-"""
-
 import json
 import unittest
 from unittest.mock import MagicMock, AsyncMock
@@ -72,11 +66,8 @@ class CAHttpValidationWireTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(server.captured), 1)
             req = server.captured[0]
             self.assertEqual(req["method"], "POST")
-            # {cert_cn} substituted into the query string
             self.assertEqual(req["path"], "/validate?cn=node1.example.com")
-            # $secrets[TOK] resolved into the header
             self.assertEqual(req["headers"]["Authorization"], "Bearer abc123")
-            # {{cn}} / {{sans}} substituted into the JSON body
             self.assertEqual(
                 json.loads(req["body"]),
                 {
@@ -100,7 +91,6 @@ class CAHttpValidationWireTests(unittest.IsolatedAsyncioTestCase):
     async def test_mtls_handshake_presents_client_cert(self):
         server_cert, server_key = self_signed_cert("server", san_ip="127.0.0.1")
         client_cert, client_key = self_signed_cert("client.example.com")
-        # server trusts our client cert and requires one (real mTLS)
         tls_ctx = server_tls_context(
             server_cert, server_key, client_ca_pem=client_cert
         )
@@ -110,9 +100,9 @@ class CAHttpValidationWireTests(unittest.IsolatedAsyncioTestCase):
                 url=f"https://127.0.0.1:{server.port}/mtls",
                 method="GET",
                 verify_ssl=True,
-                ca_cert=server_cert,  # verify the server against its own cert
+                ca_cert=server_cert,
                 client_cert=client_cert,
-                client_key="$secrets[CK]",  # resolved from the secret store
+                client_key="$secrets[CK]",
             )
             await service._execute_http_validation(
                 cn="node2", sans=["node2"], config=config, ca_id="ca", space_id="sp"
@@ -125,8 +115,6 @@ class CAHttpValidationWireTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(subject["commonName"], "client.example.com")
 
     async def test_server_verification_rejects_untrusted_cert(self):
-        # server presents cert A, but the check trusts a *different* CA -> the
-        # client must refuse the connection (fail-closed).
         server_cert, server_key = self_signed_cert("server", san_ip="127.0.0.1")
         other_cert, _ = self_signed_cert("other", san_ip="127.0.0.1")
         tls_ctx = server_tls_context(server_cert, server_key)
@@ -136,7 +124,7 @@ class CAHttpValidationWireTests(unittest.IsolatedAsyncioTestCase):
                 url=f"https://127.0.0.1:{server.port}/v",
                 method="GET",
                 verify_ssl=True,
-                ca_cert=other_cert,  # wrong trust anchor
+                ca_cert=other_cert,
             )
             with self.assertRaises(QueryParamValidationError):
                 await service._execute_http_validation(

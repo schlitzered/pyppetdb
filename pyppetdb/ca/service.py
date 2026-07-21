@@ -39,11 +39,11 @@ from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.ca.utils import CAUtils
 from pyppetdb.ca.secret_resolver import find_check_references
 from pyppetdb.ca.secret_resolver import resolve_check
-from pyppetdb.ca.secret_resolver import MissingSecretReference
 from pyppetdb.errors import (
     ResourceNotFound,
     QueryParamValidationError,
     DuplicateResource,
+    MissingSecretReference,
 )
 from pyppetdb.model.ca_authorities import (
     CAAuthorityPost,
@@ -243,15 +243,6 @@ class CAService:
 
     @staticmethod
     def _build_tls_verify(config: CAHTTPValidation):
-        """Build the value for httpx's ``verify`` argument.
-
-        Returns a bool (existing behavior) when no custom TLS material is
-        configured. When a custom ``ca_cert`` and/or mTLS ``client_cert`` +
-        ``client_key`` are present, an ``ssl.SSLContext`` is built instead.
-        The ``config`` passed in must already have its ``$secrets[...]``
-        references resolved. The client key is written to a private temp file
-        only for the duration of ``load_cert_chain`` and removed immediately.
-        """
         client_cert_present = bool(config.client_cert and config.client_key)
         if not config.ca_cert and not client_cert_present:
             return config.verify_ssl
@@ -287,9 +278,6 @@ class CAService:
         ca_id: str,
         space_id: str,
     ):
-        # Resolve any $secrets[...] references into their cleartext values just
-        # before the request is built. Resolved values are never logged, and a
-        # missing/unknown reference fails closed (validation is rejected).
         refs = find_check_references(config)
         if refs:
             secret_map = await self._crud_secrets.get_values(refs)

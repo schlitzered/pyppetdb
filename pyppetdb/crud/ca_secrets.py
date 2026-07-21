@@ -34,13 +34,6 @@ from pyppetdb.model.common import sort_order_literal
 
 
 class CrudCASecrets(CrudMongo):
-    """CRUD for CA secrets.
-
-    Secret values are encrypted at rest via :class:`NodesDataProtector` and are
-    never returned through the read API (``CASecretGet`` has no secret field and
-    read projections never include ``secret_encrypted``).
-    """
-
     def __init__(
         self,
         config: Config,
@@ -96,7 +89,6 @@ class CrudCASecrets(CrudMongo):
             return False
 
     async def existing_ids(self, ids: typing.Iterable[str]) -> set[str]:
-        """Return the subset of ``ids`` that exist (single round trip)."""
         ids = list(ids)
         if not ids:
             return set()
@@ -104,11 +96,6 @@ class CrudCASecrets(CrudMongo):
         return {doc["id"] async for doc in cursor}
 
     async def get_values(self, ids: typing.Iterable[str]) -> dict[str, str]:
-        """Return a {id: cleartext_secret} map for the requested ids.
-
-        Ids that do not exist (or fail to decrypt) are simply absent from the
-        result; callers must treat a missing id as fail-closed.
-        """
         ids = list(ids)
         if not ids:
             return {}
@@ -120,7 +107,7 @@ class CrudCASecrets(CrudMongo):
                 continue
             try:
                 secret_map[doc["id"]] = self._protector.decrypt_string(encrypted)
-            except Exception as err:  # pragma: no cover - defensive
+            except Exception as err:
                 self.log.error(f"Failed to decrypt CA secret {doc['id']}: {err}")
         return secret_map
 

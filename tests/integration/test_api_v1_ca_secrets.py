@@ -40,7 +40,6 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
     def test_secret_crud_is_write_only(self):
         secret_id = f"SEC_{uuid.uuid4().hex}"
 
-        # create
         resp = self.client.post(
             f"/api/v1/ca/secrets/{secret_id}",
             headers=self._auth_headers(),
@@ -50,24 +49,20 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         body = resp.json()
         self.assertEqual(body["id"], secret_id)
         self.assertEqual(body["description"], "gh token")
-        # the secret value is never returned
         self.assertNotIn("secret", body)
         self.assertNotIn("secret_encrypted", body)
 
-        # get
         resp = self.client.get(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 200)
         self.assertNotIn("secret", resp.json())
 
-        # the stored value is encrypted at rest (never cleartext in mongo)
         doc = self._db["ca_secrets"].find_one({"id": secret_id})
         self.assertIsNotNone(doc)
         self.assertNotIn("secret", doc)
         self.assertNotEqual(doc["secret_encrypted"], "topsecret")
 
-        # delete (not referenced)
         resp = self.client.delete(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )
@@ -85,7 +80,6 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         secret_id = f"SEC_{uuid.uuid4().hex}"
         ca_id = f"ca-{uuid.uuid4().hex}"
 
-        # create secret
         resp = self.client.post(
             f"/api/v1/ca/secrets/{secret_id}",
             headers=self._auth_headers(),
@@ -93,7 +87,6 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        # create CA authority referencing the secret in a webhook header
         resp = self.client.post(
             f"/api/v1/ca/authorities/{ca_id}",
             headers=self._auth_headers(),
@@ -104,14 +97,12 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        # deleting the referenced secret must be blocked with 409 + location
         resp = self.client.delete(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 409)
         self.assertIn(ca_id, resp.json()["detail"])
 
-        # remove the reference from the authority
         resp = self.client.put(
             f"/api/v1/ca/authorities/{ca_id}",
             headers=self._auth_headers(),
@@ -119,7 +110,6 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
 
-        # now deletion succeeds
         resp = self.client.delete(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )
@@ -179,7 +169,6 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
             json={"cn": "Url Ref CA", "validation_config": config},
         )
         self.assertEqual(resp.status_code, 422)
-        # cleanup the secret we created
         self.client.delete(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )

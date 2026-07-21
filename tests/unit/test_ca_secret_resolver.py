@@ -15,6 +15,7 @@
 import unittest
 
 from pyppetdb.ca import secret_resolver as sr
+from pyppetdb.errors import MissingSecretReference
 from pyppetdb.model.ca_validation import (
     CAValidationConfig,
     CASANValidation,
@@ -79,7 +80,7 @@ class TestResolveString(unittest.TestCase):
         )
 
     def test_missing_reference_fails_closed(self):
-        with self.assertRaises(sr.MissingSecretReference) as ctx:
+        with self.assertRaises(MissingSecretReference) as ctx:
             sr.resolve_string("$secrets[MISSING]", {})
         self.assertEqual(ctx.exception.secret_id, "MISSING")
 
@@ -104,7 +105,6 @@ class TestConfigLevel(unittest.TestCase):
             url="https://host/$secrets[URLSECRET]",
             username="$secrets[USER]",
         )
-        # username is plain text, url refs are surfaced separately
         self.assertEqual(sr.extract_references(_config(check)), set())
 
     def test_extract_url_references(self):
@@ -132,13 +132,12 @@ class TestResolveCheck(unittest.TestCase):
         self.assertEqual(resolved.password, "pw")
         self.assertEqual(resolved.body_template, '{"k":"btok"}')
         self.assertEqual(resolved.client_key, "PEM")
-        # original object is not mutated
         self.assertEqual(check.password, "$secrets[P]")
         self.assertEqual(check.headers[0].value, "Bearer $secrets[H]")
 
     def test_resolve_check_fails_closed(self):
         check = _check(password="$secrets[NOPE]")
-        with self.assertRaises(sr.MissingSecretReference):
+        with self.assertRaises(MissingSecretReference):
             sr.resolve_check(check, {})
 
 

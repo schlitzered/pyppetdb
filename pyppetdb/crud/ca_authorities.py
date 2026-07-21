@@ -185,8 +185,6 @@ class CrudCAAuthorities(CrudMongo):
             await validate_secret_references(config, self._crud_secrets)
 
     async def find_referencing_ids(self, secret_id: str) -> list[str]:
-        """Return ids of CA authorities whose validation_config references
-        ``secret_id`` (used to block deletion of an in-use secret)."""
         referencing: list[str] = []
         cursor = self.coll.find({}, {"id": 1, "validation_config": 1})
         async for doc in cursor:
