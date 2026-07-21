@@ -85,3 +85,106 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.create(_id="ca1", payload=payload, fields=["id"])
 
         self.crud._create.assert_called_once()
+
+    async def test_get_private_key_decrypts(self):
+        self.crud._get = AsyncMock(return_value={"private_key_encrypted": "ENC"})
+        self.mock_protector.decrypt_string.return_value = "PEMDATA"
+
+        result = await self.crud.get_private_key("ca1")
+
+        self.assertEqual(result, b"PEMDATA")
+        self.crud._get.assert_awaited_once_with(
+            query={"id": "ca1"}, fields=["private_key_encrypted"]
+        )
+        self.mock_protector.decrypt_string.assert_called_once_with("ENC")
+
+    async def test_get_private_key_cached_hit_skips_backend(self):
+        self.crud.cache.key_cache["ca1"] = b"CACHED"
+        self.crud._get = AsyncMock()
+
+        result = await self.crud.get_private_key_cached("ca1")
+
+        self.assertEqual(result, b"CACHED")
+        self.crud._get.assert_not_called()
+
+    async def test_get_private_key_cached_miss_reads_backend(self):
+        self.crud._get = AsyncMock(return_value={"private_key_encrypted": "ENC"})
+        self.mock_protector.decrypt_string.return_value = "PEMDATA"
+
+        result = await self.crud.get_private_key_cached("ca1")
+
+        self.assertEqual(result, b"PEMDATA")
+        self.crud._get.assert_awaited_once()
+
+    async def test_sync_crl_data_success(self):
+        now = datetime.now(timezone.utc)
+        self.mock_coll.find_one = AsyncMock(
+            side_effect=[
+                {"crl": {"generation": 5}},
+                {
+                    "crl": {
+                        "crl_pem": "PEM",
+                        "generation": 6,
+                        "updated_at": now,
+                        "next_update": now,
+                    }
+                },
+            ]
+        )
+        self.mock_coll.update_one = AsyncMock(
+            return_value=MagicMock(modified_count=1)
+        )
+
+        result = await self.crud.sync_crl_data(
+            ca_id="ca1", crl_pem="PEM", next_update=now
+        )
+
+        self.assertEqual(result.generation, 6)
+        filter_arg, update_arg = self.mock_coll.update_one.call_args[0]
+        self.assertEqual(filter_arg, {"id": "ca1", "crl.generation": 5})
+        self.assertEqual(update_arg["$set"]["crl.generation"], 6)
+        self.assertEqual(update_arg["$set"]["crl.crl_pem"], "PEM")
+
+    async def test_sync_crl_data_ca_not_found(self):
+        self.mock_coll.find_one = AsyncMock(return_value=None)
+        with self.assertRaises(Exception):
+            await self.crud.sync_crl_data(
+                ca_id="ca1", crl_pem="PEM", next_update=datetime.now(timezone.utc)
+            )
+
+    async def test_sync_crl_data_without_crl_raises(self):
+        self.mock_coll.find_one = AsyncMock(return_value={"id": "ca1"})
+        with self.assertRaises(Exception):
+            await self.crud.sync_crl_data(
+                ca_id="ca1", crl_pem="PEM", next_update=datetime.now(timezone.utc)
+            )
+
+    async def test_sync_crl_data_retries_on_generation_conflict(self):
+        now = datetime.now(timezone.utc)
+        self.mock_coll.find_one = AsyncMock(
+            side_effect=[
+                {"crl": {"generation": 5}},
+                {"crl": {"generation": 6}},
+                {
+                    "crl": {
+                        "crl_pem": "PEM",
+                        "generation": 7,
+                        "updated_at": now,
+                        "next_update": now,
+                    }
+                },
+            ]
+        )
+        self.mock_coll.update_one = AsyncMock(
+            side_effect=[
+                MagicMock(modified_count=0),
+                MagicMock(modified_count=1),
+            ]
+        )
+
+        result = await self.crud.sync_crl_data(
+            ca_id="ca1", crl_pem="PEM", next_update=now
+        )
+
+        self.assertEqual(result.generation, 7)
+        self.assertEqual(self.mock_coll.update_one.await_count, 2)
