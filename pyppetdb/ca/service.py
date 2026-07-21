@@ -161,13 +161,9 @@ class CAService:
             san_ext = csr.extensions.get_extension_for_class(
                 x509.SubjectAlternativeName
             )
-            sans = []
-            if san_ext:
-                sans = san_ext.value.get_values_for_type(x509.DNSName)
-            if not sans:
-                return
+            sans = san_ext.value.get_values_for_type(x509.DNSName)
         except x509.ExtensionNotFound:
-            return
+            sans = []
 
         for config in configs:
             if not config.san_validation:
@@ -175,8 +171,9 @@ class CAService:
 
             san_val = config.san_validation
 
-            self._validate_sans_count(sans, san_val.max_san_count)
-            self._validate_sans_regex(sans, san_val.regex_list)
+            if sans:
+                self._validate_sans_count(sans, san_val.max_san_count)
+                self._validate_sans_regex(sans, san_val.regex_list)
 
             if san_val.http_checks:
                 await self._validate_sans_http(
