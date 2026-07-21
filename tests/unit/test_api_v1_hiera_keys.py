@@ -18,6 +18,8 @@ import logging
 from pyppetdb.controller.api.v1.hiera_keys import ControllerApiV1HieraKeys
 from pyppetdb.model.hiera_keys import HieraKeyPost, HieraKeyPut
 from pyppetdb.authorize import PERM_HIERA_GET
+from pyppetdb.authorize import PERM_HIERA_KEYS_CREATE
+from pyppetdb.authorize import PERM_HIERA_KEYS_DELETE
 
 
 class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
@@ -67,7 +69,9 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
             request=mock_request, data=data, key_id="key1", fields=set()
         )
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_KEYS_CREATE
+        )
         self.mock_crud_keys.create.assert_called_once()
 
     def _wire_key_model(self, model_id="dynamic:new", validate_side_effect=None):
@@ -224,7 +228,9 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         mock_request = MagicMock()
         await self.controller.delete(request=mock_request, key_id="key1")
 
-        self.mock_authorize.require_perm.assert_called_once()
+        self.mock_authorize.require_perm.assert_called_once_with(
+            request=mock_request, permission=PERM_HIERA_KEYS_DELETE
+        )
         self.mock_crud_keys.delete.assert_called_once_with(_id="key1")
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once()
 
