@@ -29,7 +29,7 @@ class ApiV1NodesSecretsRedactorIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"value": secret_value},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         create_body = resp.json()
         secret_id = create_body["id"]
         # the plaintext secret (and its encrypted form) must never be echoed back

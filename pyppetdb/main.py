@@ -144,6 +144,7 @@ async def lifespan(app: FastAPI):
         crud_ca_authorities=container.crud_ca_authorities,
         crud_ca_spaces=container.crud_ca_spaces,
         crud_ca_certificates=container.crud_ca_certificates,
+        crud_ca_secrets=container.crud_ca_secrets,
         ca_service=container.ca_service,
         crud_oauth=container.crud_oauth,
         http=container.http,

@@ -33,7 +33,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"cn": "Root CA", "organization": "Test Org"},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["id"], ca_id)
         self.assertEqual(resp.json()["internal"], True)
         self.assertEqual(resp.json()["chain"], [])
@@ -52,7 +52,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"parent_id": ca_id, "cn": "Sub CA"},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["internal"], True)
         self.assertEqual(resp.json()["chain"], [root_cert])
 
@@ -62,7 +62,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"ca_id": ca_id},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
 
         # 4. Try to delete Root CA (should fail: in use by space)
         resp = self.client.delete(
@@ -97,7 +97,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"ca_id": ca_id},
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
 
         # Insert directly into DB for space deletion test
         self._db["ca_certificates"].insert_one(
@@ -151,7 +151,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
                 "external_chain": external_chain,
             },
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["id"], ca_id)
         self.assertEqual(resp.json()["internal"], False)
         self.assertEqual(resp.json()["chain"], external_chain)

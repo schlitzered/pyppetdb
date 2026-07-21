@@ -46,6 +46,7 @@ from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
@@ -80,6 +81,7 @@ class ControllerApi:
         crud_ca_authorities: CrudCAAuthorities,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_certificates: CrudCACertificates,
+        crud_ca_secrets: CrudCASecrets,
         ca_service: CAService,
         http: httpx.AsyncClient,
         config: Config,
@@ -118,6 +120,7 @@ class ControllerApi:
                 crud_ca_authorities=crud_ca_authorities,
                 crud_ca_spaces=crud_ca_spaces,
                 crud_ca_certificates=crud_ca_certificates,
+                crud_ca_secrets=crud_ca_secrets,
                 ca_service=ca_service,
                 http=http,
                 config=config,

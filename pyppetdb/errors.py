@@ -94,3 +94,8 @@ class SessionCredentialError(HTTPException):
 class QueryParamValidationError(HTTPException):
     def __init__(self, msg):
         super(QueryParamValidationError, self).__init__(status_code=422, detail=msg)
+
+
+class ResourceInUse(HTTPException):
+    def __init__(self, msg="Resource is still in use"):
+        super(ResourceInUse, self).__init__(status_code=409, detail=msg)

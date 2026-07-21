@@ -48,6 +48,7 @@ from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthoriti
 from pyppetdb.controller.api.v1.ca_authorities_certs import (
     ControllerApiV1CAAuthoritiesCerts,
 )
+from pyppetdb.controller.api.v1.ca_secrets import ControllerApiV1CASecrets
 from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.controller.api.v1.ca_spaces_certs import (
     ControllerApiV1CASpacesCerts,
@@ -91,6 +92,7 @@ from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.ca.service import CAService
@@ -125,6 +127,7 @@ class ControllerApiV1:
         crud_ca_authorities: CrudCAAuthorities,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_certificates: CrudCACertificates,
+        crud_ca_secrets: CrudCASecrets,
         ca_service: CAService,
         http: httpx.AsyncClient,
         config: Config,
@@ -185,6 +188,17 @@ class ControllerApiV1:
                 crud_ca_certificates=crud_ca_certificates,
                 crud_teams=crud_teams,
                 ca_service=ca_service,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1CASecrets(
+                log=log,
+                authorize=authorize,
+                crud_secrets=crud_ca_secrets,
+                crud_authorities=crud_ca_authorities,
+                crud_spaces=crud_ca_spaces,
             ).router,
             responses={404: {"description": "Not found"}},
         )

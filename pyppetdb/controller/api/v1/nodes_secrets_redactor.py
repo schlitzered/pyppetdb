@@ -61,6 +61,7 @@ class ControllerApiV1NodesSecretsRedactor:
             response_model=NodesSecretsRedactorGet,
             response_model_exclude_unset=True,
             methods=["POST"],
+            status_code=201,
         )
         self.router.add_api_route(
             "/{secret_id}",

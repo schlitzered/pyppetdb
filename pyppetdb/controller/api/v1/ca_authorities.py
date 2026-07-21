@@ -35,7 +35,6 @@ from pyppetdb.model.ca_authorities import filter_literal
 from pyppetdb.model.ca_authorities import filter_list
 from pyppetdb.model.ca_authorities import sort_literal
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.ca.validation_protector import CAValidationProtector
 
 
 class ControllerApiV1CAAuthorities:
@@ -67,6 +66,7 @@ class ControllerApiV1CAAuthorities:
             methods=["POST"],
             response_model=CAAuthorityGet,
             response_model_exclude_unset=True,
+            status_code=201,
         )
         self._router.add_api_route(
             "/{ca_id}",
@@ -94,14 +94,6 @@ class ControllerApiV1CAAuthorities:
     def router(self):
         return self._router
 
-    def _mask(self, data: CAAuthorityGet):
-        if data.validation_config:
-            protector = CAValidationProtector(
-                protector=None
-            )  # No protector needed for masking
-            data.validation_config = protector.mask_config(data.validation_config)
-        return data
-
     async def update(
         self,
         request: Request,
@@ -115,7 +107,7 @@ class ControllerApiV1CAAuthorities:
         res = await self._ca_service.update_authority(
             ca_id=ca_id, payload=data, fields=list(fields)
         )
-        return self._mask(res)
+        return res
 
     async def delete(
         self,
@@ -144,7 +136,7 @@ class ControllerApiV1CAAuthorities:
         res = await self._ca_service.create_authority(
             _id=ca_id, payload=data, fields=list(fields)
         )
-        return self._mask(res)
+        return res
 
     async def get(
         self,
@@ -154,7 +146,7 @@ class ControllerApiV1CAAuthorities:
     ):
         await self._authorize.require_perm(request=request, permission=PERM_CA_GET)
         res = await self._crud_authorities.get(_id=ca_id, fields=list(fields))
-        return self._mask(res)
+        return res
 
     async def search(
         self,
@@ -190,6 +182,4 @@ class ControllerApiV1CAAuthorities:
             page=page,
             limit=limit,
         )
-        for r in res.result:
-            self._mask(r)
         return res
