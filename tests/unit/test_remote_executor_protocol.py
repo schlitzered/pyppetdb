@@ -59,9 +59,10 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_handle_ack(self):
-        # Setup a pending ACK
-        event = asyncio.Event()
-        self.protocol._pending_acks[123] = event
+        acked = asyncio.Event()
+        other = asyncio.Event()
+        self.protocol._pending_acks[123] = acked
+        self.protocol._pending_acks[456] = other
 
         msg_dict = {
             "msg_id": 1,
@@ -70,8 +71,8 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         }
         await self.protocol._handle_message(json.dumps(msg_dict))
 
-        self.assertTrue(event.is_set())
-        self.assertIn(123, self.protocol._pending_acks)
+        self.assertTrue(acked.is_set())
+        self.assertFalse(other.is_set())
 
     async def test_handle_log_message(self):
         self.mock_redactor.redact.side_effect = lambda text: text
@@ -153,7 +154,6 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
     async def test_run_disconnect(self, mock_sleep):
         self.mock_ws.receive_text.side_effect = WebSocketDisconnect()
         self.protocol.dispatch_job = AsyncMock()
-        self.protocol._heartbeat = AsyncMock()
         self.protocol._dispatch_scheduled_jobs = AsyncMock()
 
         self.mock_crud_nodes.get.return_value = MagicMock(remote_agent=None)
@@ -163,4 +163,5 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         except WebSocketDisconnect:
             pass
 
+        self.protocol._dispatch_scheduled_jobs.assert_awaited_once()
         self.assertFalse(self.protocol._running)

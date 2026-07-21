@@ -38,9 +38,6 @@ class TestWsInterAPIUnit(unittest.IsolatedAsyncioTestCase):
 
         self.mock_authorize_client_cert = MagicMock()
         self.mock_crud_pyppetdb_nodes = MagicMock()
-        self.mock_crud_pyppetdb_nodes.get = AsyncMock(
-            return_value=MagicMock(port=None)
-        )
 
         self.inter_api = WsInterAPI(
             log=self.log,
@@ -55,51 +52,28 @@ class TestWsInterAPIUnit(unittest.IsolatedAsyncioTestCase):
     async def test_remote_api_client_idle_disconnect(
         self, mock_ws_connect, mock_ssl_context
     ):
-        # Mock the websocket connection and its context manager
-        mock_ws = AsyncMock()
+        self.mock_config.app.main.interApiIdleTimeout = -1
 
-        # Make recv() raise a TimeoutError immediately
+        mock_ws = AsyncMock()
         mock_ws.recv.side_effect = asyncio.TimeoutError()
 
         mock_ws_context = AsyncMock()
         mock_ws_context.__aenter__.return_value = mock_ws
         mock_ws_connect.return_value = mock_ws_context
 
-        # Mock time progression.
-        # We need three calls to time():
-        # 1. last_activity = asyncio.get_event_loop().time() (initially 100.0)
-        # 2. Inside the TimeoutError block: asyncio.get_event_loop().time() (now 115.0)
-        mock_time = MagicMock()
-        mock_time.side_effect = [100.0, 115.0]
+        via = "remote-node"
+        try:
+            await asyncio.wait_for(
+                self.inter_api._remote_api_client(via), timeout=1.0
+            )
+        except asyncio.TimeoutError:
+            self.fail(
+                "The inter-API client task did not exit proactively upon idle timeout."
+            )
 
-        with patch(
-            "pyppetdb.ws.inter_api.asyncio.get_event_loop"
-        ) as mock_get_event_loop:
-            mock_loop = MagicMock()
-            mock_loop.time = mock_time
-            mock_get_event_loop.return_value = mock_loop
-
-            # Start the client task
-            via = "remote-node"
-            task = asyncio.create_task(self.inter_api._remote_api_client(via))
-
-            # Allow the task to execute
-            # Wait until the task finishes (which it should when it breaks on idle)
-            try:
-                await asyncio.wait_for(task, timeout=1.0)
-            except asyncio.TimeoutError:
-                self.fail(
-                    "The inter-API client task did not exit proactively upon idle timeout."
-                )
-
-            # Verify the connection was initiated
-            mock_ws_connect.assert_called_once()
-
-            # Verify that ws.close() was called due to the timeout condition
-            mock_ws.close.assert_called_once()
-
-            # Verify it was removed from the remote_conns dictionary
-            self.assertNotIn(via, self.inter_api._remote_conns)
+        mock_ws_connect.assert_called_once()
+        mock_ws.close.assert_called_once()
+        self.assertNotIn(via, self.inter_api._remote_conns)
 
     async def test_authenticate_success(self):
         from datetime import datetime

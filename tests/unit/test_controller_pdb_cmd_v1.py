@@ -167,18 +167,32 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_gzip(self):
         mock_request = MagicMock()
-        data = {"environment": "prod"}
-        body = gzip.compress(json.dumps(data).encode())
-        mock_request.body = AsyncMock(return_value=body)
+        data = {
+            "certname": "node1",
+            "environment": "prod",
+            "values": {"os": "linux"},
+            "producer_timestamp": "2026-03-06T00:00:00Z",
+            "producer": "pm1",
+        }
+        mock_request.body = AsyncMock(
+            return_value=gzip.compress(json.dumps(data).encode())
+        )
         mock_request.headers = {"content-encoding": "gzip"}
+
+        self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])
+        self.mock_nodes.update = AsyncMock()
 
         await self.controller.create(
             request=mock_request,
             certname="node1",
-            command="unknown",
+            command="replace_facts",
             producer_timestamp="2026-03-06T00:00:00Z",
             version=1,
         )
+
+        self.mock_groups.reevaluate_node_membership.assert_called_once()
+        await asyncio.sleep(0.1)
+        self.mock_nodes.update.assert_called_once()
 
     async def test_replace_facts_placement_propagation(self):
         mock_request = MagicMock()
