@@ -15,6 +15,7 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+import re
 from pyppetdb.controller.api.v1.ca_authorities import ControllerApiV1CAAuthorities
 from pyppetdb.controller.api.v1.ca_spaces import ControllerApiV1CASpaces
 from pyppetdb.model.ca_authorities import CAAuthorityPut
@@ -79,6 +80,21 @@ class TestApiV1CAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with(
             PATTERN_CA_AUTHORITIES.format(ca_id="ca1"),
         )
+
+    async def test_delete_authority_escapes_regex_metacharacters(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_ca_service.delete_authority = AsyncMock()
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.delete(request=mock_request, ca_id=".*")
+
+        pattern = self.mock_crud_teams.drop_permissions_by_pattern.call_args[0][0]
+        self.assertEqual(
+            pattern, PATTERN_CA_AUTHORITIES.format(ca_id=re.escape(".*"))
+        )
+        self.assertIn(r"\.\*", pattern)
+        self.assertNotIn("^CA:AUTHORITIES:.*:", pattern)
 
     async def test_get_authority_permission(self):
         self.mock_authorize.require_perm = AsyncMock()
@@ -161,6 +177,20 @@ class TestApiV1CASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once_with(
             PATTERN_CA_SPACES.format(space_id="space1"),
         )
+
+    async def test_delete_space_escapes_regex_metacharacters(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_ca_certificates.count = AsyncMock(return_value=0)
+        self.mock_ca_service.delete_space = AsyncMock()
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.delete(request=mock_request, space_id=".*")
+
+        pattern = self.mock_crud_teams.drop_permissions_by_pattern.call_args[0][0]
+        self.assertEqual(pattern, PATTERN_CA_SPACES.format(space_id=re.escape(".*")))
+        self.assertIn(r"\.\*", pattern)
+        self.assertNotIn("^CA:SPACES:.*:", pattern)
 
     async def test_get_space_permission(self):
         self.mock_authorize.require_perm = AsyncMock()

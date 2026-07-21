@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import re
 from typing import Set
 
 from fastapi import APIRouter
@@ -184,7 +185,7 @@ class ControllerApiV1HieraKeys:
         )
         result = await self.crud_hiera_keys.delete(_id=key_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            pattern=f"{PATTERN_HIERA_LEVEL_DATA.format(key_id=key_id)}(CREATE|UPDATE|DELETE)$"
+            pattern=f"{PATTERN_HIERA_LEVEL_DATA.format(key_id=re.escape(key_id))}(CREATE|UPDATE|DELETE)$"
         )
         return result
 

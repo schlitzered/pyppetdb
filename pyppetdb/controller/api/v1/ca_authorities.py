@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import re
 from typing import Set
 from fastapi import APIRouter
 from fastapi import Request
@@ -119,7 +120,7 @@ class ControllerApiV1CAAuthorities:
         )
         await self._ca_service.delete_authority(ca_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            PATTERN_CA_AUTHORITIES.format(ca_id=ca_id)
+            PATTERN_CA_AUTHORITIES.format(ca_id=re.escape(ca_id))
         )
         return {}
 

@@ -15,6 +15,7 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+import re
 from pyppetdb.controller.api.v1.hiera_keys import ControllerApiV1HieraKeys
 from pyppetdb.model.hiera_keys import HieraKeyPost, HieraKeyPut
 from pyppetdb.authorize import PERM_HIERA_GET
@@ -233,6 +234,20 @@ class TestApiV1HieraKeysUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_crud_keys.delete.assert_called_once_with(_id="key1")
         self.mock_crud_teams.drop_permissions_by_pattern.assert_called_once()
+
+    async def test_delete_key_escapes_regex_metacharacters(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud_keys.delete = AsyncMock()
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.delete(request=mock_request, key_id=".*")
+
+        pattern = self.mock_crud_teams.drop_permissions_by_pattern.call_args.kwargs[
+            "pattern"
+        ]
+        self.assertIn(re.escape(".*"), pattern)
+        self.assertNotIn("^HIERA:LEVEL_DATA:.*:", pattern)
 
     async def test_get_key(self):
         self.mock_authorize.require_perm = AsyncMock()

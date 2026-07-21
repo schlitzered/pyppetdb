@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import re
 from typing import Set
 from fastapi import APIRouter
 from fastapi import Request
@@ -176,7 +177,7 @@ class ControllerApiV1CASpaces:
 
         await self._ca_service.delete_space(_id=space_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            PATTERN_CA_SPACES.format(space_id=space_id)
+            PATTERN_CA_SPACES.format(space_id=re.escape(space_id))
         )
         return {}
 
