@@ -14,6 +14,9 @@
 
 import uuid
 import datetime
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_AUTHORITIES_CREATE
+from pyppetdb.authorize import PERM_CA_SPACES_CREATE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -421,3 +424,87 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(len(resp.json()["result"]) >= 1)
+
+
+class CaAuthoritiesSpacesAuthzIntegrationTests(IntegrationTestBase):
+    def test_authorities_create_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/ca/authorities/ca-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"cn": "x"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_authorities_create_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_CA_AUTHORITIES_CREATE])
+        ca_id = f"ca-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/ca/authorities/{ca_id}",
+            headers=nu.headers,
+            json={"cn": "Authz CA"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["ca_authorities"].delete_many, {"id": ca_id})
+
+    def test_authorities_update_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/ca/authorities/ca-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_authorities_delete_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/ca/authorities/ca-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_denied_without_ca_get(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/ca/authorities", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_granted_with_ca_get(self):
+        nu = self._make_non_admin(permissions=[PERM_CA_GET])
+        resp = self.client.get("/api/v1/ca/authorities", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_spaces_create_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/ca/spaces/space-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"ca_id": "puppet-ca"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_spaces_create_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_CA_SPACES_CREATE])
+        space_id = f"space-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=nu.headers,
+            json={"ca_id": "puppet-ca"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["ca_spaces"].delete_many, {"id": space_id})
+
+    def test_spaces_update_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/ca/spaces/space-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_spaces_delete_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/ca/spaces/space-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)

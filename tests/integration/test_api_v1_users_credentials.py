@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pyppetdb.authorize import PERM_USERS_CREDENTIALS_CREATE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -113,3 +114,59 @@ class ApiV1UsersCredentialsIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
         )
         self.assertEqual(resp.status_code, 200)
+
+
+class UsersCredentialsAuthzIntegrationTests(IntegrationTestBase):
+    def test_foreign_create_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            "/api/v1/users/admin/credentials",
+            headers=nu.headers,
+            json={"description": "x"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_foreign_create_granted_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_USERS_CREDENTIALS_CREATE])
+        resp = self.client.post(
+            "/api/v1/users/admin/credentials",
+            headers=nu.headers,
+            json={"description": "granted"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(
+            self._db["users_credentials"].delete_many, {"id": resp.json()["id"]}
+        )
+
+    def test_self_create_allowed_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            "/api/v1/users/_self/credentials",
+            headers=nu.headers,
+            json={"description": "self"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(
+            self._db["users_credentials"].delete_many, {"id": resp.json()["id"]}
+        )
+
+    def test_self_search_allowed_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            "/api/v1/users/_self/credentials", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_foreign_search_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            "/api/v1/users/admin/credentials", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_own_real_id_still_requires_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            f"/api/v1/users/{nu.user_id}/credentials", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)

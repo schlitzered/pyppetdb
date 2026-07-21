@@ -14,6 +14,9 @@
 
 import unittest
 
+import uuid
+from pyppetdb.authorize import PERM_HIERA_KEYS_CREATE
+from pyppetdb.authorize import PERM_HIERA_GET
 from tests.integration.base import IntegrationTestBase
 
 
@@ -347,6 +350,54 @@ class TestApiV1HieraKeys(IntegrationTestBase):
         self.assertIn("id", data)
         self.assertIn("key_model_id", data)
         self.assertNotIn("description", data)
+
+
+class HieraKeysAuthzIntegrationTests(IntegrationTestBase):
+    def test_create_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/hiera/keys/key-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"key_model_id": "static:SimpleString"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_KEYS_CREATE])
+        key_id = f"key-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/hiera/keys/{key_id}",
+            headers=nu.headers,
+            json={"key_model_id": "static:SimpleString"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["hiera_keys"].delete_many, {"id": key_id})
+
+    def test_update_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/hiera/keys/key-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/hiera/keys/key-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/hiera/keys", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_GET])
+        resp = self.client.get("/api/v1/hiera/keys", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,8 @@
 import uuid
 from datetime import datetime, timezone
 
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_GET
+from pyppetdb.authorize import PERM_PYPPETDB_NODES_DELETE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -79,3 +81,47 @@ class ApiV1PyppetDBNodesIntegrationTests(IntegrationTestBase):
         node_id = self._insert_node()
         resp = self.client.get(f"/api/v1/pyppetdb_nodes/{node_id}")
         self.assertEqual(resp.status_code, 401)
+
+
+class PyppetdbNodesAuthzIntegrationTests(IntegrationTestBase):
+    def test_search_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/pyppetdb_nodes", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_search_granted_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_PYPPETDB_NODES_GET])
+        resp = self.client.get("/api/v1/pyppetdb_nodes", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_get_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            f"/api/v1/pyppetdb_nodes/pyppetdb-{uuid.uuid4().hex}:8000",
+            headers=nu.headers,
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/pyppetdb_nodes/pyppetdb-{uuid.uuid4().hex}:8000",
+            headers=nu.headers,
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_granted_with_permission(self):
+        node_id = f"pyppetdb-{uuid.uuid4().hex}:8000"
+        self._db["pyppetdb_nodes"].insert_one(
+            {
+                "id": node_id,
+                "heartbeat": datetime.now(timezone.utc),
+                "online_since": datetime.now(timezone.utc),
+            }
+        )
+        self.addCleanup(self._db["pyppetdb_nodes"].delete_many, {"id": node_id})
+        nu = self._make_non_admin(permissions=[PERM_PYPPETDB_NODES_DELETE])
+        resp = self.client.delete(
+            f"/api/v1/pyppetdb_nodes/{node_id}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 200)

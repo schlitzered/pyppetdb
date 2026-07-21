@@ -14,6 +14,10 @@
 
 import unittest
 
+import uuid
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_CREATE
+from pyppetdb.authorize import PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC
+from pyppetdb.authorize import PERM_HIERA_GET
 from tests.integration.base import IntegrationTestBase
 
 
@@ -439,6 +443,50 @@ class TestApiV1HieraLevelData(IntegrationTestBase):
         self.assertIn("id", data)
         self.assertIn("data", data)
         self.assertNotIn("level_id", data)
+
+
+class HieraLevelDataAuthzIntegrationTests(IntegrationTestBase):
+    def _post_data(self, headers, key_id):
+        return self.client.post(
+            f"/api/v1/hiera/data/common/d1/{key_id}",
+            headers=headers,
+            json={"data": "x"},
+        )
+
+    def test_create_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self._post_data(nu.headers, f"key-{uuid.uuid4().hex}")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_static_permission_passes_gate(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_LEVEL_DATA_CREATE])
+        resp = self._post_data(nu.headers, f"key-{uuid.uuid4().hex}")
+        self.assertNotEqual(resp.status_code, 403)
+
+    def test_per_key_permission_allows_matching_key(self):
+        key_id = f"key-{uuid.uuid4().hex}"
+        perm = PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC.format(key_id=key_id)
+        nu = self._make_non_admin(permissions=[perm])
+        resp = self._post_data(nu.headers, key_id)
+        self.assertNotEqual(resp.status_code, 403)
+
+    def test_per_key_permission_blocks_other_key(self):
+        key_id = f"key-{uuid.uuid4().hex}"
+        other_key = f"key-{uuid.uuid4().hex}"
+        perm = PERM_HIERA_LEVEL_DATA_CREATE_DYNAMIC.format(key_id=key_id)
+        nu = self._make_non_admin(permissions=[perm])
+        resp = self._post_data(nu.headers, other_key)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/hiera/data", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_GET])
+        resp = self.client.get("/api/v1/hiera/data", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
 
 
 if __name__ == "__main__":

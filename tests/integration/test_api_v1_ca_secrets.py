@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import uuid
+from pyppetdb.authorize import PERM_CA_GET
+from pyppetdb.authorize import PERM_CA_SECRETS_CREATE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -172,3 +174,51 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         self.client.delete(
             f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
         )
+
+
+class CaSecretsAuthzIntegrationTests(IntegrationTestBase):
+    def test_create_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/ca/secrets/SEC{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"secret": "x"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_CA_SECRETS_CREATE])
+        secret_id = f"SEC{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/ca/secrets/{secret_id}",
+            headers=nu.headers,
+            json={"secret": "x"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["ca_secrets"].delete_many, {"id": secret_id})
+
+    def test_update_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/ca/secrets/SEC{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/ca/secrets/SEC{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_denied_without_ca_get(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/ca/secrets", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_granted_with_ca_get(self):
+        nu = self._make_non_admin(permissions=[PERM_CA_GET])
+        resp = self.client.get("/api/v1/ca/secrets", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
