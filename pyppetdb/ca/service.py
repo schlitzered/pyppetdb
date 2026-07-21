@@ -206,7 +206,7 @@ class CAService:
         if not regex_list:
             return
         for san in sans:
-            if not any(re.match(pattern, san) for pattern in regex_list):
+            if not any(re.fullmatch(pattern, san) for pattern in regex_list):
                 raise QueryParamValidationError(
                     msg=f"SAN '{san}' does not match any allowed patterns"
                 )
@@ -428,6 +428,10 @@ class CAService:
             ],
         )
 
+        honor_csr_sans = bool(ca_config.san_validation) or bool(
+            space_config.san_validation
+        )
+
         if csr_pem:
             try:
                 return await asyncio.get_running_loop().run_in_executor(
@@ -442,6 +446,7 @@ class CAService:
                     None,
                     allowed_exts,
                     injected_sans,
+                    honor_csr_sans,
                 )
             except ValueError as e:
                 raise QueryParamValidationError(msg=f"Failed to sign CSR: {e}")
@@ -936,9 +941,11 @@ class CAService:
         self, ca_id: str, payload: CAAuthorityPut, fields: list
     ) -> CAAuthorityGet:
         data_internal = payload.model_dump(exclude_unset=True)
-        return await self._crud_authorities.update(
+        result = await self._crud_authorities.update(
             _id=ca_id, payload=CAAuthorityPutInternal(**data_internal), fields=fields
         )
+        self._cache.pop(ca_id, None)
+        return result
 
     async def delete_authority(self, ca_id: str) -> None:
         # Check if authority is in use by spaces

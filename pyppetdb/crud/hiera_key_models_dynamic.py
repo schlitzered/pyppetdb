@@ -89,6 +89,9 @@ class CrudHieraModelsDynamicAdapter:
                 f"Unexpected error in hiera_key_models_dynamic change stream: {err}"
             )
 
+        await asyncio.sleep(5)
+        asyncio.create_task(self._watch_changes())
+
     async def _handle_change(self, change):
         operation = change["operationType"]
         doc_id = change["documentKey"]["_id"]

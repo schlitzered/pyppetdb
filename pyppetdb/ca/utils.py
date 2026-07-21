@@ -373,6 +373,7 @@ class CAUtils:
         serial_number: Optional[int] = None,
         allowed_extensions: Optional[List[str]] = None,
         injected_sans: Optional[List[str]] = None,
+        honor_csr_sans: bool = True,
     ) -> bytes:
         if isinstance(ca_cert, bytes):
             ca_cert = x509.load_pem_x509_certificate(
@@ -465,7 +466,7 @@ class CAUtils:
         except x509.ExtensionNotFound:
             pass
 
-        if san_extension:
+        if san_extension and honor_csr_sans:
             san_values = list(
                 san_extension.value,
             )
@@ -509,7 +510,11 @@ class CAUtils:
             extval=x509.SubjectAlternativeName(
                 general_names=san_values,
             ),
-            critical=san_extension.critical if san_extension else False,
+            critical=(
+                san_extension.critical
+                if (san_extension and honor_csr_sans)
+                else False
+            ),
         )
 
         if allowed_extensions:
@@ -546,6 +551,7 @@ class CAUtils:
         serial_number: Optional[int] = None,
         allowed_extensions: Optional[List[str]] = None,
         injected_sans: Optional[List[str]] = None,
+        honor_csr_sans: bool = True,
     ) -> bytes:
         if isinstance(csr, bytes):
             csr = x509.load_pem_x509_csr(
@@ -564,6 +570,7 @@ class CAUtils:
             serial_number=serial_number,
             allowed_extensions=allowed_extensions,
             injected_sans=injected_sans,
+            honor_csr_sans=honor_csr_sans,
         )
 
     @staticmethod

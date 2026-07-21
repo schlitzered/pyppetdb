@@ -116,6 +116,48 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, b"PEMDATA")
         self.crud._get.assert_awaited_once()
 
+    def test_authority_get_model_excludes_private_key(self):
+        from pyppetdb.model.ca_authorities import (
+            CAAuthorityGet,
+            CAAuthorityPostInternal,
+        )
+
+        self.assertNotIn("private_key_encrypted", CAAuthorityGet.model_fields)
+        self.assertIn("private_key_encrypted", CAAuthorityPostInternal.model_fields)
+
+    def test_process_doc_strips_private_key_but_caches_it(self):
+        from pyppetdb.crud.ca_authorities import CrudCAAuthoritiesCache
+
+        self.mock_protector.decrypt_string.return_value = "PEMDATA"
+        cache = CrudCAAuthoritiesCache(
+            log=self.log,
+            coll=self.mock_coll,
+            protector=self.mock_protector,
+        )
+        doc = {
+            "_id": "objid1",
+            "id": "ca1",
+            "cn": "CA1",
+            "issuer": "CA1",
+            "serial_number": "1",
+            "not_before": datetime.now(timezone.utc),
+            "not_after": datetime.now(timezone.utc),
+            "fingerprint": {"sha256": "abc", "sha1": "def", "md5": "ghi"},
+            "certificate": "CERT",
+            "private_key_encrypted": "ENC",
+            "internal": True,
+            "chain": [],
+            "status": "active",
+        }
+
+        obj = cache._process_doc(doc)
+
+        self.assertFalse(hasattr(obj, "private_key_encrypted"))
+        self.assertNotIn("private_key_encrypted", obj.model_dump())
+        self.assertNotIn("private_key_encrypted", obj.model_dump_json())
+        self.assertEqual(cache.key_cache["ca1"], b"PEMDATA")
+        self.mock_protector.decrypt_string.assert_called_once_with("ENC")
+
     async def test_sync_crl_data_success(self):
         now = datetime.now(timezone.utc)
         self.mock_coll.find_one = AsyncMock(
