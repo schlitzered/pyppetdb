@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import uuid
+from pyppetdb.authorize import PERM_NODES_GROUPS_CREATE
+from pyppetdb.authorize import PERM_NODES_GROUPS_GET
 from tests.integration.base import IntegrationTestBase
 
 
@@ -92,3 +94,53 @@ class ApiV1NodesGroupsIntegrationTests(IntegrationTestBase):
             f"/api/v1/nodes_groups/{group_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 404)
+
+
+class NodesGroupsAuthzIntegrationTests(IntegrationTestBase):
+    def test_create_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/nodes_groups/ng-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"filters": [], "teams": []},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_granted_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_NODES_GROUPS_CREATE])
+        group_id = f"ng-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/nodes_groups/{group_id}",
+            headers=nu.headers,
+            json={"filters": [], "teams": []},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["nodes_groups"].delete_many, {"id": group_id})
+
+    def test_update_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/nodes_groups/ng-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"filters": [], "teams": []},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/nodes_groups/ng-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            f"/api/v1/nodes_groups/ng-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_search_granted_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_NODES_GROUPS_GET])
+        resp = self.client.get("/api/v1/nodes_groups", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)

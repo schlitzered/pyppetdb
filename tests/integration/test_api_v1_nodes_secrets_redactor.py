@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import uuid
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_CREATE
+from pyppetdb.authorize import PERM_NODES_SECRETS_REDACTOR_DELETE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -64,3 +66,53 @@ class ApiV1NodesSecretsRedactorIntegrationTests(IntegrationTestBase):
             params={"secret_id": secret_id},
         )
         self.assertEqual(resp.json()["meta"]["result_size"], 0)
+
+
+class NodesSecretsRedactorAuthzIntegrationTests(IntegrationTestBase):
+    def test_create_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            "/api/v1/nodes_secrets_redactor",
+            headers=nu.headers,
+            json={"value": "denied"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_granted_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_NODES_SECRETS_REDACTOR_CREATE])
+        resp = self.client.post(
+            "/api/v1/nodes_secrets_redactor",
+            headers=nu.headers,
+            json={"value": f"granted-{uuid.uuid4().hex}"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(
+            self._db["nodes_secrets_redactor"].delete_many,
+            {"id": resp.json()["id"]},
+        )
+
+    def test_delete_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/nodes_secrets_redactor/{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_granted_with_permission(self):
+        secret_id = uuid.uuid4().hex
+        self._db["nodes_secrets_redactor"].insert_one({"id": secret_id})
+        self.addCleanup(
+            self._db["nodes_secrets_redactor"].delete_many, {"id": secret_id}
+        )
+        nu = self._make_non_admin(permissions=[PERM_NODES_SECRETS_REDACTOR_DELETE])
+        resp = self.client.delete(
+            f"/api/v1/nodes_secrets_redactor/{secret_id}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_search_requires_only_authentication(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            "/api/v1/nodes_secrets_redactor", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 200)

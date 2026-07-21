@@ -14,6 +14,8 @@
 
 import unittest
 
+import uuid
+from pyppetdb.authorize import PERM_HIERA_GET
 from tests.integration.base import IntegrationTestBase
 
 
@@ -510,6 +512,22 @@ class TestApiV1HieraLookup(IntegrationTestBase):
         )
         # Should fail to find or return different value
         self.assertEqual(response.status_code, 422)
+
+
+class HieraLookupAuthzIntegrationTests(IntegrationTestBase):
+    def test_lookup_denied_without_permission(self):
+        nu = self._make_non_admin()
+        resp = self.client.get(
+            f"/api/v1/hiera/lookup/key-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_lookup_gate_passes_with_permission(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_GET])
+        resp = self.client.get(
+            f"/api/v1/hiera/lookup/key-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertNotEqual(resp.status_code, 403)
 
 
 if __name__ == "__main__":

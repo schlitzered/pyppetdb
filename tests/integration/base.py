@@ -14,7 +14,9 @@
 
 import atexit
 import unittest
+import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from argon2 import PasswordHasher
@@ -106,3 +108,50 @@ class IntegrationTestBase(unittest.TestCase):
 
     def setUp(self):
         self.client.cookies.clear()
+
+    def _make_non_admin(self, permissions=None):
+        suffix = uuid.uuid4().hex[:8]
+        user_id = f"user-{suffix}"
+        cred_id = f"cred-{suffix}"
+        team_id = f"team-{suffix}"
+        secret = f"secret-{suffix}"
+        self._db["users"].insert_one(
+            {
+                "id": user_id,
+                "name": user_id,
+                "email": f"{user_id}@example.com",
+                "admin": False,
+                "backend": "internal",
+            }
+        )
+        self._db["users_credentials"].insert_one(
+            {
+                "id": cred_id,
+                "secret": self._ph.hash(secret),
+                "created": datetime.now(timezone.utc),
+                "owner": user_id,
+                "description": "non-admin test credential",
+            }
+        )
+        self._db["teams"].insert_one(
+            {
+                "id": team_id,
+                "name": team_id,
+                "users": [user_id],
+                "permissions": list(permissions or []),
+            }
+        )
+
+        def _cleanup():
+            self._db["users"].delete_many({"id": user_id})
+            self._db["users_credentials"].delete_many({"id": cred_id})
+            self._db["teams"].delete_many({"id": team_id})
+
+        self.addCleanup(_cleanup)
+        return SimpleNamespace(
+            user_id=user_id,
+            cred_id=cred_id,
+            team_id=team_id,
+            secret=secret,
+            headers={"x-secret-id": cred_id, "x-secret": secret},
+        )

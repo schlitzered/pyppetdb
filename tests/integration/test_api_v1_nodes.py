@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import uuid
+from pyppetdb.authorize import PERM_NODES_CREATE
 from tests.integration.base import IntegrationTestBase
 
 
@@ -126,3 +127,110 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         results = {item["value"]: item["count"] for item in resp.json()["result"]}
         self.assertEqual(results["prod"], 2)
         self.assertEqual(results["dev"], 1)
+
+
+class ApiV1NodesAuthzIntegrationTests(IntegrationTestBase):
+    def setUp(self):
+        super().setUp()
+        self.ident = self._make_non_admin(permissions=[PERM_NODES_CREATE])
+        self.pfx = uuid.uuid4().hex[:8]
+        self.node_group_allowed = f"ng-allowed-{self.pfx}"
+        self.node_group_denied = f"ng-denied-{self.pfx}"
+        self.node_allowed = f"node-allowed-{self.pfx}"
+        self.node_denied = f"node-denied-{self.pfx}"
+        self.created_node = f"node-created-{self.pfx}"
+
+        self._db["nodes_groups"].insert_many(
+            [
+                {
+                    "id": self.node_group_allowed,
+                    "teams": [self.ident.team_id],
+                    "nodes": [],
+                },
+                {
+                    "id": self.node_group_denied,
+                    "teams": [f"foreign-{self.pfx}"],
+                    "nodes": [],
+                },
+            ]
+        )
+        self._db["nodes"].insert_many(
+            [
+                {
+                    "id": self.node_allowed,
+                    "environment": "production",
+                    "disabled": False,
+                    "facts": {},
+                    "node_groups": [self.node_group_allowed],
+                },
+                {
+                    "id": self.node_denied,
+                    "environment": "production",
+                    "disabled": False,
+                    "facts": {},
+                    "node_groups": [self.node_group_denied],
+                },
+            ]
+        )
+        self.addCleanup(
+            self._db["nodes_groups"].delete_many,
+            {"id": {"$in": [self.node_group_allowed, self.node_group_denied]}},
+        )
+        self.addCleanup(
+            self._db["nodes"].delete_many,
+            {
+                "id": {
+                    "$in": [self.node_allowed, self.node_denied, self.created_node]
+                }
+            },
+        )
+
+    def test_unauthenticated_is_rejected(self):
+        resp = self.client.get(f"/api/v1/nodes/{self.node_allowed}")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_granted_permission_allows_create(self):
+        resp = self.client.post(
+            f"/api/v1/nodes/{self.created_node}",
+            headers=self.ident.headers,
+            json={"disabled": False},
+        )
+        self.assertEqual(resp.status_code, 201)
+
+    def test_missing_permission_is_forbidden(self):
+        resp = self.client.delete(
+            f"/api/v1/nodes/{self.node_allowed}", headers=self.ident.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertIsNotNone(self._db["nodes"].find_one({"id": self.node_allowed}))
+
+    def test_node_group_scoping_get_allowed(self):
+        resp = self.client.get(
+            f"/api/v1/nodes/{self.node_allowed}", headers=self.ident.headers
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["id"], self.node_allowed)
+
+    def test_node_group_scoping_get_denied(self):
+        resp = self.client.get(
+            f"/api/v1/nodes/{self.node_denied}", headers=self.ident.headers
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_node_group_scoping_search(self):
+        resp = self.client.get(
+            "/api/v1/nodes",
+            headers=self.ident.headers,
+            params={"node_id": f"node-(allowed|denied)-{self.pfx}"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        ids = {n["id"] for n in resp.json()["result"]}
+        self.assertIn(self.node_allowed, ids)
+        self.assertNotIn(self.node_denied, ids)
+
+    def test_admin_is_not_scoped(self):
+        resp = self.client.get(
+            f"/api/v1/nodes/{self.node_denied}",
+            headers={"x-secret-id": "test-cred", "x-secret": "test-secret"},
+        )
+        self.assertEqual(resp.status_code, 200)

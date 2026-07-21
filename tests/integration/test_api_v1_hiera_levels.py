@@ -14,6 +14,9 @@
 
 import unittest
 
+import uuid
+from pyppetdb.authorize import PERM_HIERA_LEVELS_CREATE
+from pyppetdb.authorize import PERM_HIERA_GET
 from tests.integration.base import IntegrationTestBase
 
 
@@ -276,6 +279,55 @@ class TestApiV1HieraLevels(IntegrationTestBase):
         self.assertIn("id", data)
         self.assertIn("priority", data)
         self.assertNotIn("description", data)
+
+
+class HieraLevelsAuthzIntegrationTests(IntegrationTestBase):
+    def test_create_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.post(
+            f"/api/v1/hiera/levels/lvl-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={"priority": 100},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_create_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_LEVELS_CREATE])
+        level_id = f"lvl-{uuid.uuid4().hex}"
+        priority = 1_000_000 + (uuid.uuid4().int % 1_000_000)
+        resp = self.client.post(
+            f"/api/v1/hiera/levels/{level_id}",
+            headers=nu.headers,
+            json={"priority": priority},
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.addCleanup(self._db["hiera_levels"].delete_many, {"id": level_id})
+
+    def test_update_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.put(
+            f"/api/v1/hiera/levels/lvl-{uuid.uuid4().hex}",
+            headers=nu.headers,
+            json={},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_delete_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.delete(
+            f"/api/v1/hiera/levels/lvl-{uuid.uuid4().hex}", headers=nu.headers
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_denied(self):
+        nu = self._make_non_admin()
+        resp = self.client.get("/api/v1/hiera/levels", headers=nu.headers)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_read_granted(self):
+        nu = self._make_non_admin(permissions=[PERM_HIERA_GET])
+        resp = self.client.get("/api/v1/hiera/levels", headers=nu.headers)
+        self.assertEqual(resp.status_code, 200)
 
 
 if __name__ == "__main__":
