@@ -15,6 +15,7 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+import re
 from fastapi import HTTPException, Request
 from pyppetdb.controller.api.v1.jobs_definitions import ControllerApiV1JobsDefinitions
 from pyppetdb.model.jobs_definitions import (
@@ -199,3 +200,17 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
             pattern="^JOBS:JOB:def1:CREATE$"
         )
         self.assertEqual(result, {"deleted": "def1"})
+
+    async def test_delete_escapes_regex_metacharacters(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.delete = AsyncMock(return_value={"deleted": ".*"})
+        self.mock_crud_teams.drop_permissions_by_pattern = AsyncMock()
+
+        await self.controller.delete(request=mock_request, definition_id=".*")
+
+        pattern = self.mock_crud_teams.drop_permissions_by_pattern.call_args.kwargs[
+            "pattern"
+        ]
+        self.assertIn(re.escape(".*"), pattern)
+        self.assertNotIn("^JOBS:JOB:.*:CREATE$", pattern)

@@ -184,7 +184,7 @@ class ControllerApiV1JobsDefinitions:
         )
         result = await self.crud_jobs_definitions.delete(_id=definition_id)
         await self._crud_teams.drop_permissions_by_pattern(
-            pattern=f"{PATTERN_JOBS_JOB.format(definition_id=definition_id)}CREATE$"
+            pattern=f"{PATTERN_JOBS_JOB.format(definition_id=re.escape(definition_id))}CREATE$"
         )
         return result
 
