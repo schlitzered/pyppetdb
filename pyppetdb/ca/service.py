@@ -25,6 +25,7 @@ import ssl
 import tempfile
 import httpx
 import socket
+from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -100,6 +101,19 @@ class CAService:
         )
         self._cache = {}
         self._cache_ttl = 3600  # 1 hour
+        self._revocation_listeners = []
+
+    def add_revocation_listener(self, callback) -> None:
+        self._revocation_listeners.append(callback)
+
+    def _notify_revocation(self, serial: str) -> None:
+        for callback in self._revocation_listeners:
+            try:
+                callback(serial)
+            except Exception as e:
+                self.log.error(
+                    f"Revocation listener failed for serial '{serial}': {e}"
+                )
 
     @property
     def log(self):
@@ -147,6 +161,7 @@ class CAService:
             configs=[ca_config, space_config],
             ca_id=ca_id,
             space_id=space_id,
+            enforce_rfc1123=enforce_rfc1123,
         )
 
     async def _validate_csr_sans(
@@ -156,6 +171,7 @@ class CAService:
         configs: list[CAValidationConfig],
         ca_id: str,
         space_id: str,
+        enforce_rfc1123: bool = False,
     ):
         try:
             san_ext = csr.extensions.get_extension_for_class(
@@ -164,6 +180,10 @@ class CAService:
             sans = san_ext.value.get_values_for_type(x509.DNSName)
         except x509.ExtensionNotFound:
             sans = []
+
+        honor_csr_sans = any(config.san_validation for config in configs)
+        if enforce_rfc1123 and honor_csr_sans and sans:
+            self._validate_sans_rfc1123(sans)
 
         for config in configs:
             if not config.san_validation:
@@ -189,6 +209,14 @@ class CAService:
                     cn=cn,
                     sans=sans,
                     script_checks=san_val.script_checks,
+                )
+
+    @staticmethod
+    def _validate_sans_rfc1123(sans: list[str]):
+        for san in sans:
+            if not RE_RFC1123.match(san):
+                raise QueryParamValidationError(
+                    msg=f"SAN '{san}' does not follow strict RFC 1123 (lowercase) format"
                 )
 
     @staticmethod
@@ -293,9 +321,9 @@ class CAService:
         if config.body_template:
             try:
                 # Basic template substitution
-                template_data = config.body_template.replace("{{cn}}", cn).replace(
-                    "{{sans}}", json.dumps(sans)
-                )
+                template_data = config.body_template.replace(
+                    "{{cn}}", json.dumps(cn)[1:-1]
+                ).replace("{{sans}}", json.dumps(sans))
                 body = json.loads(template_data)
             except Exception as e:
                 self.log.error(f"Failed to parse HTTP body template: {e}")
@@ -307,7 +335,7 @@ class CAService:
             url = config.url.format(
                 ca_id=ca_id,
                 space_id=space_id,
-                cert_cn=cn,
+                cert_cn=quote(cn, safe=""),
             )
         except Exception as e:
             self.log.error(f"Failed to format HTTP validation URL '{config.url}': {e}")
@@ -821,10 +849,11 @@ class CAService:
                 ),
                 fields=[],
             )
-            return result
         except ResourceNotFound:
             # If not found with the $ne filter, it might already be revoked
-            return await self._crud_certificates.get(_id, fields=[])
+            result = await self._crud_certificates.get(_id, fields=[])
+        self._notify_revocation(_id)
+        return result
 
     async def renew_certificate(self, space_id: str, cn: str) -> CACertificateGet:
         try:
@@ -986,12 +1015,21 @@ class CAService:
     async def update_certificate_status_by_ca(
         self, ca_id: str, cert_id: str, payload: CACertificatePut, fields: list
     ) -> CACertificateGet:
-        if payload.status == "revoked":
-            return await self.revoke_certificate(_id=cert_id)
-        else:
+        if payload.status != "revoked":
             raise QueryParamValidationError(
                 msg=f"Invalid transition to {payload.status} for active certificate"
             )
+        try:
+            cert = await self._crud_certificates.get(cert_id, fields=["ca_id"])
+        except ResourceNotFound:
+            raise ResourceNotFound(
+                details=f"Certificate '{cert_id}' not found for CA '{ca_id}'"
+            )
+        if str(cert.ca_id) != str(ca_id):
+            raise ResourceNotFound(
+                details=f"Certificate '{cert_id}' not found for CA '{ca_id}'"
+            )
+        return await self.revoke_certificate(_id=cert_id)
 
     async def delete_certificate(self, space_id: str, cn: str) -> None:
         await self._crud_certificates.delete_by_cn(space_id=space_id, cn=cn)

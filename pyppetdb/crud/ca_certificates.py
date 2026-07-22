@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import datetime
 import logging
 from typing import Optional
+from typing import Protocol
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import (
     CACertificateGet,
     CACertificateGetMulti,
@@ -32,11 +35,81 @@ from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import DataDelete
 
 
+class CacheInvalidationListener(Protocol):
+    def invalidate_serial(self, serial: str) -> None: ...
+
+    def invalidate_object_id(self, object_id: str) -> None: ...
+
+
+class CertRevocationWatcher:
+    def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
+        self._log = log
+        self._coll = coll
+        self._listeners: list[CacheInvalidationListener] = []
+        self._initialized = False
+
+    def add_listener(self, listener: CacheInvalidationListener) -> None:
+        self._listeners.append(listener)
+
+    async def run(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
+        asyncio.create_task(self._watch_changes())
+
+    def _invalidate_serial(self, serial: str) -> None:
+        for listener in self._listeners:
+            try:
+                listener.invalidate_serial(serial)
+            except Exception as e:
+                self._log.error(
+                    f"Cert revocation listener failed for serial '{serial}': {e}"
+                )
+
+    def _invalidate_object_id(self, object_id: str) -> None:
+        for listener in self._listeners:
+            try:
+                listener.invalidate_object_id(object_id)
+            except Exception as e:
+                self._log.error(
+                    f"Cert revocation listener failed for _id '{object_id}': {e}"
+                )
+
+    def _handle_change(self, change: dict) -> None:
+        operation = change.get("operationType")
+        if operation in ("insert", "replace", "update"):
+            doc = change.get("fullDocument")
+            if not doc:
+                return
+            if doc.get("status") == "revoked":
+                serial = doc.get("id")
+                if serial is not None:
+                    self._invalidate_serial(serial)
+        elif operation == "delete":
+            self._invalidate_object_id(str(change["documentKey"]["_id"]))
+
+    async def _watch_changes(self) -> None:
+        try:
+            async with self._coll.watch(
+                full_document="updateLookup"
+            ) as change_stream:
+                self._log.info(
+                    "Change stream watcher started for cert revocation cache"
+                )
+                async for change in change_stream:
+                    self._handle_change(change)
+        except Exception as e:
+            self._log.error(f"Error in cert revocation change stream: {e}")
+            await asyncio.sleep(5)
+            asyncio.create_task(self._watch_changes())
+
+
 class CrudCACertificates(CrudMongo):
     def __init__(
         self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection
     ):
         super().__init__(config, log, coll, schema_model=CACertificateGet)
+        self._revocation_watcher = CertRevocationWatcher(log=log, coll=coll)
         self._indices.extend(
             [
                 pymongo.IndexModel(
@@ -80,8 +153,22 @@ class CrudCACertificates(CrudMongo):
             ]
         )
 
+    def add_revocation_listener(self, listener: CacheInvalidationListener) -> None:
+        self._revocation_watcher.add_listener(listener)
+
+    async def get_internal_object_id(
+        self, serial: str, cn: str, status: str = "signed"
+    ) -> str:
+        doc = await self.coll.find_one(
+            {"id": serial, "cn": cn, "status": status}, {"_id": 1}
+        )
+        if not doc:
+            raise ResourceNotFound(details=f"Certificate '{serial}' not found")
+        return str(doc["_id"])
+
     async def _create_index(self) -> None:
         await super()._create_index()
+        await self._revocation_watcher.run()
 
     async def update(
         self,

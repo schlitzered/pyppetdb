@@ -361,6 +361,20 @@ class AppContainer:
             crud_ca_certificates=self.crud_ca_certificates,
         )
 
+        self.ca_service.add_revocation_listener(
+            self.authorize_client_cert_puppet.invalidate_serial
+        )
+        self.ca_service.add_revocation_listener(
+            self.authorize_client_cert_pdb.invalidate_serial
+        )
+
+        self.crud_ca_certificates.add_revocation_listener(
+            self.authorize_client_cert_puppet
+        )
+        self.crud_ca_certificates.add_revocation_listener(
+            self.authorize_client_cert_pdb
+        )
+
     async def init(self):
         await self.crud_manager.init_all()
         await self._ensure_default_ca_setup()

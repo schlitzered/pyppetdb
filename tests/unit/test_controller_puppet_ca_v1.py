@@ -300,7 +300,10 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
                 "node1", mock_request, mock_bg
             )
         self.assertEqual(cm.exception.status_code, 500)
-        self.assertEqual(cm.exception.detail, "Autosign failed")
+        self.assertEqual(
+            cm.exception.detail, "Failed to process certificate request"
+        )
+        self.assertNotIn("Autosign failed", cm.exception.detail)
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_update_certificate_status_signed(self):
