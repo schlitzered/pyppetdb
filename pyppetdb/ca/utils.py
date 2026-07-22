@@ -204,6 +204,18 @@ class CAUtils:
                 extval=CAUtils._ca_key_usage(),
                 critical=True,
             )
+            .add_extension(
+                extval=x509.SubjectKeyIdentifier.from_public_key(
+                    private_key.public_key(),
+                ),
+                critical=False,
+            )
+            .add_extension(
+                extval=x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                    private_key.public_key(),
+                ),
+                critical=False,
+            )
             .sign(
                 private_key=private_key,
                 algorithm=hashes.SHA256(),
@@ -336,6 +348,18 @@ class CAUtils:
             .add_extension(
                 extval=CAUtils._ca_key_usage(),
                 critical=True,
+            )
+            .add_extension(
+                extval=x509.SubjectKeyIdentifier.from_public_key(
+                    private_key.public_key(),
+                ),
+                critical=False,
+            )
+            .add_extension(
+                extval=x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                    parent_cert.public_key(),
+                ),
+                critical=False,
             )
             .sign(
                 private_key=parent_key,
@@ -540,11 +564,28 @@ class CAUtils:
             ),
         )
 
+        builder = builder.add_extension(
+            extval=x509.SubjectKeyIdentifier.from_public_key(
+                public_key,
+            ),
+            critical=False,
+        )
+        builder = builder.add_extension(
+            extval=x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                ca_cert.public_key(),
+            ),
+            critical=False,
+        )
+
         if allowed_extensions:
             for extension in extensions:
                 if isinstance(
                     extension.value,
-                    x509.SubjectAlternativeName,
+                    (
+                        x509.SubjectAlternativeName,
+                        x509.SubjectKeyIdentifier,
+                        x509.AuthorityKeyIdentifier,
+                    ),
                 ):
                     continue
                 oid_str = extension.oid.dotted_string
@@ -700,6 +741,12 @@ class CAUtils:
         )
         builder = builder.next_update(
             next_update=next_update,
+        )
+        builder = builder.add_extension(
+            extval=x509.AuthorityKeyIdentifier.from_issuer_public_key(
+                ca_cert.public_key(),
+            ),
+            critical=False,
         )
 
         for cert in revoked_certs:
