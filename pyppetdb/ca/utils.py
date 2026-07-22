@@ -536,9 +536,7 @@ class CAUtils:
                 general_names=san_values,
             ),
             critical=(
-                san_extension.critical
-                if (san_extension and honor_csr_sans)
-                else False
+                san_extension.critical if (san_extension and honor_csr_sans) else False
             ),
         )
 

@@ -90,9 +90,7 @@ class CertRevocationWatcher:
 
     async def _watch_changes(self) -> None:
         try:
-            async with self._coll.watch(
-                full_document="updateLookup"
-            ) as change_stream:
+            async with self._coll.watch(full_document="updateLookup") as change_stream:
                 self._log.info(
                     "Change stream watcher started for cert revocation cache"
                 )

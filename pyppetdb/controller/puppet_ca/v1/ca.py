@@ -291,9 +291,7 @@ class ControllerPuppetCaV1CA:
             return Response(status_code=204)
         except Exception as e:
             self.log.error(f"Failed to delete certificate {nodename}: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to delete certificate"
-            )
+            raise HTTPException(status_code=500, detail="Failed to delete certificate")
 
     async def get_crl(
         self,
@@ -326,6 +324,4 @@ class ControllerPuppetCaV1CA:
             raise
         except Exception as e:
             self.log.error(f"Failed to renew certificate for {nodename}: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to renew certificate"
-            )
+            raise HTTPException(status_code=500, detail="Failed to renew certificate")

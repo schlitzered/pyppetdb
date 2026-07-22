@@ -111,9 +111,7 @@ class CAService:
             try:
                 callback(serial)
             except Exception as e:
-                self.log.error(
-                    f"Revocation listener failed for serial '{serial}': {e}"
-                )
+                self.log.error(f"Revocation listener failed for serial '{serial}': {e}")
 
     @property
     def log(self):
