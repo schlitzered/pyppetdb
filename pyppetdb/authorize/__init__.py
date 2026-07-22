@@ -170,6 +170,18 @@ class AuthorizeClientCert:
         await self._verify_certificate_registration(cert_info=cert_info)
         return cert_info
 
+    def invalidate_serial(self, serial: str) -> None:
+        self._cert_serial_cache.pop(serial, None)
+
+    def invalidate_object_id(self, object_id: str) -> None:
+        stale = [
+            serial
+            for serial, cached_id in list(self._cert_serial_cache.items())
+            if cached_id == object_id
+        ]
+        for serial in stale:
+            self._cert_serial_cache.pop(serial, None)
+
     async def _verify_certificate_registration(self, cert_info):
         if not self.config.ca.verifyCertificateRegistration:
             return
@@ -181,11 +193,11 @@ class AuthorizeClientCert:
             return
 
         try:
-            await self.crud_ca_certificates.get(
-                _id=serial, fields=["status", "cn"], status="signed", cn=cn
+            object_id = await self.crud_ca_certificates.get_internal_object_id(
+                serial=serial, cn=cn
             )
 
-            self._cert_serial_cache[serial] = True
+            self._cert_serial_cache[serial] = object_id
 
         except ResourceNotFound:
             self.log.error(

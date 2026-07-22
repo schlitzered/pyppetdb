@@ -200,6 +200,10 @@ class CAUtils:
                 ),
                 critical=True,
             )
+            .add_extension(
+                extval=CAUtils._ca_key_usage(),
+                critical=True,
+            )
             .sign(
                 private_key=private_key,
                 algorithm=hashes.SHA256(),
@@ -216,6 +220,20 @@ class CAUtils:
         )
 
         return cert_pem, key_pem
+
+    @staticmethod
+    def _ca_key_usage() -> x509.KeyUsage:
+        return x509.KeyUsage(
+            digital_signature=True,
+            content_commitment=False,
+            key_encipherment=False,
+            data_encipherment=False,
+            key_agreement=False,
+            key_cert_sign=True,
+            crl_sign=True,
+            encipher_only=False,
+            decipher_only=False,
+        )
 
     @staticmethod
     def sign_ca(
@@ -313,6 +331,10 @@ class CAUtils:
                     ca=True,
                     path_length=None,
                 ),
+                critical=True,
+            )
+            .add_extension(
+                extval=CAUtils._ca_key_usage(),
                 critical=True,
             )
             .sign(
@@ -514,9 +536,7 @@ class CAUtils:
                 general_names=san_values,
             ),
             critical=(
-                san_extension.critical
-                if (san_extension and honor_csr_sans)
-                else False
+                san_extension.critical if (san_extension and honor_csr_sans) else False
             ),
         )
 

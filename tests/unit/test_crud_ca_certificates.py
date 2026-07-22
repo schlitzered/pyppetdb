@@ -16,6 +16,19 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.errors import ResourceNotFound
+
+
+class _RecordingListener:
+    def __init__(self):
+        self.serials = []
+        self.object_ids = []
+
+    def invalidate_serial(self, serial):
+        self.serials.append(serial)
+
+    def invalidate_object_id(self, object_id):
+        self.object_ids.append(object_id)
 
 
 class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
@@ -33,3 +46,36 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         res = await self.crud.count({"status": "signed"})
         self.assertEqual(res, 10)
         self.mock_coll.count_documents.assert_called_once_with({"status": "signed"})
+
+    def test_add_revocation_listener_is_wired_to_watcher(self):
+        listener = _RecordingListener()
+        self.crud.add_revocation_listener(listener)
+
+        self.crud._revocation_watcher._handle_change(
+            {
+                "operationType": "update",
+                "documentKey": {"_id": "objid"},
+                "fullDocument": {"id": "serial-9", "status": "revoked"},
+            }
+        )
+        self.assertEqual(listener.serials, ["serial-9"])
+
+    async def test_get_internal_object_id_returns_stringified_id(self):
+        oid = MagicMock()
+        oid.__str__ = lambda self: "64f0c0ffee"
+        self.mock_coll.find_one = AsyncMock(return_value={"_id": oid})
+
+        result = await self.crud.get_internal_object_id(
+            serial="123", cn="node1.example.com"
+        )
+
+        self.assertEqual(result, "64f0c0ffee")
+        self.mock_coll.find_one.assert_called_once_with(
+            {"id": "123", "cn": "node1.example.com", "status": "signed"},
+            {"_id": 1},
+        )
+
+    async def test_get_internal_object_id_missing_raises_not_found(self):
+        self.mock_coll.find_one = AsyncMock(return_value=None)
+        with self.assertRaises(ResourceNotFound):
+            await self.crud.get_internal_object_id(serial="404", cn="ghost")

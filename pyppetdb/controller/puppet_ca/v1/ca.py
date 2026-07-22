@@ -208,7 +208,9 @@ class ControllerPuppetCaV1CA:
             raise
         except Exception as e:
             self.log.error(f"Failed to process CSR for {nodename}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(
+                status_code=500, detail="Failed to process certificate request"
+            )
 
     async def get_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
@@ -278,7 +280,9 @@ class ControllerPuppetCaV1CA:
             raise
         except Exception as e:
             self.log.error(f"Failed to update certificate status: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(
+                status_code=500, detail="Failed to update certificate status"
+            )
 
     async def delete_certificate(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
@@ -287,7 +291,7 @@ class ControllerPuppetCaV1CA:
             return Response(status_code=204)
         except Exception as e:
             self.log.error(f"Failed to delete certificate {nodename}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail="Failed to delete certificate")
 
     async def get_crl(
         self,
@@ -320,4 +324,4 @@ class ControllerPuppetCaV1CA:
             raise
         except Exception as e:
             self.log.error(f"Failed to renew certificate for {nodename}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail="Failed to renew certificate")

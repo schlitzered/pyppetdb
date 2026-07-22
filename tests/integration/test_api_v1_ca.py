@@ -364,6 +364,60 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self.assertIsNotNone(resp.json().get("crl"))
         self.assertIn("BEGIN X509 CRL", resp.json()["crl"]["crl_pem"])
 
+    def test_revoke_via_foreign_ca_endpoint_is_rejected(self):
+        ca_a = f"ca-a-{uuid.uuid4().hex}"
+        ca_b = f"ca-b-{uuid.uuid4().hex}"
+        space_b = f"space-b-{uuid.uuid4().hex}"
+        cert_b_id = str(uuid.uuid4().int)
+
+        self.client.post(
+            f"/api/v1/ca/authorities/{ca_a}",
+            headers=self._auth_headers(),
+            json={"cn": "CA A"},
+        )
+        self.client.post(
+            f"/api/v1/ca/authorities/{ca_b}",
+            headers=self._auth_headers(),
+            json={"cn": "CA B"},
+        )
+        self.client.post(
+            f"/api/v1/ca/spaces/{space_b}",
+            headers=self._auth_headers(),
+            json={"ca_id": ca_b},
+        )
+
+        self._db["ca_certificates"].insert_one(
+            {
+                "id": cert_b_id,
+                "space_id": space_b,
+                "ca_id": ca_b,
+                "cn": "victim-node",
+                "status": "signed",
+                "cert_uniqueness": f"{space_b}:victim-node",
+                "created": datetime.datetime.now(datetime.timezone.utc),
+            }
+        )
+        self.addCleanup(self._db["ca_certificates"].delete_many, {"id": cert_b_id})
+
+        resp = self.client.put(
+            f"/api/v1/ca/authorities/{ca_a}/certs/{cert_b_id}",
+            headers=self._auth_headers(),
+            json={"status": "revoked"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+        doc = self._db["ca_certificates"].find_one({"id": cert_b_id})
+        self.assertEqual(doc["status"], "signed")
+
+        resp = self.client.put(
+            f"/api/v1/ca/authorities/{ca_b}/certs/{cert_b_id}",
+            headers=self._auth_headers(),
+            json={"status": "revoked"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        doc = self._db["ca_certificates"].find_one({"id": cert_b_id})
+        self.assertEqual(doc["status"], "revoked")
+
     def test_search_certs_by_cn(self):
         ca_id = f"ca-search-test-{uuid.uuid4().hex}"
         space_id = f"space-search-test-{uuid.uuid4().hex}"
