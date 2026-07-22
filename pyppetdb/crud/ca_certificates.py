@@ -36,9 +36,9 @@ from pyppetdb.model.common import DataDelete
 
 
 class CacheInvalidationListener(Protocol):
-    def invalidate_serial(self, serial: str) -> None: ...
+    def invalidate_serial(self, serial: str) -> None: ...  # noqa: E704
 
-    def invalidate_object_id(self, object_id: str) -> None: ...
+    def invalidate_object_id(self, object_id: str) -> None: ...  # noqa: E704
 
 
 class CertRevocationWatcher:
