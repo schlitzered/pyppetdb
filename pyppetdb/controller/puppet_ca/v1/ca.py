@@ -255,7 +255,7 @@ class ControllerPuppetCaV1CA:
             if desired_state == "signed":
                 await asyncio.shield(
                     self._ca_service.update_certificate_status(
-                        "puppet-ca", nodename, CACertificatePut(status="signed")
+                        "puppet-ca", nodename, CACertificatePut(status="signed"), []
                     )
                 )
                 return Response(status_code=204)

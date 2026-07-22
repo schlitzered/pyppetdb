@@ -315,6 +315,29 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 204)
         self.mock_ca_service.update_certificate_status.assert_called_once()
 
+    async def test_update_certificate_status_signed_passes_all_required_args(self):
+        calls = []
+
+        async def fake_update(space_id, cn, payload, fields):
+            calls.append((space_id, cn, payload, fields))
+            return MagicMock()
+
+        self.mock_ca_service.update_certificate_status = AsyncMock(
+            side_effect=fake_update
+        )
+        mock_request = MagicMock()
+        mock_request.json = AsyncMock(return_value={"desired_state": "signed"})
+
+        response = await self.controller.update_certificate_status(
+            "node1", mock_request
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "puppet-ca")
+        self.assertEqual(calls[0][1], "node1")
+        self.assertEqual(calls[0][3], [])
+
     async def test_update_certificate_status_revoked(self):
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"desired_state": "revoked"})

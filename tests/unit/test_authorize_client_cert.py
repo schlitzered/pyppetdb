@@ -61,6 +61,21 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cert_info["serial"], "1")
         self.crud_ca_certificates.get_internal_object_id.assert_called_once()
 
+    async def test_registration_check_is_scoped_to_puppet_ca_space(self):
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "01",
+        }
+        self._setup_mock_cert("admin.example.com")
+        mock_request = self._create_mock_request(cert_dict)
+
+        await self.auth.get_cert_info(mock_request)
+
+        _, kwargs = self.crud_ca_certificates.get_internal_object_id.call_args
+        self.assertEqual(kwargs["space_id"], "puppet-ca")
+        self.assertEqual(kwargs["cn"], "admin.example.com")
+        self.assertEqual(kwargs["serial"], "1")
+
     async def test_get_cn_from_request_cache(self):
         cert_dict = {
             "subject": ((("commonName", "admin.example.com"),),),

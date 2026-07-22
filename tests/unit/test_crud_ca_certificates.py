@@ -66,16 +66,34 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll.find_one = AsyncMock(return_value={"_id": oid})
 
         result = await self.crud.get_internal_object_id(
-            serial="123", cn="node1.example.com"
+            serial="123", cn="node1.example.com", space_id="puppet-ca"
         )
 
         self.assertEqual(result, "64f0c0ffee")
         self.mock_coll.find_one.assert_called_once_with(
-            {"id": "123", "cn": "node1.example.com", "status": "signed"},
+            {
+                "id": "123",
+                "cn": "node1.example.com",
+                "space_id": "puppet-ca",
+                "status": "signed",
+            },
             {"_id": 1},
         )
+
+    async def test_get_internal_object_id_scopes_to_space(self):
+        self.mock_coll.find_one = AsyncMock(return_value=None)
+
+        with self.assertRaises(ResourceNotFound):
+            await self.crud.get_internal_object_id(
+                serial="123", cn="node1.example.com", space_id="other-space"
+            )
+
+        query, _ = self.mock_coll.find_one.call_args[0]
+        self.assertEqual(query["space_id"], "other-space")
 
     async def test_get_internal_object_id_missing_raises_not_found(self):
         self.mock_coll.find_one = AsyncMock(return_value=None)
         with self.assertRaises(ResourceNotFound):
-            await self.crud.get_internal_object_id(serial="404", cn="ghost")
+            await self.crud.get_internal_object_id(
+                serial="404", cn="ghost", space_id="puppet-ca"
+            )
