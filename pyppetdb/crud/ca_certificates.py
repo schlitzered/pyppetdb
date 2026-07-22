@@ -155,10 +155,11 @@ class CrudCACertificates(CrudMongo):
         self._revocation_watcher.add_listener(listener)
 
     async def get_internal_object_id(
-        self, serial: str, cn: str, status: str = "signed"
+        self, serial: str, cn: str, space_id: str, status: str = "signed"
     ) -> str:
         doc = await self.coll.find_one(
-            {"id": serial, "cn": cn, "status": status}, {"_id": 1}
+            {"id": serial, "cn": cn, "space_id": space_id, "status": status},
+            {"_id": 1},
         )
         if not doc:
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")

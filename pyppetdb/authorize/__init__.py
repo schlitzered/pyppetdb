@@ -38,6 +38,8 @@ from pyppetdb.model.users import UserGet
 
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 
+MTLS_AUTH_SPACE_ID = "puppet-ca"
+
 # CA Permissions
 PERM_CA_GET = "CA::GET"
 PERM_CA_AUTHORITIES_CREATE = "CA:AUTHORITIES:CREATE"
@@ -194,7 +196,7 @@ class AuthorizeClientCert:
 
         try:
             object_id = await self.crud_ca_certificates.get_internal_object_id(
-                serial=serial, cn=cn
+                serial=serial, cn=cn, space_id=MTLS_AUTH_SPACE_ID
             )
 
             self._cert_serial_cache[serial] = object_id
