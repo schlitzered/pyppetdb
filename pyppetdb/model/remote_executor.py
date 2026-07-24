@@ -43,6 +43,7 @@ class RemoteExecutorMsgBodyFinish(BaseModel):
 class RemoteExecutorMsgBodyHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid")
     running_job_ids: List[str]
+    max_jobs: int
 
 
 class RemoteExecutorMsgBodyStartJob(BaseModel):
@@ -94,6 +95,11 @@ RemoteExecutorMsgBodySubscribeLogs = RemoteExecutorMsgBodyJobId
 RemoteExecutorMsgBodyUnsubscribeLogs = RemoteExecutorMsgBodyJobId
 
 
+class RemoteExecutorMsgBodyShutdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str
+
+
 class RemoteExecutorMessage(BaseModel):
     msg_id: Optional[int] = None
     msg_type: Literal[
@@ -108,6 +114,7 @@ class RemoteExecutorMessage(BaseModel):
         "log_chunk_data",
         "subscribe_logs",
         "unsubscribe_logs",
+        "shutdown",
     ]
     msg_body: Union[
         RemoteExecutorMsgBodyLogMessage,
@@ -120,6 +127,7 @@ class RemoteExecutorMessage(BaseModel):
         RemoteExecutorMsgBodyGetLogChunk,
         RemoteExecutorMsgBodyLogChunkData,
         RemoteExecutorMsgBodyJobId,
+        RemoteExecutorMsgBodyShutdown,
     ]
 
     @model_validator(mode="after")
@@ -136,6 +144,7 @@ class RemoteExecutorMessage(BaseModel):
             "log_chunk_data": RemoteExecutorMsgBodyLogChunkData,
             "subscribe_logs": RemoteExecutorMsgBodySubscribeLogs,
             "unsubscribe_logs": RemoteExecutorMsgBodyUnsubscribeLogs,
+            "shutdown": RemoteExecutorMsgBodyShutdown,
         }
         expected_type = type_mapping.get(self.msg_type)
         if expected_type and not isinstance(self.msg_body, expected_type):

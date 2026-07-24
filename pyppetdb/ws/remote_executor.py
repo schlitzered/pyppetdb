@@ -37,6 +37,13 @@ from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunks
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunks
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunk
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunkData
+from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyShutdown
+
+
+class IncompatibleAgentError(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
 
 
 class RemoteExecutorLogHandler:
@@ -98,6 +105,16 @@ class RemoteExecutorJobManager:
         self._manager = manager
 
         self.active_job_ids: set[str] = set()
+        self._max_jobs: Optional[int] = None
+
+    def has_free_slot(self) -> bool:
+        if self._max_jobs is None:
+            return False
+        return len(self.active_job_ids) < self._max_jobs
+
+    async def next_scheduled(self) -> Optional[str]:
+        job = await self._crud_node_jobs.get_oldest_scheduled(node_id=self._node_id)
+        return job.job_id if job else None
 
     async def initialize(self):
         await self._cleanup_stale_jobs()
@@ -155,6 +172,7 @@ class RemoteExecutorJobManager:
         body: RemoteExecutorMsgBodyHeartbeat,
     ):
         self.active_job_ids = set(body.running_job_ids)
+        self._max_jobs = body.max_jobs
         await self._update_node_status()
 
     async def mark_all_jobs_failed(
@@ -265,6 +283,7 @@ class RemoteExecutorProtocol:
         self._heartbeat_interval = 30
 
         self._pending_agent_requests: Dict[str, asyncio.Future] = {}
+        self._fill_lock = asyncio.Lock()
 
     @property
     def pending_agent_requests(self):
@@ -277,8 +296,6 @@ class RemoteExecutorProtocol:
         await self._job_manager.initialize()
 
         try:
-            await self._dispatch_scheduled_jobs()
-
             while self._running:
                 data = await self._websocket.receive_text()
                 self._last_activity = time.time()
@@ -286,18 +303,21 @@ class RemoteExecutorProtocol:
         except WebSocketDisconnect:
             self._log.info(msg=f"Agent {self._node_id} disconnected")
             raise
+        except IncompatibleAgentError:
+            raise
         except Exception as e:
             self._log.error(msg=f"Error in protocol for {self._node_id}: {e}")
             raise
         finally:
             self._running = False
 
-    async def _dispatch_scheduled_jobs(self):
-        cursor = self._crud_node_jobs.coll.find(
-            filter={"node_id": self._node_id, "status": "scheduled"}
-        )
-        async for doc in cursor:
-            await self.dispatch_job(job_id=doc["job_id"])
+    async def fill_slots(self):
+        async with self._fill_lock:
+            while self._running and self._job_manager.has_free_slot():
+                job_id = await self._job_manager.next_scheduled()
+                if not job_id:
+                    break
+                await self.dispatch_job(job_id=job_id)
 
     async def dispatch_job(self, job_id: str):
         if not self._running:
@@ -340,10 +360,12 @@ class RemoteExecutorProtocol:
                 )
             elif msg_type == "finish" and isinstance(body, RemoteExecutorMsgBodyFinish):
                 await self._job_manager.handle_finish(body=body)
+                asyncio.create_task(self.fill_slots())
             elif msg_type == "heartbeat" and isinstance(
                 body, RemoteExecutorMsgBodyHeartbeat
             ):
                 await self._job_manager.handle_heartbeat(body=body)
+                asyncio.create_task(self.fill_slots())
             elif msg_type == "log_chunks" and isinstance(
                 body, RemoteExecutorMsgBodyLogChunks
             ):
@@ -361,7 +383,14 @@ class RemoteExecutorProtocol:
                 )
 
         except ValidationError as e:
-            self._log.error(msg=f"Validation error from {self._node_id}: {e}")
+            reason = "incompatible or malformed message; please upgrade the agent"
+            self._log.error(
+                msg=f"Rejecting connection from {self._node_id}: "
+                f"{e.error_count()} validation error(s) on inbound message; "
+                f"sending shutdown and closing connection"
+            )
+            await self.send_shutdown(reason=reason)
+            raise IncompatibleAgentError(reason)
         except Exception as e:
             self._log.error(msg=f"Error handling message from {self._node_id}: {e}")
 
@@ -414,6 +443,29 @@ class RemoteExecutorProtocol:
             msg_type="get_log_chunk",
             body=body,
         )
+
+    async def _send_raw(
+        self,
+        msg_type: str,
+        body: BaseModel,
+    ):
+        msg = RemoteExecutorMessage(
+            msg_type=msg_type,
+            msg_body=body,
+        )
+        await self._websocket.send_text(data=msg.model_dump_json())
+        self._last_activity = time.time()
+
+    async def send_shutdown(self, reason: str):
+        try:
+            await self._send_raw(
+                msg_type="shutdown",
+                body=RemoteExecutorMsgBodyShutdown(reason=reason),
+            )
+        except Exception as e:
+            self._log.warning(
+                msg=f"Failed to send shutdown to {self._node_id}: {e}"
+            )
 
     async def _send_message(
         self,
@@ -514,7 +566,7 @@ class WsRemoteExecutor:
                         job_id = doc.get("job_id")
                         if node_id in self._local_protocols and job_id:
                             protocol = self._local_protocols[node_id]
-                            asyncio.create_task(protocol.dispatch_job(job_id=job_id))
+                            asyncio.create_task(protocol.fill_slots())
             except Exception as e:
                 self._log.error(f"Error in Change Stream watcher: {e}")
                 await asyncio.sleep(5)
@@ -609,6 +661,9 @@ class WsRemoteExecutor:
         except ClientCertError as e:
             self._log.error(msg=f"WS remote_executor Auth failed: {e.detail}")
             await websocket.close(code=4003)
+        except IncompatibleAgentError as e:
+            await self._handle_disconnect(node_id)
+            await websocket.close(code=4001, reason=e.reason)
         except WebSocketDisconnect:
             await self._handle_disconnect(node_id)
         except Exception as e:

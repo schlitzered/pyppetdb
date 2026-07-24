@@ -88,6 +88,18 @@ Logs are streamed from the agent through pyppetdb to the API in real time (see
 [Architecture → Secure Job Execution](architecture.md#4-secure-job-execution-inter-instance-websocket)).
 Secret redaction is applied to job logs as well, so secrets never leak into the UI.
 
+## Concurrency and queueing
+
+Each agent reports a concurrency limit (its `max_jobs`) to the server. pyppetdb dispatches per-node
+executions to an agent only while it has a free slot; any excess stays `scheduled` in the queue and
+is dispatched automatically, oldest-first, as running jobs finish and slots free up. Agents are
+never overloaded, and no job is silently dropped.
+
+!!! warning "Queue wait is bounded by `jobs_expireSeconds`"
+    A per-node execution that waits in the `scheduled` state longer than `jobs_expireSeconds`
+    (default 3600) is marked `failed` by the expiry worker. If you expect long queues, raise
+    `jobs_expireSeconds` accordingly.
+
 ## Permissions
 
 Triggering jobs is governed by RBAC. In addition to the static `JOBS:JOB::CREATE` permission, each

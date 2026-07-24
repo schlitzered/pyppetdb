@@ -15,6 +15,9 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 
+from pydantic import ValidationError
+
+from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyHeartbeat
 from pyppetdb.ws.remote_executor import RemoteExecutorJobManager
 
 
@@ -64,12 +67,54 @@ class TestRemoteExecutorJobManager(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("job1", self.jm.active_job_ids)
 
     async def test_handle_heartbeat_syncs_active_jobs(self):
-        await self.jm.handle_heartbeat(MagicMock(running_job_ids=["a", "b"]))
+        await self.jm.handle_heartbeat(
+            MagicMock(running_job_ids=["a", "b"], max_jobs=10)
+        )
 
         self.assertEqual(self.jm.active_job_ids, {"a", "b"})
         args = self.crud_nodes.update_remote_agent_current_job_id.call_args[1]
         self.assertEqual(args["node_id"], "node1")
         self.assertEqual(set(args["current_job_id"]), {"a", "b"})
+
+    async def test_handle_heartbeat_sets_max_jobs(self):
+        await self.jm.handle_heartbeat(MagicMock(running_job_ids=["a"], max_jobs=5))
+
+        self.assertEqual(self.jm._max_jobs, 5)
+        self.assertEqual(self.jm.active_job_ids, {"a"})
+
+    async def test_has_free_slot_unknown_capacity(self):
+        self.jm._max_jobs = None
+        self.jm.active_job_ids = set()
+
+        self.assertFalse(self.jm.has_free_slot())
+
+    async def test_has_free_slot_boundary(self):
+        self.jm._max_jobs = 2
+
+        self.jm.active_job_ids = {"a"}
+        self.assertTrue(self.jm.has_free_slot())
+
+        self.jm.active_job_ids = {"a", "b"}
+        self.assertFalse(self.jm.has_free_slot())
+
+    async def test_next_scheduled_returns_job_id(self):
+        self.crud_node_jobs.get_oldest_scheduled = AsyncMock(
+            return_value=MagicMock(job_id="jobX")
+        )
+
+        result = await self.jm.next_scheduled()
+
+        self.assertEqual(result, "jobX")
+        self.crud_node_jobs.get_oldest_scheduled.assert_awaited_once_with(
+            node_id="node1"
+        )
+
+    async def test_next_scheduled_returns_none(self):
+        self.crud_node_jobs.get_oldest_scheduled = AsyncMock(return_value=None)
+
+        result = await self.jm.next_scheduled()
+
+        self.assertIsNone(result)
 
     async def test_mark_job_failed(self):
         self.jm.active_job_ids = {"job1", "job2"}
@@ -116,6 +161,19 @@ class TestRemoteExecutorJobManager(unittest.IsolatedAsyncioTestCase):
 
         self.crud_node_jobs.update_status.assert_not_called()
         self.manager.job_finished.assert_not_called()
+
+
+class TestHeartbeatModel(unittest.TestCase):
+    def test_validates_with_max_jobs(self):
+        body = RemoteExecutorMsgBodyHeartbeat.model_validate(
+            {"running_job_ids": ["a"], "max_jobs": 7}
+        )
+        self.assertEqual(body.max_jobs, 7)
+        self.assertEqual(body.running_job_ids, ["a"])
+
+    def test_max_jobs_is_required(self):
+        with self.assertRaises(ValidationError):
+            RemoteExecutorMsgBodyHeartbeat.model_validate({"running_job_ids": ["a"]})
 
 
 if __name__ == "__main__":
