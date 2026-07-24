@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import logging
 from fastapi import WebSocketDisconnect
 from pyppetdb.ws.remote_executor import RemoteExecutorProtocol
+from pyppetdb.ws.remote_executor import IncompatibleAgentError
 
 
 class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
@@ -154,7 +155,6 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
     async def test_run_disconnect(self, mock_sleep):
         self.mock_ws.receive_text.side_effect = WebSocketDisconnect()
         self.protocol.dispatch_job = AsyncMock()
-        self.protocol._dispatch_scheduled_jobs = AsyncMock()
 
         self.mock_crud_nodes.get.return_value = MagicMock(remote_agent=None)
 
@@ -163,5 +163,112 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         except WebSocketDisconnect:
             pass
 
-        self.protocol._dispatch_scheduled_jobs.assert_awaited_once()
+        # run() no longer bulk-dispatches on connect; filling is driven by the
+        # first heartbeat, so nothing is dispatched here.
+        self.protocol.dispatch_job.assert_not_called()
         self.assertFalse(self.protocol._running)
+
+    async def test_fill_slots_dispatches_up_to_capacity(self):
+        self.protocol._job_manager._max_jobs = 2
+        self.protocol._job_manager.active_job_ids = set()
+
+        counter = {"n": 0}
+
+        async def fake_oldest(node_id):
+            counter["n"] += 1
+            return MagicMock(job_id=f"job{counter['n']}")
+
+        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock(
+            side_effect=fake_oldest
+        )
+
+        dispatched = []
+
+        async def fake_dispatch(job_id):
+            dispatched.append(job_id)
+            self.protocol._job_manager.active_job_ids.add(job_id)
+
+        self.protocol.dispatch_job = AsyncMock(side_effect=fake_dispatch)
+
+        await asyncio.wait_for(self.protocol.fill_slots(), timeout=1.0)
+
+        self.assertEqual(dispatched, ["job1", "job2"])
+
+    async def test_fill_slots_no_dispatch_when_full(self):
+        self.protocol._job_manager._max_jobs = 1
+        self.protocol._job_manager.active_job_ids = {"existing"}
+        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock()
+        self.protocol.dispatch_job = AsyncMock()
+
+        await asyncio.wait_for(self.protocol.fill_slots(), timeout=1.0)
+
+        self.protocol.dispatch_job.assert_not_called()
+        self.mock_crud_node_jobs.get_oldest_scheduled.assert_not_called()
+
+    async def test_fill_slots_no_dispatch_when_capacity_unknown(self):
+        self.protocol._job_manager._max_jobs = None
+        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock()
+        self.protocol.dispatch_job = AsyncMock()
+
+        await asyncio.wait_for(self.protocol.fill_slots(), timeout=1.0)
+
+        self.protocol.dispatch_job.assert_not_called()
+        self.mock_crud_node_jobs.get_oldest_scheduled.assert_not_called()
+
+    async def test_fill_slots_stops_when_no_scheduled(self):
+        self.protocol._job_manager._max_jobs = 5
+        self.protocol._job_manager.active_job_ids = set()
+        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock(return_value=None)
+        self.protocol.dispatch_job = AsyncMock()
+
+        await asyncio.wait_for(self.protocol.fill_slots(), timeout=1.0)
+
+        self.protocol.dispatch_job.assert_not_called()
+
+    async def test_incompatible_message_triggers_shutdown_and_raises(self):
+        self.protocol.send_shutdown = AsyncMock()
+        bad = json.dumps(
+            {
+                "msg_id": 1,
+                "msg_type": "heartbeat",
+                "msg_body": {"running_job_ids": []},
+            }
+        )
+
+        with self.assertRaises(IncompatibleAgentError):
+            await asyncio.wait_for(
+                self.protocol._handle_message(bad),
+                timeout=1.0,
+            )
+
+        self.protocol.send_shutdown.assert_awaited_once()
+
+    async def test_send_shutdown_sends_shutdown_frame(self):
+        await asyncio.wait_for(
+            self.protocol.send_shutdown(reason="please upgrade"),
+            timeout=1.0,
+        )
+
+        self.mock_ws.send_text.assert_awaited_once()
+        sent = json.loads(self.mock_ws.send_text.call_args[1]["data"])
+        self.assertEqual(sent["msg_type"], "shutdown")
+        self.assertEqual(sent["msg_body"]["reason"], "please upgrade")
+
+    async def test_fill_slots_after_finish_dispatches_next(self):
+        self.protocol._job_manager._max_jobs = 1
+        self.protocol._job_manager.active_job_ids = set()
+        self.mock_crud_node_jobs.get_oldest_scheduled = AsyncMock(
+            return_value=MagicMock(job_id="next_job")
+        )
+
+        dispatched = []
+
+        async def fake_dispatch(job_id):
+            dispatched.append(job_id)
+            self.protocol._job_manager.active_job_ids.add(job_id)
+
+        self.protocol.dispatch_job = AsyncMock(side_effect=fake_dispatch)
+
+        await asyncio.wait_for(self.protocol.fill_slots(), timeout=1.0)
+
+        self.assertEqual(dispatched, ["next_job"])
