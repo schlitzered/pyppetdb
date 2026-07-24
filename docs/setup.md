@@ -52,48 +52,59 @@ sudo yum install gcc python3.12-devel openldap-devel cyrus-sasl-devel
 
 ## Configuration
 ### Pyppetdb
-pyppetdb is configured via environment variables or a `.env` file. It uses Pydantic for
-configuration management, supporting nested settings using the `_` delimiter.
+pyppetdb is configured via environment variables or a `.env` file placed in the process working
+directory (e.g. `/opt/pyppetdb/.env`). Settings map to a nested model using `_` as the delimiter
+(e.g. `app_main_port` → `app.main.port`), and list values are given as JSON. See the
+[Configuration Reference](configuration_reference.md) for the full list.
 
-**Note:** Configuration keys are case-sensitive. Nested settings use the `_` delimiter to
-map to the internal model structure.
+#### Deployment model
 
+pyppetdb is a single application that listens on **one port**. All three router groups are served
+from that same port and distinguished by their URL prefix:
 
-Below is an example of a production-ready configuration using a .env file.
-The env file needs to be placed in the working directory of pyppetdb, example /opt/pyppetdb/.env
+* Management API (`app_main_enable`) — `/api`, `/oauth`
+* Puppet proxy (`app_puppet_enable`) — `/puppet`, `/puppet-ca`
+* PuppetDB proxy (`app_puppetdb_enable`) — `/pdb`
+
+!!! important "One port for everything"
+    A pyppetdb process binds to a single port (`app_main_port`) with a single TLS config
+    (`app_main_ssl_*`). Puppet agents, Puppetserver and the web UI all connect to the same port and
+    are routed by path. The `*_enable` flags turn router groups on or off.
+
+    For high availability, run **several identical replicas** (same config, same port) behind a
+    load balancer; they share one MongoDB and coordinate over the inter-instance WebSocket mesh.
+
+Below is a production-ready configuration. In this example pyppetdb takes over the Puppetserver
+agent port `8140` (the Puppetserver itself is moved to `8144`, see below), so existing Puppet
+agents keep working unchanged. All traffic — agents, Puppetserver→PuppetDB, and the web UI — goes
+to this one port.
 
 ```env
 # security related settings
 app_secretkey=SomethingSuperSecretHere
 app_wssalt=AnotherSuperSecretSecret
 
-# Main API Settings
-app_main_facts_index=[ "role", "stage", "location", "provider" ]
+# bind + TLS (mTLS: client certs are validated against the pyppetdb CA)
 app_main_host=0.0.0.0
+app_main_port=8140  # take over the puppetserver agent port
 app_main_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
 app_main_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
 app_main_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+app_main_facts_index=[ "role", "stage", "location", "provider" ]
 
-# Puppet Proxy Settings
-app_puppet_port=8140 # we are taking over the puppetserver port
-app_puppet_serverurl=http://127.0.0.1:8144 # the puppetserver instance on the same node
-app_puppet_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-app_puppet_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
-app_puppet_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
+# Puppet proxy: forward catalog compilation to the local puppetserver
+app_puppet_serverurl=http://127.0.0.1:8144  # the puppetserver instance on the same node
+app_puppet_catalogCache=true
 app_puppet_catalogCacheFacts=[ "role", "stage", "location", "provider" ]
-app_puppet_catalogCache=True
-app_puppet_trustedCns=[ "puppetsrv-1.example.com" ] # usually it is enough if this is to the fqdn of the current node
+app_puppet_trustedCns=[ "puppetsrv-1.example.com" ]  # usually the fqdn of the current node
 
-# PuppetDB Proxy Settings
-app_puppetdb_host=0.0.0.0
-app_puppetdb_serverurl=http://127.0.0.1:8080 # if omitted, will not forward requests to real puppetdb
-app_puppetdb_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-app_puppetdb_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
-app_puppetdb_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
-app_puppetdb_trustedCns=[ "puppetsrv-1.example.com" ] # usually it is enough if this is to the fqdn of the current node
+# PuppetDB proxy: optionally forward to a real puppetdb (omit to not forward)
+app_puppetdb_serverurl=http://127.0.0.1:8080
+app_puppetdb_trustedCns=[ "puppetsrv-1.example.com" ]
 
-# MongoDB Settings
-# this is used if you like to shard the shard-able collections
+# MongoDB
+mongodb_url=mongodb://127.0.0.1:27017/?replicaSet=rs0
+# only needed if you shard the shard-able collections
 mongodb_placementFacts=[ "role", "stage", "location", "provider" ]
 ```
 
@@ -435,7 +446,8 @@ authorization: {
 **`/etc/puppetlabs/puppet/puppetdb.conf`**
 ```ini
 [main]
-server_urls = https://puppetsrv-1.example.com:8002
+# point puppetserver at pyppetdb's PuppetDB proxy — the same single pyppetdb port
+server_urls = https://puppetsrv-1.example.com:8140
 ```
 
 ### PuppetDB
@@ -516,7 +528,7 @@ server {
 
     # API Proxy and WebSockets
     location ~ ^/(api|docs|oauth|openapi\.json|versions) {
-        proxy_pass https://127.0.0.1:8000;
+        proxy_pass https://127.0.0.1:8140;
         
         # Standard proxy headers
         proxy_set_header Host $host;
@@ -598,11 +610,11 @@ Create a new virtual host configuration, for example at **`/etc/apache2/sites-av
     RewriteEngine On
     RewriteCond %{HTTP:Upgrade} websocket [NC]
     RewriteCond %{HTTP:Connection} upgrade [NC]
-    RewriteRule ^/(api|docs|oauth|openapi\.json|versions)(.*) wss://127.0.0.1:8000/$1$2 [P,L]
+    RewriteRule ^/(api|docs|oauth|openapi\.json|versions)(.*) wss://127.0.0.1:8140/$1$2 [P,L]
 
     # Standard proxy for API paths
-    ProxyPassMatch ^/(api|docs|oauth|openapi\.json|versions) https://127.0.0.1:8000
-    ProxyPassReverse / https://127.0.0.1:8000
+    ProxyPassMatch ^/(api|docs|oauth|openapi\.json|versions) https://127.0.0.1:8140
+    ProxyPassReverse / https://127.0.0.1:8140
 
     # Increase timeouts for long-running log streams
     ProxyTimeout 3600
@@ -699,11 +711,13 @@ pyppetdb import-puppet-ca --help
 
 **Output:**
 ```text
-usage: pyppetdb import-puppet-ca [-h] --ca-dir CA_DIR
+usage: pyppetdb import-puppet-ca [-h] --ca-dir CA_DIR [--ca-id CA_ID] [--skip-certs]
 
 options:
   -h, --help       show this help message and exit
   --ca-dir CA_DIR  Path to the Puppet CA directory (e.g., /etc/puppetlabs/puppetserver/ca)
+  --ca-id CA_ID    ID of the CA to import (default: puppet-ca)
+  --skip-certs     Skip importing signed certificates
 ```
 
 **Example Call:**
@@ -741,7 +755,9 @@ Once initialized, you can start the application by running the `pyppetdb` comman
 
 ### Systemd Unit File
 
-For production deployments, it is recommended to run pyppetdb as a systemd service. Create the following file at **`/etc/systemd/system/pyppetdb.service`**:
+For production it is recommended to run pyppetdb as a systemd service. The process reads its
+configuration from the `.env` file in its working directory. Create the following file at
+**`/etc/systemd/system/pyppetdb.service`**:
 
 ```ini
 [Unit]
@@ -764,6 +780,10 @@ WantedBy=multi-user.target
 ### Enable and Start
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable pyppetdb
-sudo systemctl start pyppetdb
+sudo systemctl enable --now pyppetdb
 ```
+
+!!! tip "High availability"
+    To run several replicas, deploy this same unit and configuration on multiple hosts (each on its
+    single port) and put them behind a load balancer. They share one MongoDB and coordinate over
+    the inter-instance WebSocket mesh.

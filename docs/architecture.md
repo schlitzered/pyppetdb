@@ -1,108 +1,134 @@
 # Architecture & Deployment Scenarios
 
-This page describes common deployment scenarios and data flows for **pyppetdb**.
+This page describes how **pyppetdb** is structured internally and the common ways to deploy it.
 
 ## 1. Component Overview
 
-pyppetdb consists of three primary functional components, typically listening on different ports:
+pyppetdb is a **single FastAPI application** that listens on **one port**. It exposes three router
+groups, all served from that same port and distinguished by their URL prefix:
 
-*   **Puppet API Proxy (Port 8001)**: Handles Puppetserver and CA replacement/proxying.
-*   **PuppetDB API Proxy (Port 8002)**: Handles PuppetDB query proxying.
-*   **Management API (Port 8000)**: The main REST API for users, frontends, and inter-service communication.
+| Router group | Enable flag | URL prefixes | Purpose |
+|--------------|-------------|--------------|---------|
+| Management API | `app_main_enable` | `/api`, `/oauth` | REST API for users, web UI, and inter-instance communication |
+| Puppet Proxy | `app_puppet_enable` | `/puppet`, `/puppet-ca` | Puppetserver front-end and Puppet CA implementation |
+| PuppetDB Proxy | `app_puppetdb_enable` | `/pdb` | PuppetDB command/query endpoints |
+
+!!! important "One port for everything"
+    A pyppetdb process binds to a single address/port pair (`app_main_host` / `app_main_port`) and
+    uses a single TLS configuration (`app_main_ssl_*`). Puppet agents, Puppetserver, and the web UI
+    all connect to the **same** port and are routed by URL path. The `*_enable` flags turn
+    individual router groups on or off.
+
+    For high availability and scale, run **several identical pyppetdb replicas** (all router groups
+    enabled, same port) behind a load balancer. They share one MongoDB and coordinate over the
+    inter-instance WebSocket mesh (see section 4).
 
 ```mermaid
 graph TD
-    subgraph "External Access"
+    subgraph "Clients"
         User[Human / CLI / Web UI]
         Agent[Puppet Agent]
-    end
-
-    subgraph "Ingress Layer"
-        Proxy[Apache / Nginx]
-    end
-
-    subgraph "pyppetdb Service"
-        direction TB
-        API_8000[Management API :8000]
-        Proxy_8001[Puppet Proxy :8001]
-        PDB_8002[PuppetDB Proxy :8002]
-    end
-
-    subgraph "Backend Infrastructure"
         PS[Puppetserver]
-        PDB[PuppetDB]
-        DB[(MongoDB)]
     end
 
-    User --> Proxy --> API_8000
-    Agent --> Proxy_8001
-    Proxy_8001 --> PS
-    PS --> PDB_8002
-    PDB_8002 --> PDB
-    API_8000 & Proxy_8001 & PDB_8002 <--> DB
+    subgraph "pyppetdb (one port, e.g. :8140)"
+        PP["pyppetdb application<br/>/api · /oauth · /puppet · /puppet-ca · /pdb"]
+    end
+
+    subgraph "Backends"
+        UPS_PS[Upstream Puppetserver]
+        UPS_PDB[Upstream PuppetDB]
+        DB[(MongoDB Replica Set)]
+    end
+
+    User -- "/api, /oauth" --> PP
+    Agent -- "/puppet, /puppet-ca (mTLS)" --> PP
+    PS -- "/pdb" --> PP
+    PP -. optional forward .-> UPS_PS
+    PP -. optional forward .-> UPS_PDB
+    PP <--> DB
 ```
 
 ## 2. Agent Interaction & Data Flow
 
-From the perspective of a Puppet Agent, pyppetdb acts as the entry point for both catalog compilation and data submission. Note that the Puppetserver must be co-located or accessible to the Puppet Proxy.
+From a Puppet Agent's perspective, pyppetdb is the entry point for both certificate management and
+catalog compilation. The agent authenticates via mTLS; pyppetdb validates the client certificate
+against its own CA records before proxying (see `app_main_ssl_*` and
+`ca_verifyCertificateRegistration`).
 
 ```mermaid
 graph LR
     Node[Puppet Agent]
-    P1[pyppetdb :8001<br/>Puppet Proxy]
-    PS[Puppetserver]
-    P2[pyppetdb :8002<br/>PuppetDB Proxy]
-    PDB[PuppetDB]
+    P1["pyppetdb"]
+    UPS[Upstream Puppetserver]
+    DB[(MongoDB)]
 
-    Node -- "1. Catalog/Cert" --> P1
-    P1 -- "2. Proxy" --> PS
-    PS -- "3. Store Facts/Catalog" --> P2
-    P2 -- "4. Optional Forward" --> PDB
+    Node -- "1. CSR / cert (/puppet-ca/v1)" --> P1
+    Node -- "2. Catalog (/puppet/v3/catalog)" --> P1
+    P1 -- "3. Proxy compile" --> UPS
+    UPS -- "4. Compiled catalog" --> P1
+    P1 -- "5. Store facts / catalog" --> DB
+    P1 -- "6. Return catalog" --> Node
 ```
 
 ## 3. Secret Redaction Strategy
 
-Redaction is applied at the **Management API** level. The Puppet Agent requires unredacted secrets to configure the system, while humans and external consumers of the API see redacted data.
+Redaction is applied at read time, when data is served over the `/api` routes. The Puppet Agent
+(on the `/puppet` routes) needs the unredacted catalog to configure the system, while humans and
+API consumers only ever see redacted data. Redaction happens even for deeply nested values and for
+job logs.
 
 ```mermaid
 sequenceDiagram
     participant Node as Puppet Agent
-    participant P1 as pyppetdb :8001
-    participant PS as Puppetserver
+    participant PP as pyppetdb
+    participant PS as Upstream Puppetserver
     participant DB as MongoDB
-    participant API as pyppetdb :8000
     participant User as Human / UI
 
-    Note over Node, PS: Catalog Compilation
-    Node->>P1: GET /puppet/v3/catalog
-    P1->>PS: Proxy Request
-    PS-->>P1: Compiled Catalog (Full Secrets)
-    P1->>DB: Store Catalog (Full Secrets)
-    P1-->>Node: Return Catalog (Full Secrets)
-    
-    Note over API, User: API Consumption
-    User->>API: GET /api/v1/nodes/{node}/catalog
-    API->>DB: Fetch Catalog
-    DB-->>API: Return Raw Catalog
-    API->>API: Redact Secrets
-    API-->>User: Return Redacted Catalog
+    Note over Node, PS: Catalog compilation (/puppet routes)
+    Node->>PP: GET /puppet/v3/catalog
+    PP->>PS: Proxy request
+    PS-->>PP: Compiled catalog (full secrets)
+    PP->>DB: Store catalog (full secrets)
+    PP-->>Node: Return catalog (full secrets)
+
+    Note over PP, User: API consumption (/api routes)
+    User->>PP: GET /api/v1/nodes/{node}/catalogs/{id}
+    PP->>DB: Fetch catalog
+    DB-->>PP: Raw catalog
+    PP->>PP: Redact secrets
+    PP-->>User: Redacted catalog
 ```
 
-## 4. Secure Job Execution (Inter-API WebSocket)
+## 4. Secure Job Execution (Inter-Instance WebSocket)
 
-When a user triggers a job, the request traverses the management API and uses an internal WebSocket channel to reach the specific pyppetdb instance managing the agent connection.
+The pyppetdb agent connects to one pyppetdb instance over a WebSocket. When you run several
+replicas behind a load balancer, a user's job request may land on a *different* instance than the
+one that holds the target agent's connection. The instances form a mesh and relay the instruction
+over an internal WebSocket channel (`app_main_interApiIdleTimeout` controls its idle timeout) to
+the instance that owns the agent connection.
 
 ```mermaid
 graph TD
     User[Human / UI]
-    API[pyppetdb :8000<br/>Management API]
-    WS[Inter-API WebSocket]
-    Proxy[pyppetdb :8001<br/>Puppet Proxy]
-    Agent[pyppetdb-agent]
+    API["pyppetdb instance A<br/>(receives the API call)"]
+    WS[Inter-instance WebSocket mesh]
+    Proxy["pyppetdb instance B<br/>(owns the agent connection)"]
+    Agent[pyppetdb agent]
 
-    User -- "Trigger Job" --> API
-    API -- "Instruction" --> WS
-    WS -- "Relay" --> Proxy
+    User -- "Trigger job (/api/v1/jobs/jobs)" --> API
+    API -- "Relay instruction" --> WS
+    WS -- "Deliver to owning instance" --> Proxy
     Proxy -- "WebSocket" --> Agent
-    Agent -- "Execute Job" --> Jobs[Pre-defined Scripts]
+    Agent -- "Execute pre-defined job" --> Jobs[Pre-defined executables]
+    Agent -. "Stream logs back" .-> Proxy
 ```
+
+## 5. Storage
+
+pyppetdb stores all state in **MongoDB** and requires a **replica set**, because it relies on
+[change streams](https://www.mongodb.com/docs/manual/changeStreams/) to react to data changes
+in real time (cache invalidation, inter-instance coordination, live job logs) instead of
+polling. See the [Setup](setup.md#mongodb-setup) guide for details. Shard-capable collections
+can be distributed using placement facts (`mongodb_placementFacts`).
