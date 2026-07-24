@@ -63,8 +63,8 @@ The lookup process resolves the value of a key for a specific context.
 ## API Examples
 
 ### Setup
-Set the Management API base URL and your API credentials as environment variables for the examples
-below (adjust host/port to your Management API instance):
+Set the API base URL and your API credentials as environment variables for the examples below
+(adjust host/port to your pyppetdb instance; `/api` is served on the single pyppetdb port):
 ```bash
 export API_URL="http://localhost:8000/api/v1"
 export SECRET_HEADER="x-secret-id: <your_secret_id>"

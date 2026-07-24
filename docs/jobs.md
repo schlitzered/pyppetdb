@@ -12,7 +12,7 @@ command and shell injection.
 
 !!! note "To be documented"
     This section will describe how to install and configure the `pyppetdb_agent` on managed nodes
-    (installation, connecting the agent to a Puppet proxy instance, and registering local job
+    (installation, connecting the agent to a pyppetdb instance, and registering local job
     definitions).
 
     *Placeholder — content to follow.*
@@ -84,7 +84,7 @@ A job carries:
 | `GET` | `/api/v1/jobs/nodes_jobs/{node_job_id}` | Get a single per-node execution. |
 | `GET` | `/api/v1/jobs/nodes_jobs_logs/{log_id}` | Retrieve the log for a per-node execution. |
 
-Logs are streamed from the agent through the Puppet proxy instance to the API in real time (see
+Logs are streamed from the agent through pyppetdb to the API in real time (see
 [Architecture → Secure Job Execution](architecture.md#4-secure-job-execution-inter-instance-websocket)).
 Secret redaction is applied to job logs as well, so secrets never leak into the UI.
 

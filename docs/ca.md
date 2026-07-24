@@ -47,7 +47,7 @@ Each CA space carries a `validation_config` that governs which certificate reque
 
 ## Puppet CA endpoints (agent-facing)
 
-Served by a Puppet proxy instance under `/puppet-ca/v1` (mTLS):
+Served under `/puppet-ca/v1` (Puppet proxy router group, mTLS):
 
 | Method | Path | Description |
 |--------|------|-------------|
