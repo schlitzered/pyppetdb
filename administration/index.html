@@ -1,0 +1,957 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../hiera/">
+      
+      
+        <link rel="next" href="../ca/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Administration - pyppetdb</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#administration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pyppetdb" class="md-header__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pyppetdb
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Administration
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration_reference/" class="md-tabs__link">
+        
+  
+    
+  
+  Configuration Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../nodes/" class="md-tabs__link">
+        
+  
+    
+  
+  Nodes
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../hiera/" class="md-tabs__link">
+        
+  
+    
+  
+  Hiera
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ca/" class="md-tabs__link">
+        
+  
+    
+  
+  CA
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../jobs/" class="md-tabs__link">
+        
+  
+    
+  
+  Jobs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pyppetdb" class="md-nav__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    pyppetdb
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nodes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Nodes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hiera/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hiera
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authentication
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-first-admin-user" class="md-nav__link">
+    <span class="md-ellipsis">
+      The first admin user
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#users" class="md-nav__link">
+    <span class="md-ellipsis">
+      Users
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Users">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#api-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      API credentials
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#teams" class="md-nav__link">
+    <span class="md-ellipsis">
+      Teams
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Permissions
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Permissions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#static-vs-dynamic-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Static vs. dynamic permissions
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ldap-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      LDAP integration
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ca/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="administration">Administration<a class="headerlink" href="#administration" title="Permanent link">&para;</a></h1>
+<p>This page covers users, authentication, teams and the RBAC model that controls access to the
+Management API.</p>
+<h2 id="authentication">Authentication<a class="headerlink" href="#authentication" title="Permanent link">&para;</a></h2>
+<p>The Management API accepts two authentication methods:</p>
+<ul>
+<li><strong>Session</strong> — a browser session established through OAuth login (<code>/oauth/...</code>) or the
+  <code>/api/v1/authenticate</code> endpoint. Backed by a signed session cookie (<code>app_secretkey</code>).</li>
+<li><strong>API credentials</strong> — a secret-id / secret pair sent as request headers, used for
+  automation and CLI access:</li>
+</ul>
+<div class="highlight"><pre><span></span><code>x-secret-id: &lt;credential_id&gt;
+x-secret:    &lt;credential_secret&gt;
+</code></pre></div>
+<p>The <code>/api/v1/authenticate</code> endpoint reports the current user (<code>GET</code>), logs in (<code>POST</code>) and logs out
+(<code>DELETE</code>).</p>
+<h2 id="the-first-admin-user">The first admin user<a class="headerlink" href="#the-first-admin-user" title="Permanent link">&para;</a></h2>
+<p>Bootstrap the first administrator with the CLI (it cannot be created through the API before any user
+exists):</p>
+<div class="highlight"><pre><span></span><code>pyppetdb<span class="w"> </span>create-admin<span class="w"> </span>--user-id<span class="w"> </span>admin<span class="w"> </span>--email<span class="w"> </span>admin@example.com<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;System Admin&quot;</span>
+</code></pre></div>
+<p>If <code>--password</code> is omitted a random password is generated and printed once. See
+<a href="../setup/#1-create-administrative-user">Setup → Create Administrative User</a>.</p>
+<h2 id="users">Users<a class="headerlink" href="#users" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/users</code></td>
+<td>Search users.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/users/{user_id}</code></td>
+<td>Get a user.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/users/{user_id}</code></td>
+<td>Create a user.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/users/{user_id}</code></td>
+<td>Update a user.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/users/{user_id}</code></td>
+<td>Delete a user.</td>
+</tr>
+</tbody>
+</table>
+<p>A user has an <code>email</code>, <code>name</code>, a <code>backend</code> (local or an OAuth provider) and an <code>admin</code> flag.
+<strong>Admin users bypass all permission checks</strong> and can see all nodes.</p>
+<h3 id="api-credentials">API credentials<a class="headerlink" href="#api-credentials" title="Permanent link">&para;</a></h3>
+<p>Each user can own multiple long-lived API credentials (used with the <code>x-secret-id</code> / <code>x-secret</code>
+headers). The secret is returned <strong>only once</strong>, at creation time.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/users/{user_id}/credentials</code></td>
+<td>List a user's credentials.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/users/{user_id}/credentials</code></td>
+<td>Create a credential (returns the secret once).</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/users/{user_id}/credentials/{credential_id}</code></td>
+<td>Get credential metadata.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/users/{user_id}/credentials/{credential_id}</code></td>
+<td>Update a credential's description.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/users/{user_id}/credentials/{credential_id}</code></td>
+<td>Delete a credential.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="teams">Teams<a class="headerlink" href="#teams" title="Permanent link">&para;</a></h2>
+<p>Permissions are never assigned to users directly — they are assigned to <strong>teams</strong>, and users become
+members of teams. Team membership can be maintained manually (<code>users</code> list) or synchronized from an
+LDAP group (<code>ldap_group</code>, requires the <code>ldap_*</code> configuration).</p>
+<p>A team has:</p>
+<ul>
+<li><code>users</code> — member user IDs.</li>
+<li><code>ldap_group</code> — optional LDAP group whose members are synchronized into the team.</li>
+<li><code>permissions</code> — the permission strings granted to members.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/teams</code></td>
+<td>Search teams.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/teams/{team_id}</code></td>
+<td>Get a team.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/teams/{team_id}</code></td>
+<td>Create a team.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/teams/{team_id}</code></td>
+<td>Update a team (members and permissions).</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/teams/{team_id}</code></td>
+<td>Delete a team.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="permissions">Permissions<a class="headerlink" href="#permissions" title="Permanent link">&para;</a></h2>
+<p>A user is authorized for an action if <strong>any</strong> team they belong to holds the required permission.
+Admin users are always authorized.</p>
+<p>Two kinds of node visibility / action control combine:</p>
+<ol>
+<li><strong>Operation permissions</strong> — control <em>which actions</em> a team may perform (see below).</li>
+<li><strong>Fact-based node access</strong> — controls <em>which nodes</em> a team can see, via
+   <a href="../nodes/#node-groups">node groups</a> attached to the team.</li>
+</ol>
+<h3 id="static-vs-dynamic-permissions">Static vs. dynamic permissions<a class="headerlink" href="#static-vs-dynamic-permissions" title="Permanent link">&para;</a></h3>
+<ul>
+<li>
+<p><strong>Static permissions</strong> are a fixed set of operation permissions, formatted as
+  <code>DOMAIN:SUBDOMAIN::ACTION</code>, for example:</p>
+<ul>
+<li><code>NODES::CREATE</code>, <code>NODES::UPDATE</code>, <code>NODES::DELETE</code></li>
+<li><code>TEAMS::GET</code>, <code>USERS::CREATE</code>, <code>USERS:CREDENTIALS::CREATE</code></li>
+<li><code>HIERA:KEYS::CREATE</code>, <code>HIERA:LEVEL_DATA::UPDATE</code></li>
+<li><code>CA:AUTHORITIES::CREATE</code>, <code>CA:SPACES::UPDATE</code></li>
+<li><code>JOBS::GET</code>, <code>JOBS:JOB::CREATE</code>, <code>JOBS:DEFINITION::CREATE</code></li>
+</ul>
+</li>
+<li>
+<p><strong>Dynamic permissions</strong> are scoped to a specific resource id, allowing fine-grained grants:</p>
+<ul>
+<li><code>JOBS:JOB:{definition_id}:CREATE</code> — run one specific job definition.</li>
+<li><code>HIERA:LEVEL_DATA:{key_id}:CREATE|UPDATE|DELETE</code> — write data for one specific Hiera key.</li>
+<li><code>CA:AUTHORITIES:{ca_id}:CERTS:UPDATE</code> — manage certs of one authority.</li>
+<li><code>CA:SPACES:{space_id}:CERTS:UPDATE</code> — manage certs of one space.</li>
+</ul>
+</li>
+</ul>
+<p>You can discover the full set of currently valid permission strings (static plus the dynamic ones
+derived from existing definitions, keys, authorities and spaces) via:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/permissions</code></td>
+<td>List all assignable static and dynamic permissions.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ldap-integration">LDAP integration<a class="headerlink" href="#ldap-integration" title="Permanent link">&para;</a></h2>
+<p>When <code>ldap_url</code> (and the required <code>ldap_binddn</code> / <code>ldap_password</code>) is configured, teams with an
+<code>ldap_group</code> set have their membership synchronized from the directory, so access follows your
+existing group management. See the
+<a href="../configuration_reference/#ldap-ldap_">Configuration Reference → LDAP</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>

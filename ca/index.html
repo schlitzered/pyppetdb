@@ -1,0 +1,1014 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../administration/">
+      
+      
+        <link rel="next" href="../jobs/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>CA - pyppetdb</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#certificate-authority" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pyppetdb" class="md-header__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pyppetdb
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CA
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration_reference/" class="md-tabs__link">
+        
+  
+    
+  
+  Configuration Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../nodes/" class="md-tabs__link">
+        
+  
+    
+  
+  Nodes
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../hiera/" class="md-tabs__link">
+        
+  
+    
+  
+  Hiera
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+    
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  CA
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../jobs/" class="md-tabs__link">
+        
+  
+    
+  
+  Jobs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pyppetdb" class="md-nav__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    pyppetdb
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nodes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Nodes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hiera/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hiera
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#concepts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Concepts
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#signing-behaviour" class="md-nav__link">
+    <span class="md-ellipsis">
+      Signing behaviour
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Signing behaviour">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mtls-certificate-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      mTLS certificate verification
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#space-validation-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      Space validation configuration
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#puppet-ca-endpoints-agent-facing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Puppet CA endpoints (agent-facing)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ca-management-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      CA management API
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CA management API">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#authorities" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authorities
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      Spaces
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Secrets
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#initialising-the-ca" class="md-nav__link">
+    <span class="md-ellipsis">
+      Initialising the CA
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="certificate-authority">Certificate Authority<a class="headerlink" href="#certificate-authority" title="Permanent link">&para;</a></h1>
+<p>pyppetdb implements the <strong>Puppet CA API</strong> and stores all CA state (authorities, issued
+certificates, secrets, CRLs) in MongoDB. Because the CA is database-backed rather than
+filesystem-backed, <strong>every</strong> pyppetdb instance can act as a CA — there is no single-node CA to fail
+over and no shared filesystem or <code>keepalived</code> setup required.</p>
+<h2 id="concepts">Concepts<a class="headerlink" href="#concepts" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>CA Authority</strong> — a signing CA (certificate + private key). The default authority used for
+  Puppet is <code>puppet-ca</code>. Authorities can be chained (an authority may have a <code>parent_id</code>).</li>
+<li><strong>CA Space</strong> — a namespace that binds incoming certificate requests to a specific authority and a
+  <strong>validation configuration</strong>. The <code>puppet-ca</code> space is used for Puppet agent enrollment. Spaces
+  keep a <code>ca_id_history</code> so certificates signed by a previously-used authority remain valid.</li>
+<li><strong>Certificate</strong> — an issued/known certificate, tracked by serial number, CN and status.</li>
+<li><strong>CA Secret</strong> — an encrypted secret stored in pyppetdb (see <a href="../#advanced-secrets-redaction">secret redaction</a>).</li>
+</ul>
+<h2 id="signing-behaviour">Signing behaviour<a class="headerlink" href="#signing-behaviour" title="Permanent link">&para;</a></h2>
+<p>Signing is controlled by the <code>ca_*</code> settings (see the
+<a href="../configuration_reference/#certificate-authority-ca_">Configuration Reference</a>):</p>
+<ul>
+<li><code>ca_autoSign</code> — automatically sign incoming requests.</li>
+<li><code>ca_autoSignNodeIfExists</code> — auto-sign only when the node already exists in the database.</li>
+<li><code>ca_certificateValidityDays</code> — validity of issued certificates.</li>
+<li>CRLs are refreshed by a background worker when <code>ca_enableCrlRefresh</code> is set
+  (<code>ca_crlRefreshInterval</code>, <code>ca_crlValidityDays</code>).</li>
+</ul>
+<h3 id="mtls-certificate-verification">mTLS certificate verification<a class="headerlink" href="#mtls-certificate-verification" title="Permanent link">&para;</a></h3>
+<p>When TLS is enabled with a client CA (<code>app_main_ssl_ca</code>), client certificates presented by Puppet
+agents are validated against pyppetdb's own records. With <code>ca_verifyCertificateRegistration</code>
+enabled (default), a presented certificate must exist in the database as a signed certificate whose
+serial and CN match — otherwise access is denied. Lookups are cached
+(<code>ca_verifyCertificateRegistrationCacheTtl</code>, <code>ca_verifyCertificateRegistrationCacheMaxsize</code>).</p>
+<h2 id="space-validation-configuration">Space validation configuration<a class="headerlink" href="#space-validation-configuration" title="Permanent link">&para;</a></h2>
+<p>Each CA space carries a <code>validation_config</code> that governs which certificate requests may be signed:</p>
+<ul>
+<li><code>enforce_rfc1123</code> — require RFC 1123-compliant names.</li>
+<li><code>allowed_extensions</code> — allow-list of certificate extensions.</li>
+<li><code>key_usages</code> / <code>extended_key_usages</code> — enforced key usage constraints.</li>
+<li><code>san_validation</code> — bounds and checks on Subject Alternative Names: <code>max_san_count</code>, regex
+  allow-lists, external HTTP checks, and external script checks.</li>
+<li><code>san_injection</code> — inject additional SANs based on a matching pattern.</li>
+</ul>
+<h2 id="puppet-ca-endpoints-agent-facing">Puppet CA endpoints (agent-facing)<a class="headerlink" href="#puppet-ca-endpoints-agent-facing" title="Permanent link">&para;</a></h2>
+<p>Served under <code>/puppet-ca/v1</code> (Puppet proxy router group, mTLS):</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/puppet-ca/v1/certificate/{nodename}</code></td>
+<td>Retrieve a signed certificate.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/puppet-ca/v1/certificate_request/{nodename}</code></td>
+<td>Retrieve a pending CSR.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/puppet-ca/v1/certificate_request/{nodename}</code></td>
+<td>Submit a CSR.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/puppet-ca/v1/certificate_status/{nodename}</code></td>
+<td>Get certificate status.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/puppet-ca/v1/certificate_status/{nodename}</code></td>
+<td>Sign a pending request.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/puppet-ca/v1/certificate_status/{nodename}</code></td>
+<td>Revoke / clean a certificate.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/puppet-ca/v1/certificate_revocation_list/ca</code></td>
+<td>Retrieve the CRL.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/puppet-ca/v1/certificate_renewal</code></td>
+<td>Renew the caller's certificate (the undocumented Puppet auto-refresh endpoint).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ca-management-api">CA management API<a class="headerlink" href="#ca-management-api" title="Permanent link">&para;</a></h2>
+<p>Served by the Management API under <code>/api/v1</code> for operators and the web UI:</p>
+<h3 id="authorities">Authorities<a class="headerlink" href="#authorities" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/authorities</code></td>
+<td>List authorities.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}</code></td>
+<td>Create an authority.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}</code></td>
+<td>Get an authority.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}</code></td>
+<td>Update an authority.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}</code></td>
+<td>Delete an authority.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}/certs</code></td>
+<td>List certificates for an authority.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}/certs/{cert_id}</code></td>
+<td>Get a certificate.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/ca/authorities/{ca_id}/certs/{cert_id}</code></td>
+<td>Update a certificate (e.g. sign/revoke).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="spaces">Spaces<a class="headerlink" href="#spaces" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/spaces</code></td>
+<td>List spaces.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}</code></td>
+<td>Create a space.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}</code></td>
+<td>Get a space.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}</code></td>
+<td>Update a space (incl. <code>validation_config</code>).</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}</code></td>
+<td>Delete a space.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}/certs</code></td>
+<td>List certificates in a space.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}/certs/{cert_id}</code></td>
+<td>Get a certificate.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/ca/spaces/{space_id}/certs/{cert_id}</code></td>
+<td>Update a certificate.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="secrets">Secrets<a class="headerlink" href="#secrets" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/secrets</code></td>
+<td>List secrets.</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/ca/secrets/{secret_id}</code></td>
+<td>Create a secret.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/ca/secrets/{secret_id}</code></td>
+<td>Get a secret.</td>
+</tr>
+<tr>
+<td><code>PUT</code></td>
+<td><code>/api/v1/ca/secrets/{secret_id}</code></td>
+<td>Update a secret.</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/v1/ca/secrets/{secret_id}</code></td>
+<td>Delete a secret.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="initialising-the-ca">Initialising the CA<a class="headerlink" href="#initialising-the-ca" title="Permanent link">&para;</a></h2>
+<p>Use the <code>pyppetdb init-ca</code> command to create a fresh CA and server certificate, or
+<code>pyppetdb import-puppet-ca</code> to migrate an existing Puppetserver CA. See
+<a href="../setup/#2-configure-certificate-authority">Setup → Configure Certificate Authority</a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>

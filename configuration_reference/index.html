@@ -1,0 +1,1216 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../setup/">
+      
+      
+        <link rel="next" href="../nodes/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>Configuration Reference - pyppetdb</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#configuration-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pyppetdb" class="md-header__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pyppetdb
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuration Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  Configuration Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../nodes/" class="md-tabs__link">
+        
+  
+    
+  
+  Nodes
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../hiera/" class="md-tabs__link">
+        
+  
+    
+  
+  Hiera
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+    
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ca/" class="md-tabs__link">
+        
+  
+    
+  
+  CA
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../jobs/" class="md-tabs__link">
+        
+  
+    
+  
+  Jobs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pyppetdb" class="md-nav__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    pyppetdb
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conventions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#global-app_" class="md-nav__link">
+    <span class="md-ellipsis">
+      Global (app_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#management-api-app_main_" class="md-nav__link">
+    <span class="md-ellipsis">
+      Management API (app_main_)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Management API (app_main_)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#history-storage-app_main_storehistory_" class="md-nav__link">
+    <span class="md-ellipsis">
+      History storage (app_main_storeHistory_)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#puppet-proxy-app_puppet_" class="md-nav__link">
+    <span class="md-ellipsis">
+      Puppet Proxy (app_puppet_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#puppetdb-proxy-app_puppetdb_" class="md-nav__link">
+    <span class="md-ellipsis">
+      PuppetDB Proxy (app_puppetdb_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#certificate-authority-ca_" class="md-nav__link">
+    <span class="md-ellipsis">
+      Certificate Authority (ca_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#jobs-jobs_" class="md-nav__link">
+    <span class="md-ellipsis">
+      Jobs (jobs_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mongodb-mongodb_" class="md-nav__link">
+    <span class="md-ellipsis">
+      MongoDB (mongodb_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ldap-ldap_" class="md-nav__link">
+    <span class="md-ellipsis">
+      LDAP (ldap_)
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth-oauth_name_" class="md-nav__link">
+    <span class="md-ellipsis">
+      OAuth (oauth_&lt;name&gt;_)
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nodes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Nodes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hiera/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hiera
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ca/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="configuration-reference">Configuration Reference<a class="headerlink" href="#configuration-reference" title="Permanent link">&para;</a></h1>
+<p>pyppetdb is configured via environment variables or a <code>.env</code> file (placed in the process working
+directory). Configuration is powered by Pydantic Settings.</p>
+<h2 id="conventions">Conventions<a class="headerlink" href="#conventions" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Nested delimiter:</strong> settings map to a nested model using <code>_</code> as the delimiter, e.g.
+  <code>app_main_port</code> sets <code>app.main.port</code>.</li>
+<li><strong>List / JSON values:</strong> list-typed settings are provided as a JSON string, e.g.
+  <code>app_main_facts_index=["role","stage"]</code>.</li>
+<li><strong>Booleans:</strong> use <code>true</code> / <code>false</code>.</li>
+<li><strong>Required values:</strong> <code>app_secretkey</code> has <strong>no default</strong> and must be set, otherwise the process
+  will not start.</li>
+</ul>
+<hr />
+<h2 id="global-app_">Global (<code>app_</code>)<a class="headerlink" href="#global-app_" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_secretkey</code></td>
+<td><em>(required)</em></td>
+<td>Secret key for session cookies and cryptographic operations. <strong>No default — must be set.</strong></td>
+</tr>
+<tr>
+<td><code>app_wssalt</code></td>
+<td><code>ws-auth</code></td>
+<td>Salt used for inter-instance/agent WebSocket authentication.</td>
+</tr>
+<tr>
+<td><code>app_loglevel</code></td>
+<td><code>INFO</code></td>
+<td>Log level: <code>CRITICAL</code>, <code>FATAL</code>, <code>ERROR</code>, <code>WARN</code>, <code>WARNING</code>, <code>INFO</code>, <code>DEBUG</code>.</td>
+</tr>
+<tr>
+<td><code>app_logstruct</code></td>
+<td><code>false</code></td>
+<td>Emit structured JSON logs (via structlog) instead of plain text.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="management-api-app_main_">Management API (<code>app_main_</code>)<a class="headerlink" href="#management-api-app_main_" title="Permanent link">&para;</a></h2>
+<p>A pyppetdb process always binds on the <code>app_main_host</code> / <code>app_main_port</code> pair and uses the
+<code>app_main_ssl_*</code> TLS configuration — regardless of which router groups are enabled.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_main_enable</code></td>
+<td><code>true</code></td>
+<td>Enable the management API router group (<code>/api</code>, <code>/oauth</code>).</td>
+</tr>
+<tr>
+<td><code>app_main_host</code></td>
+<td><code>0.0.0.0</code></td>
+<td>Bind address for this process.</td>
+</tr>
+<tr>
+<td><code>app_main_port</code></td>
+<td><code>8000</code></td>
+<td>Bind port for this process.</td>
+</tr>
+<tr>
+<td><code>app_main_ssl_cert</code></td>
+<td><em>(unset)</em></td>
+<td>Path to the server certificate (PEM). Required to enable TLS.</td>
+</tr>
+<tr>
+<td><code>app_main_ssl_key</code></td>
+<td><em>(unset)</em></td>
+<td>Path to the server private key (PEM). Required to enable TLS.</td>
+</tr>
+<tr>
+<td><code>app_main_ssl_ca</code></td>
+<td><em>(unset)</em></td>
+<td>Path to the CA bundle used to validate client certificates (enables mTLS).</td>
+</tr>
+<tr>
+<td><code>app_main_facts_index</code></td>
+<td><em>(unset)</em></td>
+<td>JSON list of facts to index in the database for faster searching.</td>
+</tr>
+<tr>
+<td><code>app_main_hiera_keyModels</code></td>
+<td><em>(unset)</em></td>
+<td>JSON list of import paths for <strong>static</strong> Hiera key model plugins to register at startup.</td>
+</tr>
+<tr>
+<td><code>app_main_interApiIdleTimeout</code></td>
+<td><code>300</code></td>
+<td>Idle timeout (seconds) for the inter-instance WebSocket mesh.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">TLS is all-or-nothing per process</p>
+<p><code>app_main_ssl_cert</code> and <code>app_main_ssl_key</code> must be provided together to enable TLS. When TLS
+is enabled, client certificates are requested (<code>CERT_OPTIONAL</code>); provide <code>app_main_ssl_ca</code> so
+Puppet agent / PuppetDB mTLS can be validated.</p>
+</div>
+<h3 id="history-storage-app_main_storehistory_">History storage (<code>app_main_storeHistory_</code>)<a class="headerlink" href="#history-storage-app_main_storehistory_" title="Permanent link">&para;</a></h3>
+<p>Controls how historical catalogs/reports are retained.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_main_storeHistory_catalog</code></td>
+<td><code>true</code></td>
+<td>Store historical catalogs.</td>
+</tr>
+<tr>
+<td><code>app_main_storeHistory_catalogUnchanged</code></td>
+<td><code>false</code></td>
+<td>Also store catalogs that did not change.</td>
+</tr>
+<tr>
+<td><code>app_main_storeHistory_catalogNoReportTtl</code></td>
+<td><code>3600</code></td>
+<td>TTL (seconds) for a stored catalog that never received a matching report.</td>
+</tr>
+<tr>
+<td><code>app_main_storeHistory_ttl</code></td>
+<td><code>7776000</code></td>
+<td>TTL (seconds) for stored history (default 90 days).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="puppet-proxy-app_puppet_">Puppet Proxy (<code>app_puppet_</code>)<a class="headerlink" href="#puppet-proxy-app_puppet_" title="Permanent link">&para;</a></h2>
+<p>Serves <code>/puppet</code> and <code>/puppet-ca</code>. Binding and TLS are configured via <code>app_main_*</code> (see above).</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_puppet_enable</code></td>
+<td><code>true</code></td>
+<td>Enable the Puppet proxy router group.</td>
+</tr>
+<tr>
+<td><code>app_puppet_serverurl</code></td>
+<td><em>(unset)</em></td>
+<td>URL of the upstream Puppetserver. If unset, requests are not forwarded.</td>
+</tr>
+<tr>
+<td><code>app_puppet_timeout</code></td>
+<td><code>60</code></td>
+<td>Upstream request timeout (seconds).</td>
+</tr>
+<tr>
+<td><code>app_puppet_authSecret</code></td>
+<td><code>true</code></td>
+<td>Apply secret redaction to proxied responses.</td>
+</tr>
+<tr>
+<td><code>app_puppet_trustedCns</code></td>
+<td><code>[]</code></td>
+<td>JSON list of trusted client CNs allowed for privileged proxy operations.</td>
+</tr>
+<tr>
+<td><code>app_puppet_catalogCache</code></td>
+<td><code>true</code></td>
+<td>Enable catalog caching.</td>
+</tr>
+<tr>
+<td><code>app_puppet_catalogCacheTTL</code></td>
+<td><code>86400</code></td>
+<td>TTL (seconds) for cached catalogs.</td>
+</tr>
+<tr>
+<td><code>app_puppet_catalogCacheFacts</code></td>
+<td><code>[]</code></td>
+<td>JSON list of facts used for granular, fact-based cache invalidation.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="puppetdb-proxy-app_puppetdb_">PuppetDB Proxy (<code>app_puppetdb_</code>)<a class="headerlink" href="#puppetdb-proxy-app_puppetdb_" title="Permanent link">&para;</a></h2>
+<p>Serves <code>/pdb</code>. Binding and TLS are configured via <code>app_main_*</code> (see above).</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app_puppetdb_enable</code></td>
+<td><code>true</code></td>
+<td>Enable the PuppetDB proxy router group.</td>
+</tr>
+<tr>
+<td><code>app_puppetdb_serverurl</code></td>
+<td><em>(unset)</em></td>
+<td>URL of the upstream PuppetDB. If unset, requests are not forwarded.</td>
+</tr>
+<tr>
+<td><code>app_puppetdb_timeout</code></td>
+<td><code>60</code></td>
+<td>Upstream request timeout (seconds).</td>
+</tr>
+<tr>
+<td><code>app_puppetdb_trustedCns</code></td>
+<td><code>[]</code></td>
+<td>JSON list of trusted client CNs.</td>
+</tr>
+<tr>
+<td><code>app_puppetdb_resourceQueryInternal</code></td>
+<td><code>true</code></td>
+<td>Answer <code>pdb/query/v4/resources</code> from pyppetdb's own store instead of forwarding upstream.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="certificate-authority-ca_">Certificate Authority (<code>ca_</code>)<a class="headerlink" href="#certificate-authority-ca_" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ca_autoSign</code></td>
+<td><code>false</code></td>
+<td>Automatically sign incoming certificate requests.</td>
+</tr>
+<tr>
+<td><code>ca_autoSignNodeIfExists</code></td>
+<td><code>false</code></td>
+<td>Auto-sign only if the node already exists in the database.</td>
+</tr>
+<tr>
+<td><code>ca_certificateValidityDays</code></td>
+<td><code>365</code></td>
+<td>Validity period (days) for issued certificates.</td>
+</tr>
+<tr>
+<td><code>ca_concurrentWorkers</code></td>
+<td><code>5</code></td>
+<td>Number of concurrent workers for CA signing operations.</td>
+</tr>
+<tr>
+<td><code>ca_enableCrlRefresh</code></td>
+<td><code>true</code></td>
+<td>Run the background CRL refresh worker.</td>
+</tr>
+<tr>
+<td><code>ca_crlRefreshInterval</code></td>
+<td><code>3600</code></td>
+<td>Interval (seconds) between CRL refresh runs.</td>
+</tr>
+<tr>
+<td><code>ca_crlValidityDays</code></td>
+<td><code>30</code></td>
+<td>Validity period (days) of generated CRLs.</td>
+</tr>
+<tr>
+<td><code>ca_verifyCertificateRegistration</code></td>
+<td><code>true</code></td>
+<td>Require client certificates presented over mTLS to exist (signed) in the database.</td>
+</tr>
+<tr>
+<td><code>ca_verifyCertificateRegistrationCacheTtl</code></td>
+<td><code>300</code></td>
+<td>TTL (seconds) of the certificate-registration verification cache.</td>
+</tr>
+<tr>
+<td><code>ca_verifyCertificateRegistrationCacheMaxsize</code></td>
+<td><code>1024</code></td>
+<td>Maximum number of entries in that cache.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="jobs-jobs_">Jobs (<code>jobs_</code>)<a class="headerlink" href="#jobs-jobs_" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jobs_maxNodesPerJob</code></td>
+<td><code>1000</code></td>
+<td>Maximum number of nodes a single job may target.</td>
+</tr>
+<tr>
+<td><code>jobs_expireSeconds</code></td>
+<td><code>3600</code></td>
+<td>TTL (seconds) for job records and their logs.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="mongodb-mongodb_">MongoDB (<code>mongodb_</code>)<a class="headerlink" href="#mongodb-mongodb_" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mongodb_url</code></td>
+<td><code>mongodb://localhost:27017</code></td>
+<td>MongoDB connection string. A replica set is required.</td>
+</tr>
+<tr>
+<td><code>mongodb_database</code></td>
+<td><code>pyppetdb</code></td>
+<td>Database name.</td>
+</tr>
+<tr>
+<td><code>mongodb_placementFacts</code></td>
+<td><code>[]</code></td>
+<td>JSON list of facts used to place documents when using sharded collections.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="ldap-ldap_">LDAP (<code>ldap_</code>)<a class="headerlink" href="#ldap-ldap_" title="Permanent link">&para;</a></h2>
+<p>Optional. When <code>ldap_url</code> is set, <code>ldap_binddn</code> and <code>ldap_password</code> are also required, otherwise
+the process exits. Used to synchronize team membership from LDAP groups.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ldap_url</code></td>
+<td><em>(unset)</em></td>
+<td>LDAP server URL. Enables LDAP integration when set.</td>
+</tr>
+<tr>
+<td><code>ldap_basedn</code></td>
+<td><em>(unset)</em></td>
+<td>Base DN for user/group searches.</td>
+</tr>
+<tr>
+<td><code>ldap_binddn</code></td>
+<td><em>(unset)</em></td>
+<td>Bind DN used to authenticate against the directory.</td>
+</tr>
+<tr>
+<td><code>ldap_password</code></td>
+<td><em>(unset)</em></td>
+<td>Password for the bind DN.</td>
+</tr>
+<tr>
+<td><code>ldap_userpattern</code></td>
+<td><em>(unset)</em></td>
+<td>Search pattern used to resolve users.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="oauth-oauth_name_">OAuth (<code>oauth_&lt;name&gt;_</code>)<a class="headerlink" href="#oauth-oauth_name_" title="Permanent link">&para;</a></h2>
+<p>Optional. OAuth providers are configured as a map keyed by a provider name you choose. Each
+<code>&lt;name&gt;</code> becomes a login provider. Currently the <code>github</code> provider <code>type</code> is implemented.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>oauth_&lt;name&gt;_type</code></td>
+<td>Provider type (e.g. <code>github</code>).</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_scope</code></td>
+<td>Requested OAuth scope.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_override</code></td>
+<td>If <code>true</code>, treat this provider as the backend of record for the user.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_client_id</code></td>
+<td>OAuth client ID.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_client_secret</code></td>
+<td>OAuth client secret.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_url_authorize</code></td>
+<td>Authorization endpoint URL.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_url_accesstoken</code></td>
+<td>Access-token endpoint URL.</td>
+</tr>
+<tr>
+<td><code>oauth_&lt;name&gt;_url_userinfo</code></td>
+<td>Userinfo endpoint URL (optional).</td>
+</tr>
+</tbody>
+</table>
+<p>Example (GitHub):</p>
+<div class="highlight"><pre><span></span><code>oauth_github_type=github
+oauth_github_scope=user
+oauth_github_override=true
+oauth_github_client_id=XXX
+oauth_github_client_secret=XXX
+oauth_github_url_authorize=https://github.com/login/oauth/authorize
+oauth_github_url_accesstoken=https://github.com/login/oauth/access_token
+oauth_github_url_userinfo=https://api.github.com/user
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>
