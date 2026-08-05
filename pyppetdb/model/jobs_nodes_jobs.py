@@ -28,9 +28,20 @@ filter_literal = Literal[
     "status",
     "created_by",
     "created_at",
+    "log_blobs",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
+
+sort_literal = Literal[
+    "id",
+    "job_id",
+    "definition_id",
+    "node_id",
+    "status",
+    "created_by",
+    "created_at",
+]
 
 
 class NodeJobGet(BaseModel):

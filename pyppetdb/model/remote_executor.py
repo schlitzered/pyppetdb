@@ -93,6 +93,7 @@ class RemoteExecutorMsgBodyJobId(BaseModel):
 
 RemoteExecutorMsgBodySubscribeLogs = RemoteExecutorMsgBodyJobId
 RemoteExecutorMsgBodyUnsubscribeLogs = RemoteExecutorMsgBodyJobId
+RemoteExecutorMsgBodyCancelJob = RemoteExecutorMsgBodyJobId
 
 
 class RemoteExecutorMsgBodyShutdown(BaseModel):
@@ -114,6 +115,7 @@ class RemoteExecutorMessage(BaseModel):
         "log_chunk_data",
         "subscribe_logs",
         "unsubscribe_logs",
+        "cancel_job",
         "shutdown",
     ]
     msg_body: Union[
@@ -144,6 +146,7 @@ class RemoteExecutorMessage(BaseModel):
             "log_chunk_data": RemoteExecutorMsgBodyLogChunkData,
             "subscribe_logs": RemoteExecutorMsgBodySubscribeLogs,
             "unsubscribe_logs": RemoteExecutorMsgBodyUnsubscribeLogs,
+            "cancel_job": RemoteExecutorMsgBodyCancelJob,
             "shutdown": RemoteExecutorMsgBodyShutdown,
         }
         expected_type = type_mapping.get(self.msg_type)

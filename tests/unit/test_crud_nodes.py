@@ -14,6 +14,7 @@
 
 import unittest
 from unittest.mock import MagicMock, AsyncMock
+from datetime import datetime
 import logging
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes import NodePutInternal
@@ -48,6 +49,61 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         query = self.crud._get.call_args[1]["query"]
         self.assertEqual(query["id"], "node1")
         self.assertEqual(query["node_groups"], {"$in": ["g1"]})
+
+    async def test_get_fetches_report_status_sources_and_strips_them(self):
+        self.crud._get = AsyncMock(
+            return_value={
+                "id": "node1",
+                "disabled": False,
+                "change_report": datetime.now(),
+                "report": {"status": "changed"},
+            }
+        )
+        node = await self.crud.get(_id="node1", fields=["id"])
+        fetched_fields = self.crud._get.call_args[1]["fields"]
+        self.assertIn("report.status", fetched_fields)
+        self.assertIn("disabled", fetched_fields)
+        self.assertIn("change_report", fetched_fields)
+        self.assertEqual(node.report_status_computed, "changed")
+        self.assertIsNone(node.report)
+        self.assertIsNone(node.disabled)
+        self.assertIsNone(node.change_report)
+
+    async def test_get_keeps_requested_report_status_sources(self):
+        change_report = datetime.now()
+        self.crud._get = AsyncMock(
+            return_value={
+                "id": "node1",
+                "disabled": False,
+                "change_report": change_report,
+                "report": {"status": "unchanged", "noop": True},
+            }
+        )
+        node = await self.crud.get(
+            _id="node1", fields=["id", "disabled", "report.noop"]
+        )
+        self.assertEqual(node.report_status_computed, "unchanged")
+        self.assertFalse(node.disabled)
+        self.assertIsNone(node.change_report)
+        self.assertTrue(node.report.noop)
+        self.assertIsNone(node.report.status)
+
+    async def test_get_without_fields_keeps_everything(self):
+        change_report = datetime.now()
+        self.crud._get = AsyncMock(
+            return_value={
+                "id": "node1",
+                "disabled": False,
+                "change_report": change_report,
+                "report": {"status": "failed"},
+            }
+        )
+        node = await self.crud.get(_id="node1", fields=[])
+        self.assertEqual(self.crud._get.call_args[1]["fields"], [])
+        self.assertEqual(node.report_status_computed, "failed")
+        self.assertFalse(node.disabled)
+        self.assertEqual(node.change_report, change_report)
+        self.assertEqual(node.report.status, "failed")
 
     async def test_resource_exists(self):
         self.crud._resource_exists = AsyncMock(return_value=MagicMock())

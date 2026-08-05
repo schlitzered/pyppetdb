@@ -111,6 +111,7 @@ class RemoteExecutorMsgBodyJobId(BaseModel):
 
 RemoteExecutorMsgBodySubscribeLogs = RemoteExecutorMsgBodyJobId
 RemoteExecutorMsgBodyUnsubscribeLogs = RemoteExecutorMsgBodyJobId
+RemoteExecutorMsgBodyCancelJob = RemoteExecutorMsgBodyJobId
 
 
 class RemoteExecutorMessage(BaseModel):
@@ -128,6 +129,7 @@ class RemoteExecutorMessage(BaseModel):
         "log_chunk_data",
         "subscribe_logs",
         "unsubscribe_logs",
+        "cancel_job",
     ]
     msg_body: Union[
         RemoteExecutorMsgBodyLogMessage,
@@ -158,6 +160,7 @@ class RemoteExecutorMessage(BaseModel):
             "log_chunk_data": RemoteExecutorMsgBodyLogChunkData,
             "subscribe_logs": RemoteExecutorMsgBodySubscribeLogs,
             "unsubscribe_logs": RemoteExecutorMsgBodyUnsubscribeLogs,
+            "cancel_job": RemoteExecutorMsgBodyCancelJob,
         }
         expected_type = type_mapping.get(self.msg_type)
         if expected_type and not isinstance(self.msg_body, expected_type):
@@ -188,6 +191,7 @@ class RemoteExecutorClient:
 
         # Persistent state
         self.current_job_ids: set[str] = set()
+        self.processes: Dict[str, Any] = {}
         self.log_buffers: Dict[str, List[RemoteExecutorLogEntry]] = {}
         self.unacked_log_batches: List[List[RemoteExecutorLogEntry]] = []
 
@@ -345,6 +349,10 @@ class RemoteExecutorClient:
                 asyncio.create_task(
                     coro=self._handle_unsubscribe_logs(body=msg.msg_body)
                 )
+            elif msg.msg_type == "cancel_job" and isinstance(
+                msg.msg_body, RemoteExecutorMsgBodyCancelJob
+            ):
+                asyncio.create_task(coro=self._handle_cancel_job(body=msg.msg_body))
             elif msg.msg_type == "heartbeat":
                 pass
 
@@ -352,6 +360,20 @@ class RemoteExecutorClient:
             print(f"Validation error: {e}")
         except Exception as e:
             print(f"Error handling message: {e}")
+
+    async def _handle_cancel_job(self, body: RemoteExecutorMsgBodyCancelJob):
+        process = self.processes.get(body.job_id)
+        if process is None or process.returncode is not None:
+            print(f"Cancel for unknown or already finished job {body.job_id}")
+            return
+
+        print(f"Canceling job {body.job_id}")
+        process.terminate()
+        try:
+            await asyncio.wait_for(fut=process.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            print(f"Job {body.job_id} did not terminate, killing it")
+            process.kill()
 
     async def _handle_subscribe_logs(self, body: RemoteExecutorMsgBodySubscribeLogs):
         self._log_subscribers.add(body.job_id)
@@ -532,6 +554,7 @@ class RemoteExecutorClient:
                 stderr=asyncio.subprocess.STDOUT,
                 env=env,
             )
+            self.processes[job_body.job_id] = process
 
             line_nr = 1
             while True:
@@ -594,6 +617,7 @@ class RemoteExecutorClient:
                     await asyncio.sleep(delay=5)
         finally:
             self.current_job_ids.discard(job_body.job_id)
+            self.processes.pop(job_body.job_id, None)
             self.log_buffers.pop(job_body.job_id, None)
             await self._send_status()
 

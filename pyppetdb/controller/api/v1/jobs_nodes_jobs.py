@@ -26,6 +26,8 @@ from pyppetdb.model.jobs_nodes_jobs import NodeJobGet
 from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 from pyppetdb.model.jobs_nodes_jobs import filter_list
 from pyppetdb.model.jobs_nodes_jobs import filter_literal
+from pyppetdb.model.jobs_nodes_jobs import sort_literal
+from pyppetdb.model.common import sort_order_literal
 
 
 class ControllerApiV1JobsNodesJobs:
@@ -75,10 +77,12 @@ class ControllerApiV1JobsNodesJobs:
     async def search(
         self,
         request: Request,
-        job_id: str = Query(default=None),
-        node_id: str = Query(default=None),
+        job_id: str = Query(description="filter: regular_expressions", default=None),
+        node_id: str = Query(description="filter: regular_expressions", default=None),
         status: str = Query(default=None),
         fields: Set[filter_literal] = Query(default=filter_list),
+        sort: sort_literal = Query(default="id"),
+        sort_order: sort_order_literal = Query(default="ascending"),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
@@ -88,15 +92,18 @@ class ControllerApiV1JobsNodesJobs:
             node_id=node_id,
             status=status,
             fields=list(fields),
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )
 
-        for job in result.result:
-            chunks = await self._manager.get_log_chunks(
-                job_run_id=job.id,
-            )
-            job.log_blobs = [f"{job.id}:{chunk}" for chunk in chunks]
+        if "log_blobs" in fields and "id" in fields:
+            for job in result.result:
+                chunks = await self._manager.get_log_chunks(
+                    job_run_id=job.id,
+                )
+                job.log_blobs = [f"{job.id}:{chunk}" for chunk in chunks]
 
         return result
 
@@ -112,9 +119,10 @@ class ControllerApiV1JobsNodesJobs:
             fields=list(fields),
         )
 
-        chunks = await self._manager.get_log_chunks(
-            job_run_id=node_job_id,
-        )
-        job.log_blobs = [f"{node_job_id}:{chunk}" for chunk in chunks]
+        if "log_blobs" in fields:
+            chunks = await self._manager.get_log_chunks(
+                job_run_id=node_job_id,
+            )
+            job.log_blobs = [f"{node_job_id}:{chunk}" for chunk in chunks]
 
         return job

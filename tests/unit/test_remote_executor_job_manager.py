@@ -26,8 +26,10 @@ class TestRemoteExecutorJobManager(unittest.IsolatedAsyncioTestCase):
         self.crud_nodes = MagicMock()
         self.crud_nodes.update_remote_agent_current_job_id = AsyncMock()
         self.crud_node_jobs = MagicMock()
-        self.crud_node_jobs.search = AsyncMock()
-        self.crud_node_jobs.update_status = AsyncMock()
+        self.crud_node_jobs.search = AsyncMock(return_value=MagicMock(result=[]))
+        self.crud_node_jobs.update_status = AsyncMock(
+            side_effect=lambda job_id, node_id, status: status
+        )
         self.manager = MagicMock()
         self.manager.job_finished = AsyncMock()
 
@@ -64,6 +66,16 @@ class TestRemoteExecutorJobManager(unittest.IsolatedAsyncioTestCase):
         kwargs = self.manager.job_finished.call_args[1]
         self.assertEqual(kwargs["status"], "failed")
         self.assertEqual(kwargs["exit_code"], 3)
+        self.assertNotIn("job1", self.jm.active_job_ids)
+
+    async def test_handle_finish_keeps_canceled_status(self):
+        self.crud_node_jobs.update_status = AsyncMock(return_value="canceled")
+        self.jm.active_job_ids = {"job1"}
+
+        await self.jm.handle_finish(MagicMock(job_id="job1", exit_code=143))
+
+        kwargs = self.manager.job_finished.call_args[1]
+        self.assertEqual(kwargs["status"], "canceled")
         self.assertNotIn("job1", self.jm.active_job_ids)
 
     async def test_handle_heartbeat_syncs_active_jobs(self):
@@ -139,28 +151,67 @@ class TestRemoteExecutorJobManager(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.job_finished.await_count, 2)
         self.assertEqual(self.jm.active_job_ids, set())
 
-    async def test_initialize_marks_stale_running_jobs_failed(self):
-        self.crud_node_jobs.search = AsyncMock(
-            return_value=MagicMock(result=[MagicMock(job_id="jobX")])
+    async def test_heartbeat_marks_unreported_running_jobs_failed(self):
+        async def fake_search(node_id, status):
+            if status == "running":
+                return MagicMock(
+                    result=[MagicMock(job_id="gone"), MagicMock(job_id="alive")]
+                )
+            return MagicMock(result=[])
+
+        self.crud_node_jobs.search = AsyncMock(side_effect=fake_search)
+
+        to_cancel = await self.jm.handle_heartbeat(
+            MagicMock(running_job_ids=["alive"], max_jobs=5)
         )
 
-        await self.jm.initialize()
-
-        self.crud_node_jobs.search.assert_awaited_once_with(
-            node_id="node1", status="running"
-        )
+        self.assertEqual(to_cancel, [])
         self.crud_node_jobs.update_status.assert_awaited_once_with(
-            job_id="jobX", node_id="node1", status="failed"
+            job_id="gone", node_id="node1", status="failed"
         )
-        self.manager.job_finished.assert_awaited_once()
+        kwargs = self.manager.job_finished.call_args[1]
+        self.assertEqual(kwargs["status"], "failed")
+        self.assertEqual(self.jm.active_job_ids, {"alive"})
 
-    async def test_initialize_without_stale_jobs_is_noop(self):
-        self.crud_node_jobs.search = AsyncMock(return_value=MagicMock(result=[]))
+    async def test_heartbeat_keeps_reported_running_jobs(self):
+        self.crud_node_jobs.search = AsyncMock(
+            return_value=MagicMock(result=[MagicMock(job_id="alive")])
+        )
 
-        await self.jm.initialize()
+        await self.jm.handle_heartbeat(
+            MagicMock(running_job_ids=["alive"], max_jobs=5)
+        )
 
         self.crud_node_jobs.update_status.assert_not_called()
         self.manager.job_finished.assert_not_called()
+
+    async def test_heartbeat_returns_canceled_jobs_still_running_on_agent(self):
+        async def fake_search(node_id, status):
+            if status == "canceled":
+                return MagicMock(
+                    result=[MagicMock(job_id="zombie"), MagicMock(job_id="old")]
+                )
+            return MagicMock(result=[])
+
+        self.crud_node_jobs.search = AsyncMock(side_effect=fake_search)
+
+        to_cancel = await self.jm.handle_heartbeat(
+            MagicMock(running_job_ids=["zombie", "alive"], max_jobs=5)
+        )
+
+        self.assertEqual(to_cancel, ["zombie"])
+
+    async def test_heartbeat_without_reported_jobs_skips_cancel_lookup(self):
+        self.crud_node_jobs.search = AsyncMock(return_value=MagicMock(result=[]))
+
+        to_cancel = await self.jm.handle_heartbeat(
+            MagicMock(running_job_ids=[], max_jobs=5)
+        )
+
+        self.assertEqual(to_cancel, [])
+        self.crud_node_jobs.search.assert_awaited_once_with(
+            node_id="node1", status="running"
+        )
 
 
 class TestHeartbeatModel(unittest.TestCase):

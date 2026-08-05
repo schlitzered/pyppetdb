@@ -38,6 +38,7 @@ from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunks
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunk
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunkData
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyShutdown
+from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyCancelJob
 
 
 class IncompatibleAgentError(Exception):
@@ -116,27 +117,34 @@ class RemoteExecutorJobManager:
         job = await self._crud_node_jobs.get_oldest_scheduled(node_id=self._node_id)
         return job.job_id if job else None
 
-    async def initialize(self):
-        await self._cleanup_stale_jobs()
-
-    async def _cleanup_stale_jobs(self):
+    async def _reconcile_jobs(self, reported: set) -> List[str]:
+        to_cancel: List[str] = []
         try:
             running_jobs = await self._crud_node_jobs.search(
                 node_id=self._node_id,
                 status="running",
             )
             for job in running_jobs.result:
-                self._log.warning(
-                    msg=f"Found stale running job {job.job_id} for node {self._node_id} during startup. Marking as failed."
-                )
+                if job.job_id in reported:
+                    continue
                 await self.mark_job_failed(
                     job_id=job.job_id,
-                    reason="Stale job found during protocol startup",
+                    reason="Agent no longer reports this job as running",
                 )
+
+            if reported:
+                canceled_jobs = await self._crud_node_jobs.search(
+                    node_id=self._node_id,
+                    status="canceled",
+                )
+                for job in canceled_jobs.result:
+                    if job.job_id in reported:
+                        to_cancel.append(job.job_id)
         except Exception as e:
             self._log.error(
-                msg=f"Error checking for stale jobs during startup for {self._node_id}: {e}"
+                msg=f"Error reconciling jobs for {self._node_id}: {e}"
             )
+        return to_cancel
 
     async def handle_finish(
         self,
@@ -147,7 +155,7 @@ class RemoteExecutorJobManager:
         job_id = body.job_id
 
         if job_id:
-            await self._crud_node_jobs.update_status(
+            final_status = await self._crud_node_jobs.update_status(
                 job_id=job_id,
                 node_id=self._node_id,
                 status=status,
@@ -155,7 +163,7 @@ class RemoteExecutorJobManager:
             await self._manager.job_finished(
                 node_id=self._node_id,
                 job_id=job_id,
-                status=status,
+                status=final_status or status,
                 exit_code=exit_code,
             )
             self.active_job_ids.discard(job_id)
@@ -170,10 +178,13 @@ class RemoteExecutorJobManager:
     async def handle_heartbeat(
         self,
         body: RemoteExecutorMsgBodyHeartbeat,
-    ):
-        self.active_job_ids = set(body.running_job_ids)
+    ) -> List[str]:
+        reported = set(body.running_job_ids)
+        self.active_job_ids = set(reported)
         self._max_jobs = body.max_jobs
+        to_cancel = await self._reconcile_jobs(reported=reported)
         await self._update_node_status()
+        return to_cancel
 
     async def mark_all_jobs_failed(
         self,
@@ -194,7 +205,7 @@ class RemoteExecutorJobManager:
             msg=f"Marking job {job_id} for node {self._node_id} as failed: {reason}"
         )
 
-        await self._crud_node_jobs.update_status(
+        final_status = await self._crud_node_jobs.update_status(
             job_id=job_id,
             node_id=self._node_id,
             status="failed",
@@ -202,7 +213,7 @@ class RemoteExecutorJobManager:
         await self._manager.job_finished(
             node_id=self._node_id,
             job_id=job_id,
-            status="failed",
+            status=final_status or "failed",
             exit_code=1,
         )
         self.active_job_ids.discard(job_id)
@@ -211,7 +222,19 @@ class RemoteExecutorJobManager:
     async def start_job(
         self,
         job_id: str,
-    ) -> RemoteExecutorMsgBodyStartJob:
+    ) -> Optional[RemoteExecutorMsgBodyStartJob]:
+        claimed_status = await self._crud_node_jobs.update_status(
+            job_id=job_id,
+            node_id=self._node_id,
+            status="running",
+        )
+        if claimed_status != "running":
+            self._log.info(
+                msg=f"Skipping dispatch of job {job_id} for {self._node_id}: "
+                f"status is {claimed_status}"
+            )
+            return None
+
         job = await self._crud_jobs.get(
             _id=job_id,
             fields=[],
@@ -223,11 +246,6 @@ class RemoteExecutorJobManager:
 
         self.active_job_ids.add(job_id)
         await self._update_node_status()
-        await self._crud_node_jobs.update_status(
-            job_id=job_id,
-            node_id=self._node_id,
-            status="running",
-        )
 
         return RemoteExecutorMsgBodyStartJob(
             job_id=job_id,
@@ -284,6 +302,7 @@ class RemoteExecutorProtocol:
 
         self._pending_agent_requests: Dict[str, asyncio.Future] = {}
         self._fill_lock = asyncio.Lock()
+        self._cancels_sent: set[str] = set()
 
     @property
     def pending_agent_requests(self):
@@ -293,8 +312,6 @@ class RemoteExecutorProtocol:
         self._running = False
 
     async def run(self):
-        await self._job_manager.initialize()
-
         try:
             while self._running:
                 data = await self._websocket.receive_text()
@@ -325,12 +342,36 @@ class RemoteExecutorProtocol:
 
         try:
             msg_body = await self._job_manager.start_job(job_id=job_id)
+            if not msg_body:
+                return
             await self._send_message(
                 msg_type="start_job",
                 body=msg_body,
             )
         except Exception as e:
             self._log.error(f"Error dispatching job {job_id} for {self._node_id}: {e}")
+            await self._job_manager.mark_job_failed(
+                job_id=job_id,
+                reason=f"dispatch failed: {e}",
+            )
+
+    async def cancel_job(self, job_id: str):
+        if not self._running:
+            return
+        if job_id not in self._job_manager.active_job_ids:
+            return
+        if job_id in self._cancels_sent:
+            return
+        self._cancels_sent.add(job_id)
+
+        self._log.info(msg=f"Sending cancel for job {job_id} to {self._node_id}")
+        try:
+            await self._send_message(
+                msg_type="cancel_job",
+                body=RemoteExecutorMsgBodyCancelJob(job_id=job_id),
+            )
+        except Exception as e:
+            self._log.error(f"Error canceling job {job_id} for {self._node_id}: {e}")
 
     async def _handle_message(
         self,
@@ -364,7 +405,9 @@ class RemoteExecutorProtocol:
             elif msg_type == "heartbeat" and isinstance(
                 body, RemoteExecutorMsgBodyHeartbeat
             ):
-                await self._job_manager.handle_heartbeat(body=body)
+                to_cancel = await self._job_manager.handle_heartbeat(body=body)
+                for job_id in to_cancel:
+                    asyncio.create_task(self.cancel_job(job_id=job_id))
                 asyncio.create_task(self.fill_slots())
             elif msg_type == "log_chunks" and isinstance(
                 body, RemoteExecutorMsgBodyLogChunks
@@ -550,7 +593,7 @@ class WsRemoteExecutor:
                     {
                         "$match": {
                             "operationType": {"$in": ["insert", "replace", "update"]},
-                            "fullDocument.status": "scheduled",
+                            "fullDocument.status": {"$in": ["scheduled", "canceled"]},
                         }
                     }
                 ]
@@ -564,9 +607,15 @@ class WsRemoteExecutor:
 
                         node_id = doc.get("node_id")
                         job_id = doc.get("job_id")
-                        if node_id in self._local_protocols and job_id:
-                            protocol = self._local_protocols[node_id]
+                        status = doc.get("status")
+                        if node_id not in self._local_protocols or not job_id:
+                            continue
+
+                        protocol = self._local_protocols[node_id]
+                        if status == "scheduled":
                             asyncio.create_task(protocol.fill_slots())
+                        elif status == "canceled":
+                            asyncio.create_task(protocol.cancel_job(job_id=job_id))
             except Exception as e:
                 self._log.error(f"Error in Change Stream watcher: {e}")
                 await asyncio.sleep(5)

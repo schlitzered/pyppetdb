@@ -314,6 +314,52 @@ class CrudNodes(CrudMongo):
             },
         )
 
+    _report_status_source_fields = ("report.status", "disabled", "change_report")
+
+    @staticmethod
+    def _fields_with_report_status_sources(fields: Optional[list]) -> Optional[list]:
+        if not fields:
+            return fields
+        extended = list(fields)
+        for source in CrudNodes._report_status_source_fields:
+            parent = source.split(".", 1)[0]
+            if source not in extended and parent not in extended:
+                extended.append(source)
+        return extended
+
+    @staticmethod
+    def _strip_report_status_sources(result: dict, fields: Optional[list]) -> dict:
+        if not fields:
+            return result
+        requested = set(fields)
+        if "disabled" not in requested:
+            result.pop("disabled", None)
+        if "change_report" not in requested:
+            result.pop("change_report", None)
+        if "report" not in requested:
+            if not any(field.startswith("report.") for field in requested):
+                result.pop("report", None)
+            elif "report.status" not in requested and isinstance(
+                result.get("report"), dict
+            ):
+                result["report"].pop("status", None)
+        return result
+
+    def _build_node_response(
+        self,
+        result: dict,
+        fields: Optional[list],
+        outdated_threshold: Optional[str] = None,
+    ) -> NodeGet:
+        computed = self._compute_report_status(
+            node=NodeGet(**result),
+            outdated_threshold=outdated_threshold,
+        )
+        stripped = self._strip_report_status_sources(result=result, fields=fields)
+        node = NodeGet(**stripped)
+        node.report_status_computed = computed.report_status_computed
+        return node
+
     @staticmethod
     def _compute_report_status(
         node: NodeGet,
@@ -357,11 +403,13 @@ class CrudNodes(CrudMongo):
     ) -> NodeGet:
         query = {"id": _id}
         self._filter_list(query, "node_groups", user_node_groups)
-        result = await self._get(query=query, fields=fields)
-        result = NodeGet(**result)
-
-        return self._compute_report_status(
-            node=result,
+        result = await self._get(
+            query=query,
+            fields=self._fields_with_report_status_sources(fields),
+        )
+        return self._build_node_response(
+            result=result,
+            fields=fields,
             outdated_threshold=outdated_threshold,
         )
 
@@ -650,9 +698,9 @@ class CrudNodes(CrudMongo):
 
         result = await self._create(
             payload=data,
-            fields=fields,
+            fields=self._fields_with_report_status_sources(fields),
         )
-        return self._compute_report_status(node=NodeGet(**result))
+        return self._build_node_response(result=result, fields=fields)
 
     async def update(
         self,
@@ -667,13 +715,13 @@ class CrudNodes(CrudMongo):
 
         result = await self._update(
             query=query,
-            fields=fields,
+            fields=self._fields_with_report_status_sources(fields),
             payload=data,
             upsert=upsert,
         )
         if return_none:
             return None
-        return self._compute_report_status(node=NodeGet(**result))
+        return self._build_node_response(result=result, fields=fields)
 
     async def update_remote_agent_status(
         self,

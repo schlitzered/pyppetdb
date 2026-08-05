@@ -74,7 +74,19 @@ A job carries:
 | `GET` | `/api/v1/jobs/jobs` | List jobs. |
 | `POST` | `/api/v1/jobs/jobs` | Create (trigger) a job. |
 | `GET` | `/api/v1/jobs/jobs/{job_id}` | Get a job. |
-| `POST` | `/api/v1/jobs/jobs/{job_id}/cancel` | Cancel a running job. |
+| `POST` | `/api/v1/jobs/jobs/{job_id}/cancel` | Cancel a job's pending and running per-node executions. |
+
+Canceling a job marks all of its per-node executions that are still `scheduled` or `running` as
+`canceled`; executions that already reached a terminal state (`success`, `failed`, `canceled`) are
+left untouched. For executions that were already dispatched, the API instance holding the agent
+connection sends a `cancel_job` message to the agent, which terminates the process.
+
+If the agent is disconnected when the cancel arrives, the kill signal is delivered on reconnect:
+every agent heartbeat is reconciled against the database, and any job the agent still reports as
+running whose execution is `canceled` gets a `cancel_job` message (at most once per connection).
+The same reconciliation replaces the old reconnect cleanup — running executions are only marked
+`failed` once the agent stops reporting them, so a job that survives a reconnect keeps its true
+outcome.
 
 ### Per-node executions and logs
 

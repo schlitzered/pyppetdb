@@ -24,12 +24,10 @@ import pymongo
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.errors import ResourceNotFound
-from pyppetdb.model.ca_certificates import (
-    CACertificateGet,
-    CACertificateGetMulti,
-    CACertificatePostInternal,
-    CACertificatePutInternal,
-)
+from pyppetdb.model.ca_certificates import CACertificateGet
+from pyppetdb.model.ca_certificates import CACertificateGetMulti
+from pyppetdb.model.ca_certificates import CACertificatePostInternal
+from pyppetdb.model.ca_certificates import CACertificatePutInternal
 from pyppetdb.model.ca_certificates import CAStatus
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import DataDelete

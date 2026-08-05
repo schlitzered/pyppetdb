@@ -29,6 +29,13 @@ filter_literal = Literal[
 
 filter_list = set(typing_get_args(filter_literal))
 
+sort_literal = Literal[
+    "id",
+    "executable",
+    "user",
+    "group",
+]
+
 
 class JobParamDefinition(BaseModel):
     type: Literal["string", "float", "bool", "int", "enum"]

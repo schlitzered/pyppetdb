@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import uuid
+from datetime import datetime, timedelta
 from pyppetdb.authorize import PERM_NODES_CREATE
 from tests.integration.base import IntegrationTestBase
 
@@ -105,6 +106,80 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         resp = self.client.get(f"/api/v1/nodes/{node_id}", headers=self._auth_headers())
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["id"], node_id)
+
+    def test_nodes_report_status_computed_with_field_projection(self):
+        node_id = f"node-status-{uuid.uuid4().hex}"
+        self._db["nodes"].insert_one(
+            {
+                "id": node_id,
+                "environment": "production",
+                "disabled": False,
+                "change_report": datetime.now(),
+                "report": {"status": "changed", "noop": False},
+                "facts": {},
+                "node_groups": [],
+            }
+        )
+        self.addCleanup(self._db["nodes"].delete_many, {"id": node_id})
+
+        resp = self.client.get(
+            f"/api/v1/nodes/{node_id}",
+            headers=self._auth_headers(),
+            params={"fields": ["id"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["report_status_computed"], "changed")
+        self.assertNotIn("report", body)
+        self.assertNotIn("disabled", body)
+        self.assertNotIn("change_report", body)
+
+        resp = self.client.get(
+            f"/api/v1/nodes/{node_id}",
+            headers=self._auth_headers(),
+            params={"fields": ["id", "disabled", "report.noop"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["report_status_computed"], "changed")
+        self.assertEqual(body["disabled"], False)
+        self.assertEqual(body["report"], {"noop": False})
+        self.assertNotIn("change_report", body)
+
+        resp = self.client.get(
+            "/api/v1/nodes",
+            headers=self._auth_headers(),
+            params={"node_id": node_id, "fields": ["id"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()["result"][0]
+        self.assertEqual(result["report_status_computed"], "changed")
+        self.assertNotIn("report", result)
+
+    def test_nodes_report_status_computed_disabled_node_not_outdated(self):
+        node_id = f"node-status-{uuid.uuid4().hex}"
+        self._db["nodes"].insert_one(
+            {
+                "id": node_id,
+                "environment": "production",
+                "disabled": True,
+                "change_report": datetime.now() - timedelta(days=10),
+                "report": {"status": "unchanged"},
+                "facts": {},
+                "node_groups": [],
+            }
+        )
+        self.addCleanup(self._db["nodes"].delete_many, {"id": node_id})
+
+        resp = self.client.get(
+            f"/api/v1/nodes/{node_id}",
+            headers=self._auth_headers(),
+            params={"fields": ["id"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["report_status_computed"], "unchanged")
+        self.assertNotIn("disabled", body)
 
     def test_nodes_distinct_facts(self):
         pfx = uuid.uuid4().hex[:8]

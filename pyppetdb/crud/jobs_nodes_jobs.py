@@ -24,6 +24,8 @@ from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 
 
 class CrudJobsNodeJobs(CrudMongo):
+    terminal_statuses = ("success", "failed", "canceled")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._indices.extend(
@@ -40,6 +42,9 @@ class CrudJobsNodeJobs(CrudMongo):
                 ),
                 pymongo.IndexModel(
                     [("created_by", pymongo.ASCENDING)], name="idx_created_by"
+                ),
+                pymongo.IndexModel(
+                    [("created_at", pymongo.ASCENDING)], name="idx_created_at"
                 ),
                 pymongo.IndexModel(
                     [("job_id", pymongo.ASCENDING), ("node_id", pymongo.ASCENDING)],
@@ -102,7 +107,7 @@ class CrudJobsNodeJobs(CrudMongo):
 
     async def cancel_node_jobs(self, job_id: str):
         await self.coll.update_many(
-            filter={"job_id": job_id, "status": "scheduled"},
+            filter={"job_id": job_id, "status": {"$in": ["scheduled", "running"]}},
             update={"$set": {"status": "canceled"}},
         )
 
@@ -119,11 +124,23 @@ class CrudJobsNodeJobs(CrudMongo):
         job_id: str,
         node_id: str,
         status: str,
-    ):
-        await self.coll.update_one(
-            filter={"job_id": job_id, "node_id": node_id},
+    ) -> Optional[str]:
+        result = await self.coll.find_one_and_update(
+            filter={
+                "job_id": job_id,
+                "node_id": node_id,
+                "status": {"$nin": list(self.terminal_statuses)},
+            },
             update={"$set": {"status": status}},
+            return_document=pymongo.ReturnDocument.AFTER,
         )
+        if result:
+            return status
+        doc = await self.coll.find_one(
+            filter={"job_id": job_id, "node_id": node_id},
+            projection={"status": 1},
+        )
+        return doc["status"] if doc else None
 
     async def delete_by_node(self, node_id: str):
         await self.coll.delete_many(filter={"node_id": node_id})
