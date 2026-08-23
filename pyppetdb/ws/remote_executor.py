@@ -13,9 +13,10 @@
 # limitations under the License.
 
 import asyncio
+import datetime
 import logging
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Set, Tuple
 from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import ValidationError, BaseModel
 
@@ -39,6 +40,9 @@ from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyGetLogChunk
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyLogChunkData
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyShutdown
 from pyppetdb.model.remote_executor import RemoteExecutorMsgBodyCancelJob
+
+
+DISPATCH_CONFIRM_TIMEOUT_SECONDS = 90
 
 
 class IncompatibleAgentError(Exception):
@@ -117,34 +121,51 @@ class RemoteExecutorJobManager:
         job = await self._crud_node_jobs.get_oldest_scheduled(node_id=self._node_id)
         return job.job_id if job else None
 
-    async def _reconcile_jobs(self, reported: set) -> List[str]:
+    async def _reconcile_jobs(self, reported: set) -> Tuple[List[str], Set[str]]:
         to_cancel: List[str] = []
+        pending: Set[str] = set()
         try:
-            running_jobs = await self._crud_node_jobs.search(
+            active_jobs = await self._crud_node_jobs.get_by_statuses(
                 node_id=self._node_id,
-                status="running",
+                statuses=["dispatched", "running"],
             )
-            for job in running_jobs.result:
-                if job.job_id in reported:
-                    continue
-                await self.mark_job_failed(
-                    job_id=job.job_id,
-                    reason="Agent no longer reports this job as running",
-                )
-
-            if reported:
-                canceled_jobs = await self._crud_node_jobs.search(
-                    node_id=self._node_id,
-                    status="canceled",
-                )
-                for job in canceled_jobs.result:
+            now = datetime.datetime.now()
+            for job in active_jobs:
+                if job.status == "dispatched":
                     if job.job_id in reported:
-                        to_cancel.append(job.job_id)
+                        await self._crud_node_jobs.confirm_running(
+                            job_id=job.job_id,
+                            node_id=self._node_id,
+                        )
+                    elif (
+                        job.dispatched_at is not None
+                        and (now - job.dispatched_at).total_seconds()
+                        > DISPATCH_CONFIRM_TIMEOUT_SECONDS
+                    ):
+                        await self.mark_job_failed(
+                            job_id=job.job_id,
+                            reason=f"Agent did not confirm dispatched job within {DISPATCH_CONFIRM_TIMEOUT_SECONDS}s",
+                        )
+                    else:
+                        pending.add(job.job_id)
+                elif job.job_id not in reported:
+                    await self.mark_job_failed(
+                        job_id=job.job_id,
+                        reason="Agent no longer reports this job as running",
+                    )
+
+            reported_jobs = await self._crud_node_jobs.get_by_job_ids(
+                node_id=self._node_id,
+                job_ids=list(reported),
+            )
+            for job in reported_jobs:
+                if job.status in ("canceled", "failed"):
+                    to_cancel.append(job.job_id)
         except Exception as e:
             self._log.error(
                 msg=f"Error reconciling jobs for {self._node_id}: {e}"
             )
-        return to_cancel
+        return to_cancel, pending
 
     async def handle_finish(
         self,
@@ -180,9 +201,9 @@ class RemoteExecutorJobManager:
         body: RemoteExecutorMsgBodyHeartbeat,
     ) -> List[str]:
         reported = set(body.running_job_ids)
-        self.active_job_ids = set(reported)
         self._max_jobs = body.max_jobs
-        to_cancel = await self._reconcile_jobs(reported=reported)
+        to_cancel, pending = await self._reconcile_jobs(reported=reported)
+        self.active_job_ids = reported | pending
         await self._update_node_status()
         return to_cancel
 
@@ -223,12 +244,11 @@ class RemoteExecutorJobManager:
         self,
         job_id: str,
     ) -> Optional[RemoteExecutorMsgBodyStartJob]:
-        claimed_status = await self._crud_node_jobs.update_status(
+        claimed_status = await self._crud_node_jobs.claim_for_dispatch(
             job_id=job_id,
             node_id=self._node_id,
-            status="running",
         )
-        if claimed_status != "running":
+        if claimed_status != "dispatched":
             self._log.info(
                 msg=f"Skipping dispatch of job {job_id} for {self._node_id}: "
                 f"status is {claimed_status}"

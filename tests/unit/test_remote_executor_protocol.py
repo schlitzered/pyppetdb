@@ -59,6 +59,12 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_node_jobs.update_status = AsyncMock(
             side_effect=lambda job_id, node_id, status: status
         )
+        self.mock_crud_node_jobs.claim_for_dispatch = AsyncMock(
+            return_value="dispatched"
+        )
+        self.mock_crud_node_jobs.confirm_running = AsyncMock(return_value=True)
+        self.mock_crud_node_jobs.get_by_statuses = AsyncMock(return_value=[])
+        self.mock_crud_node_jobs.get_by_job_ids = AsyncMock(return_value=[])
         self.mock_crud_node_jobs.search = AsyncMock()
         self.mock_crud_node_jobs.search.return_value = MagicMock(result=[])
 
@@ -294,7 +300,9 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dispatched, ["next_job"])
 
     async def test_dispatch_job_skips_when_job_no_longer_scheduled(self):
-        self.mock_crud_node_jobs.update_status = AsyncMock(return_value="canceled")
+        self.mock_crud_node_jobs.claim_for_dispatch = AsyncMock(
+            return_value="canceled"
+        )
         self.protocol._send_message = AsyncMock()
 
         await self.protocol.dispatch_job(job_id="job1")
@@ -342,12 +350,9 @@ class TestRemoteExecutorProtocolUnit(unittest.IsolatedAsyncioTestCase):
         self.protocol._send_message.assert_called_once()
 
     async def test_heartbeat_sends_cancel_for_canceled_jobs_still_on_agent(self):
-        async def fake_search(node_id, status):
-            if status == "canceled":
-                return MagicMock(result=[MagicMock(job_id="zombie")])
-            return MagicMock(result=[])
-
-        self.mock_crud_node_jobs.search = AsyncMock(side_effect=fake_search)
+        self.mock_crud_node_jobs.get_by_job_ids = AsyncMock(
+            return_value=[MagicMock(job_id="zombie", status="canceled")]
+        )
         self.protocol.cancel_job = AsyncMock()
         self.protocol.fill_slots = AsyncMock()
 

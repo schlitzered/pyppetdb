@@ -1,5 +1,6 @@
 .antigravitycli
 .coverage
+*secret
 GEMINI.md
 api_secret.txt
 scripts/
