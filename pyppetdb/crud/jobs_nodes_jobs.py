@@ -24,6 +24,8 @@ from pyppetdb.model.jobs_nodes_jobs import JobsNodeJobGetMulti
 
 
 class CrudJobsNodeJobs(CrudMongo):
+    terminal_statuses = ("success", "failed", "canceled")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._indices.extend(
@@ -40,6 +42,9 @@ class CrudJobsNodeJobs(CrudMongo):
                 ),
                 pymongo.IndexModel(
                     [("created_by", pymongo.ASCENDING)], name="idx_created_by"
+                ),
+                pymongo.IndexModel(
+                    [("created_at", pymongo.ASCENDING)], name="idx_created_at"
                 ),
                 pymongo.IndexModel(
                     [("job_id", pymongo.ASCENDING), ("node_id", pymongo.ASCENDING)],
@@ -86,7 +91,10 @@ class CrudJobsNodeJobs(CrudMongo):
         threshold = datetime.datetime.now() - datetime.timedelta(
             seconds=timeout_seconds
         )
-        query = {"status": "scheduled", "created_at": {"$lt": threshold}}
+        query = {
+            "status": {"$in": ["scheduled", "dispatched"]},
+            "created_at": {"$lt": threshold},
+        }
 
         expired_jobs = []
         async for doc in self.coll.find(filter=query):
@@ -102,7 +110,10 @@ class CrudJobsNodeJobs(CrudMongo):
 
     async def cancel_node_jobs(self, job_id: str):
         await self.coll.update_many(
-            filter={"job_id": job_id, "status": "scheduled"},
+            filter={
+                "job_id": job_id,
+                "status": {"$in": ["scheduled", "dispatched", "running"]},
+            },
             update={"$set": {"status": "canceled"}},
         )
 
@@ -114,16 +125,84 @@ class CrudJobsNodeJobs(CrudMongo):
             return NodeJobGet(**self._format(result[0]))
         return None
 
+    async def get_by_statuses(
+        self,
+        node_id: str,
+        statuses: List[str],
+    ) -> List[NodeJobGet]:
+        cursor = self.coll.find(
+            filter={"node_id": node_id, "status": {"$in": statuses}}
+        )
+        return [NodeJobGet(**self._format(doc)) async for doc in cursor]
+
+    async def get_by_job_ids(
+        self,
+        node_id: str,
+        job_ids: List[str],
+    ) -> List[NodeJobGet]:
+        if not job_ids:
+            return []
+        cursor = self.coll.find(
+            filter={"node_id": node_id, "job_id": {"$in": job_ids}}
+        )
+        return [NodeJobGet(**self._format(doc)) async for doc in cursor]
+
+    async def claim_for_dispatch(
+        self,
+        job_id: str,
+        node_id: str,
+    ) -> Optional[str]:
+        result = await self.coll.find_one_and_update(
+            filter={"job_id": job_id, "node_id": node_id, "status": "scheduled"},
+            update={
+                "$set": {
+                    "status": "dispatched",
+                    "dispatched_at": datetime.datetime.now(),
+                }
+            },
+            return_document=pymongo.ReturnDocument.AFTER,
+        )
+        if result:
+            return "dispatched"
+        doc = await self.coll.find_one(
+            filter={"job_id": job_id, "node_id": node_id},
+            projection={"status": 1},
+        )
+        return doc["status"] if doc else None
+
+    async def confirm_running(
+        self,
+        job_id: str,
+        node_id: str,
+    ) -> bool:
+        result = await self.coll.find_one_and_update(
+            filter={"job_id": job_id, "node_id": node_id, "status": "dispatched"},
+            update={"$set": {"status": "running"}},
+        )
+        return result is not None
+
     async def update_status(
         self,
         job_id: str,
         node_id: str,
         status: str,
-    ):
-        await self.coll.update_one(
-            filter={"job_id": job_id, "node_id": node_id},
+    ) -> Optional[str]:
+        result = await self.coll.find_one_and_update(
+            filter={
+                "job_id": job_id,
+                "node_id": node_id,
+                "status": {"$nin": list(self.terminal_statuses)},
+            },
             update={"$set": {"status": status}},
+            return_document=pymongo.ReturnDocument.AFTER,
         )
+        if result:
+            return status
+        doc = await self.coll.find_one(
+            filter={"job_id": job_id, "node_id": node_id},
+            projection={"status": 1},
+        )
+        return doc["status"] if doc else None
 
     async def delete_by_node(self, node_id: str):
         await self.coll.delete_many(filter={"node_id": node_id})

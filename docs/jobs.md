@@ -74,7 +74,40 @@ A job carries:
 | `GET` | `/api/v1/jobs/jobs` | List jobs. |
 | `POST` | `/api/v1/jobs/jobs` | Create (trigger) a job. |
 | `GET` | `/api/v1/jobs/jobs/{job_id}` | Get a job. |
-| `POST` | `/api/v1/jobs/jobs/{job_id}/cancel` | Cancel a running job. |
+| `POST` | `/api/v1/jobs/jobs/{job_id}/cancel` | Cancel a job's pending and running per-node executions. |
+
+Canceling a job marks all of its per-node executions that are still `scheduled`, `dispatched`, or
+`running` as `canceled`; executions that already reached a terminal state (`success`, `failed`,
+`canceled`) are left untouched. For executions that were already dispatched, the API instance
+holding the agent connection sends a `cancel_job` message to the agent, which terminates the
+process.
+
+If the agent is disconnected when the cancel arrives, the kill signal is delivered on reconnect:
+every agent heartbeat is reconciled against the database, and any job the agent still reports as
+running whose execution is `canceled` or `failed` gets a `cancel_job` message (at most once per
+connection). The same reconciliation replaces the old reconnect cleanup — running executions are
+only marked `failed` once the agent stops reporting them, so a job that survives a reconnect keeps
+its true outcome.
+
+### Execution states
+
+A per-node execution moves through these states:
+
+| State | Meaning |
+|-------|---------|
+| `scheduled` | Queued; not yet sent to the agent. |
+| `dispatched` | `start_job` was sent to the agent, which has not yet confirmed it. The claim is atomic, and `dispatched_at` records when it happened. |
+| `running` | The agent reported the job in a heartbeat — it is actually executing. |
+| `success` / `failed` / `canceled` | Terminal. |
+
+A heartbeat is always a snapshot from the agent's point of view, so a job the server just
+dispatched may legitimately be missing from heartbeats that were in flight during dispatch. The
+reconciliation therefore treats the two active states differently: a `dispatched` execution that
+the agent does not report yet is left alone until a confirmation timeout (90 seconds) expires,
+while a `running` execution missing from a heartbeat is failed immediately — `running` by
+definition means the agent has reported it before. `dispatched` executions count toward the
+agent's `max_jobs` capacity, so the queue can never overload an agent through unconfirmed
+dispatches.
 
 ### Per-node executions and logs
 
@@ -87,6 +120,18 @@ A job carries:
 Logs are streamed from the agent through pyppetdb to the API in real time (see
 [Architecture → Secure Job Execution](architecture.md#4-secure-job-execution-inter-instance-websocket)).
 Secret redaction is applied to job logs as well, so secrets never leak into the UI.
+
+## Concurrency and queueing
+
+Each agent reports a concurrency limit (its `max_jobs`) to the server. pyppetdb dispatches per-node
+executions to an agent only while it has a free slot; any excess stays `scheduled` in the queue and
+is dispatched automatically, oldest-first, as running jobs finish and slots free up. Agents are
+never overloaded, and no job is silently dropped.
+
+!!! warning "Queue wait is bounded by `jobs_expireSeconds`"
+    A per-node execution that stays in the `scheduled` or `dispatched` state longer than
+    `jobs_expireSeconds` (default 3600, measured from creation) is marked `failed` by the expiry
+    worker. If you expect long queues, raise `jobs_expireSeconds` accordingly.
 
 ## Permissions
 

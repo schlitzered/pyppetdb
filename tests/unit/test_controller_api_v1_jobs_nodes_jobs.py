@@ -64,10 +64,31 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             _id="job1:node1",
             fields=[],
         )
+        self.mock_manager.get_log_chunks.assert_not_called()
+        self.assertEqual(result.id, "job1:node1")
+        self.assertEqual(result.log_blobs, [])
+
+    async def test_get_populates_log_blobs_when_requested(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.get = AsyncMock(
+            return_value=NodeJobGet(id="job1:node1", job_id="job1")
+        )
+        self.mock_manager.get_log_chunks = AsyncMock(return_value=["chunk1"])
+
+        result = await self.controller.get(
+            request=mock_request,
+            node_job_id="job1:node1",
+            fields={"log_blobs"},
+        )
+
+        self.mock_crud.get.assert_called_once_with(
+            _id="job1:node1",
+            fields=["log_blobs"],
+        )
         self.mock_manager.get_log_chunks.assert_called_once_with(
             job_run_id="job1:node1",
         )
-        self.assertEqual(result.id, "job1:node1")
         self.assertEqual(result.log_blobs, ["job1:node1:chunk1"])
 
     async def test_search_success(self):
@@ -96,6 +117,8 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1",
             status="scheduled",
             fields=set(),
+            sort="created_at",
+            sort_order="descending",
             page=0,
             limit=10,
         )
@@ -108,11 +131,54 @@ class TestControllerApiV1JobsNodesJobsUnit(unittest.IsolatedAsyncioTestCase):
             node_id="node1",
             status="scheduled",
             fields=[],
+            sort="created_at",
+            sort_order="descending",
             page=0,
             limit=10,
         )
+        self.mock_manager.get_log_chunks.assert_not_called()
+        self.assertEqual(len(result.result), 1)
+        self.assertEqual(result.result[0].log_blobs, [])
+
+    async def test_search_populates_log_blobs_when_requested_with_id(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.search = AsyncMock(
+            return_value=JobsNodeJobGetMulti(
+                result=[NodeJobGet(id="job1:node1", job_id="job1")],
+                meta={"result_size": 1},
+            )
+        )
+        self.mock_manager.get_log_chunks = AsyncMock(return_value=["chunk1"])
+
+        result = await self.controller.search(
+            request=mock_request,
+            fields={"id", "log_blobs"},
+            page=0,
+            limit=10,
+        )
+
         self.mock_manager.get_log_chunks.assert_called_once_with(
             job_run_id="job1:node1",
         )
-        self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].log_blobs, ["job1:node1:chunk1"])
+
+    async def test_search_skips_log_blobs_without_id_field(self):
+        mock_request = MagicMock(spec=Request)
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_crud.search = AsyncMock(
+            return_value=JobsNodeJobGetMulti(
+                result=[NodeJobGet(job_id="job1")],
+                meta={"result_size": 1},
+            )
+        )
+        self.mock_manager.get_log_chunks = AsyncMock()
+
+        await self.controller.search(
+            request=mock_request,
+            fields={"log_blobs"},
+            page=0,
+            limit=10,
+        )
+
+        self.mock_manager.get_log_chunks.assert_not_called()

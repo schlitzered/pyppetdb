@@ -104,7 +104,7 @@ Serves `/pdb`. Binding and TLS are configured via `app_main_*` (see above).
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `jobs_maxNodesPerJob` | `1000` | Maximum number of nodes a single job may target. |
-| `jobs_expireSeconds` | `3600` | TTL (seconds) for job records and their logs. |
+| `jobs_expireSeconds` | `3600` | TTL (seconds) for job records and their logs. Because jobs wait as `scheduled` until the agent has a free slot, this also bounds the **maximum time a job may wait in the queue** before it is marked `failed`. Raise it if you expect long queues. |
 
 ## MongoDB (`mongodb_`)
 

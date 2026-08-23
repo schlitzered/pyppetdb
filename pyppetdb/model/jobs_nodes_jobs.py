@@ -28,9 +28,21 @@ filter_literal = Literal[
     "status",
     "created_by",
     "created_at",
+    "dispatched_at",
+    "log_blobs",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
+
+sort_literal = Literal[
+    "id",
+    "job_id",
+    "definition_id",
+    "node_id",
+    "status",
+    "created_by",
+    "created_at",
+]
 
 
 class NodeJobGet(BaseModel):
@@ -39,10 +51,11 @@ class NodeJobGet(BaseModel):
     definition_id: str = ""
     node_id: Optional[str] = None
     status: Optional[
-        Literal["scheduled", "running", "success", "failed", "canceled"]
+        Literal["scheduled", "dispatched", "running", "success", "failed", "canceled"]
     ] = None
     created_by: str = ""
     created_at: Optional[datetime.datetime] = None
+    dispatched_at: Optional[datetime.datetime] = None
     log_blobs: List[str] = []
 
 

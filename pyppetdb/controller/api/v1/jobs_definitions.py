@@ -35,7 +35,9 @@ from pyppetdb.model.jobs_definitions import JobDefinitionPost
 from pyppetdb.model.jobs_definitions import JobDefinitionPut
 from pyppetdb.model.jobs_definitions import filter_list
 from pyppetdb.model.jobs_definitions import filter_literal
+from pyppetdb.model.jobs_definitions import sort_literal
 from pyppetdb.model.common import DataDelete
+from pyppetdb.model.common import sort_order_literal
 
 
 class ControllerApiV1JobsDefinitions:
@@ -107,15 +109,21 @@ class ControllerApiV1JobsDefinitions:
     async def search(
         self,
         request: Request,
-        _id: str = Query(default=None),
+        definition_id: str = Query(
+            description="filter: regular_expressions", default=None
+        ),
         fields: Set[filter_literal] = Query(default=filter_list),
+        sort: sort_literal = Query(default="id"),
+        sort_order: sort_order_literal = Query(default="ascending"),
         page: int = Query(default=0, ge=0),
         limit: int = Query(default=10, ge=10, le=1000),
     ):
         await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         return await self.crud_jobs_definitions.search(
-            _id=_id,
+            _id=definition_id,
             fields=list(fields),
+            sort=sort,
+            sort_order=sort_order,
             page=page,
             limit=limit,
         )

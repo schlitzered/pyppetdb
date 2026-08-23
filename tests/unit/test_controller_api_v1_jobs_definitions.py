@@ -157,13 +157,25 @@ class TestControllerApiV1JobsDefinitionsUnit(unittest.IsolatedAsyncioTestCase):
 
         await self.controller.search(
             request=mock_request,
+            definition_id="def1",
             fields=set(),
+            sort="id",
+            sort_order="ascending",
+            page=0,
+            limit=10,
         )
 
         self.mock_authorize.require_perm.assert_called_once_with(
             request=mock_request, permission=PERM_JOBS_GET
         )
-        self.mock_crud.search.assert_called_once()
+        self.mock_crud.search.assert_called_once_with(
+            _id="def1",
+            fields=[],
+            sort="id",
+            sort_order="ascending",
+            page=0,
+            limit=10,
+        )
 
     async def test_get_success(self):
         mock_request = MagicMock(spec=Request)

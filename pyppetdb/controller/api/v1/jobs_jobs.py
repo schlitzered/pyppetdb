@@ -112,9 +112,15 @@ class ControllerApiV1JobsJobs:
     async def search(
         self,
         request: Request,
-        _id: Optional[str] = Query(default=None),
-        definition_id: Optional[str] = Query(default=None),
-        created_by: Optional[str] = Query(default=None),
+        job_id: Optional[str] = Query(
+            description="filter: regular_expressions", default=None
+        ),
+        definition_id: Optional[str] = Query(
+            description="filter: regular_expressions", default=None
+        ),
+        created_by: Optional[str] = Query(
+            description="filter: regular_expressions", default=None
+        ),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: Optional[sort_literal] = Query(default=None),
         sort_order: Optional[sort_order_literal] = Query(default=None),
@@ -123,7 +129,7 @@ class ControllerApiV1JobsJobs:
     ):
         await self.authorize.require_perm(request=request, permission=PERM_JOBS_GET)
         return await self.crud_jobs.search(
-            _id=_id,
+            _id=job_id,
             definition_id=definition_id,
             created_by=created_by,
             fields=list(fields),
