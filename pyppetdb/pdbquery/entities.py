@@ -818,7 +818,7 @@ PREFILTERS = {
         "exported": ("catalog.resources.exported", "path", False),
         "tags": ("catalog.resources.tags", "path", []),
         "tag": ("catalog.resources.tags", "path", []),
-        "parameters": ("catalog.resources.parameters", "path", {}),
+        "parameters": ("catalog.resources.parameters", "resource_param", {}),
         "node_state": ("disabled", "node_state"),
     },
     "edges": {

@@ -120,6 +120,13 @@ class CrudNodes(CrudMongo):
                     name="idx_resources_hash",
                 ),
                 pymongo.IndexModel(
+                    [
+                        ("resource_params.n", pymongo.ASCENDING),
+                        ("resource_params.v", pymongo.ASCENDING),
+                    ],
+                    name="idx_resource_params",
+                ),
+                pymongo.IndexModel(
                     [("producer", pymongo.ASCENDING)], name="idx_producer"
                 ),
                 pymongo.IndexModel(

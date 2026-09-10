@@ -250,6 +250,7 @@ class NodePutInternal(BaseModel):
     producer: Optional[str] = None
     producer_timestamp: Optional[datetime] = None
     catalog_inputs: Optional[NodeGetCatalogInputs] = None
+    resource_params: Optional[List[Dict[str, Any]]] = None
     facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None
     node_groups: Optional[List[str]] = None

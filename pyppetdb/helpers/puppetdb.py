@@ -118,6 +118,36 @@ def catalog_content_hash(resources, edges) -> str:
     return stable_hash({"resources": resources, "edges": edges})
 
 
+RESOURCE_PARAM_MAX_VALUE_LEN = 512
+
+
+def build_resource_params(resources, max_value_len: int = RESOURCE_PARAM_MAX_VALUE_LEN) -> list:
+    seen = set()
+    pairs = []
+    if not isinstance(resources, list):
+        return pairs
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        params = resource.get("parameters")
+        if not isinstance(params, dict):
+            continue
+        for name, value in params.items():
+            if isinstance(value, bool) or isinstance(value, (int, float)):
+                pass
+            elif isinstance(value, str):
+                if len(value) > max_value_len:
+                    continue
+            else:
+                continue
+            key = (name, value)
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append({"n": name, "v": value})
+    return pairs
+
+
 def catalog_payload(data: dict) -> dict:
     resources = normalise_resources(data.get("resources"))
     exported = [resource for resource in resources if resource.get("exported")]

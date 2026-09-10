@@ -197,6 +197,10 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         self.assertEqual(node["catalog"]["transaction_uuid"], "tx-detail")
         self.assertEqual(node["catalog"]["producer"], "puppetmaster")
 
+        # normalisierte Parameter fuer den indizierten Prefilter
+        rp = {(e["n"], e["v"]) for e in node.get("resource_params", [])}
+        self.assertIn(("ensure", "present"), rp)
+
         resources = self.client.get(
             "/pdb/query/v4/resources",
             params={"query": json.dumps(

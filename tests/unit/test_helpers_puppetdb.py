@@ -18,6 +18,7 @@ from datetime import datetime
 from pyppetdb.helpers.puppetdb import catalog_metadata
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
+from pyppetdb.helpers.puppetdb import build_resource_params
 from pyppetdb.helpers.puppetdb import normalise_edges
 from pyppetdb.model.nodes import NodeGetCatalog
 from pyppetdb.helpers.puppetdb import normalise_package_inventory
@@ -94,6 +95,35 @@ class TestNormalisers(unittest.TestCase):
         self.assertEqual(
             normalise_catalog_inputs([["hiera", "key"], "junk"]), [["hiera", "key"]]
         )
+
+
+class TestResourceParams(unittest.TestCase):
+    def test_normalises_and_deduplicates(self):
+        resources = [
+            {"resource": "h1", "parameters": {"ensure": "present", "mode": "0644"}},
+            {"resource": "h2", "parameters": {"ensure": "present"}},
+        ]
+        pairs = build_resource_params(resources)
+        self.assertIn({"n": "ensure", "v": "present"}, pairs)
+        self.assertIn({"n": "mode", "v": "0644"}, pairs)
+        # dedupliziert ueber resources hinweg
+        self.assertEqual(sum(1 for p in pairs if p["n"] == "ensure"), 1)
+
+    def test_excludes_large_and_complex_values(self):
+        resources = [{"resource": "h1", "parameters": {
+            "content": "x" * 600,
+            "meta": {"a": 1},
+            "list": [1, 2],
+            "count": 3,
+            "flag": True,
+        }}]
+        pairs = build_resource_params(resources)
+        names = {p["n"] for p in pairs}
+        self.assertNotIn("content", names)
+        self.assertNotIn("meta", names)
+        self.assertNotIn("list", names)
+        self.assertIn("count", names)
+        self.assertIn("flag", names)
 
 
 class TestPayloads(unittest.TestCase):

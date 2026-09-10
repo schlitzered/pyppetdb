@@ -38,6 +38,7 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 
 from pyppetdb.helpers.placement import calculate_placement
+from pyppetdb.helpers.puppetdb import build_resource_params
 from pyppetdb.helpers.puppetdb import catalog_metadata
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
@@ -317,6 +318,7 @@ class ControllerPdbCmdV1:
             return
         if state["content_hash"] != catalog.get("content_hash"):
             base["catalog"] = catalog
+            base["resource_params"] = build_resource_params(catalog["resources"])
         else:
             metadata = catalog_metadata(catalog)
             self.log.debug(

@@ -23,6 +23,7 @@ from typing import Optional
 
 import pymongo.errors
 
+from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
 from pyppetdb.pdbquery import matcher
 from pyppetdb.pdbquery.ast import FilterCompiler
 from pyppetdb.pdbquery.ast import check_depth
@@ -494,6 +495,34 @@ def _prefilter_node(entity, node) -> list:
     return clauses
 
 
+def _indexable_param_value(value) -> bool:
+    if isinstance(value, bool) or isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        return len(value) <= RESOURCE_PARAM_MAX_VALUE_LEN
+    return False
+
+
+RESOURCE_PARAMS_FIELD = "resource_params"
+
+
+def _resource_param_prefilter(name: str, condition) -> Optional[dict]:
+    field = RESOURCE_PARAMS_FIELD
+    if isinstance(condition, dict):
+        values = condition.get("$in")
+        if (
+            len(condition) == 1
+            and isinstance(values, list)
+            and values
+            and all(_indexable_param_value(item) for item in values)
+        ):
+            return {field: {"$elemMatch": {"n": name, "v": {"$in": values}}}}
+        return None
+    if _indexable_param_value(condition):
+        return {field: {"$elemMatch": {"n": name, "v": condition}}}
+    return None
+
+
 def _prefilter_leaf(entity, key: str, condition) -> Optional[dict]:
     column = entity.by_name.get(key)
     rest = ""
@@ -525,6 +554,11 @@ def _prefilter_leaf(entity, key: str, condition) -> Optional[dict]:
         if condition == "inactive":
             return {column.prefilter: True}
         return {column.prefilter: {"$ne": True}}
+
+    if column.prefilter_kind == "resource_param":
+        if not rest:
+            return None
+        return _resource_param_prefilter(rest[1:], condition)
 
     path = f"{column.prefilter}{rest}"
 

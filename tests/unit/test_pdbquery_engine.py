@@ -785,7 +785,62 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
     async def test_dotted_parameters(self):
         self.assertEqual(
             await self.prefilter("resources", ["=", ["parameter", "owner"], "root"]),
-            {"catalog.resources.parameters.owner": "root"},
+            {"resource_params": {"$elemMatch": {"n": "owner", "v": "root"}}},
+        )
+
+    async def test_parameter_large_value_has_no_prefilter(self):
+        big = "x" * 600
+        self.assertEqual(
+            await self.prefilter(
+                "resources", ["=", ["parameter", "content"], big]
+            ),
+            {},
+        )
+
+    async def test_resource_param_prefilter_matches_the_built_array(self):
+        # Soundness: was build_resource_params ins Array legt, findet der
+        # elemMatch-Prefilter auch; was ausgeschlossen wird, erzeugt keinen
+        # Prefilter (also keinen faelschlichen Drop).
+        from pyppetdb.helpers.puppetdb import build_resource_params
+
+        resources = [{
+            "resource": "h1", "type": "File", "title": "/a",
+            "parameters": {"ensure": "present", "mode": "0644",
+                           "content": "x" * 600},
+        }]
+        params = build_resource_params(resources)
+
+        def elem_match(spec):
+            n = spec["n"]
+            v = spec["v"]
+            for e in params:
+                if e["n"] != n:
+                    continue
+                if isinstance(v, dict) and "$in" in v:
+                    if e["v"] in v["$in"]:
+                        return True
+                elif e["v"] == v:
+                    return True
+            return False
+
+        # indexierbar -> Prefilter da und trifft das Array
+        pf = await self.prefilter(
+            "resources", ["=", ["parameter", "ensure"], "present"]
+        )
+        self.assertTrue(elem_match(pf["resource_params"]["$elemMatch"]))
+
+        # grosser Wert -> kein Prefilter (Node wird nicht gedroppt)
+        pf_big = await self.prefilter(
+            "resources", ["=", ["parameter", "content"], "x" * 600]
+        )
+        self.assertEqual(pf_big, {})
+
+    async def test_parameter_regex_has_no_prefilter(self):
+        self.assertEqual(
+            await self.prefilter(
+                "resources", ["~", ["parameter", "owner"], "^ro"]
+            ),
+            {},
         )
 
     async def test_and_collects_every_derivable_clause(self):
