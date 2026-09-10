@@ -437,6 +437,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cert")
     parser.add_argument("--key")
     parser.add_argument("--nodes", type=int, default=200)
+    parser.add_argument("--resources-per-node", type=int, default=None)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--iterations", type=int, default=30)
@@ -482,6 +483,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if getattr(args, "resources_per_node", None):
+        workload.RESOURCE_COUNT = args.resources_per_node
     return asyncio.run(args.func(args))
 
 

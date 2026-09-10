@@ -21,6 +21,8 @@ from datetime import timedelta
 OS_FAMILIES = ("Debian", "RedHat", "Suse", "FreeBSD")
 ENVIRONMENTS = ("production", "staging", "development")
 RESOURCE_TYPES = ("File", "Package", "Service", "Exec", "Notify", "User")
+
+RESOURCE_COUNT = 200
 REPORT_STATUSES = ("changed", "unchanged", "failed")
 EVENT_STATUSES = ("success", "failure", "noop")
 
@@ -103,7 +105,9 @@ def facts_payload(index: int, seed: int, fact_count: int = 150, generation: int 
     }
 
 
-def catalog_payload(index: int, seed: int, resource_count: int = 200, generation: int = 0) -> dict:
+def catalog_payload(index: int, seed: int, resource_count: int = None, generation: int = 0) -> dict:
+    if resource_count is None:
+        resource_count = RESOURCE_COUNT
     rng = _rng(index, seed)
     environment = ENVIRONMENTS[index % len(ENVIRONMENTS)]
     name = certname(index)
@@ -168,6 +172,21 @@ def catalog_payload(index: int, seed: int, resource_count: int = 200, generation
                 "relationship": "contains",
             }
         )
+
+    # a selective parameter: one node in ~100 carries a given role, so a
+    # parameter filter on it narrows to ~1% of nodes -- the case where an
+    # index over the parameters pays off, unlike a value present on every node.
+    resources.append(
+        {
+            "type": "Bench::Role",
+            "title": f"role-{name}",
+            "exported": False,
+            "file": "/etc/puppetlabs/code/modules/bench/manifests/role.pp",
+            "line": 1,
+            "tags": ["role"],
+            "parameters": {"role": f"role{index % 100:02d}"},
+        }
+    )
 
     return {
         "certname": name,
@@ -359,11 +378,7 @@ def build_queries(node_count: int) -> list:
         query(
             "resources_by_parameter",
             "/pdb/query/v4/resources",
-            [
-                "and",
-                ["=", "type", "Package"],
-                ["=", ["parameter", "owner"], "nobody"],
-            ],
+            ["=", ["parameter", "role"], "role07"],
         ),
         query(
             "resources_exported",
