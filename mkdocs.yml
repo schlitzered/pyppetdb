@@ -21,6 +21,7 @@ nav:
   - Setup: setup.md
   - Configuration Reference: configuration_reference.md
   - Nodes: nodes.md
+  - PuppetDB: puppetdb.md
   - Hiera: hiera.md
   - Administration: administration.md
   - CA: ca.md

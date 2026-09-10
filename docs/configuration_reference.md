@@ -82,7 +82,28 @@ Serves `/pdb`. Binding and TLS are configured via `app_main_*` (see above).
 | `app_puppetdb_serverurl` | *(unset)* | URL of the upstream PuppetDB. If unset, requests are not forwarded. |
 | `app_puppetdb_timeout` | `60` | Upstream request timeout (seconds). |
 | `app_puppetdb_trustedCns` | `[]` | JSON list of trusted client CNs. |
-| `app_puppetdb_resourceQueryInternal` | `true` | Answer `pdb/query/v4/resources` from pyppetdb's own store instead of forwarding upstream. |
+| `app_puppetdb_querySource` | `internal` | Where query results come from: `internal` (pyppetdb's own store) or `upstream` (the configured OpenVoxDB/PuppetDB). Requires `app_puppetdb_serverurl` when set to `upstream`. |
+| `app_puppetdb_writeQueueSize` | `500` | Maximum number of commands waiting to be written. Bounds memory: a queued catalog holds its parsed payload (~90 KB for 200 resources), so this is the knob that decides how much RAM a backlog may consume. When the queue is full, `/pdb/cmd/v1` answers `503` with `Retry-After` instead of accumulating work. |
+| `app_puppetdb_writeQueueWorkers` | `32` | Number of workers draining the queue, i.e. the cap on concurrent MongoDB write operations. The MongoDB driver pool holds 100 connections by default, so leave headroom for reads. |
+| `app_puppetdb_writeQueueDrainTimeout` | `30` | Seconds a graceful shutdown waits for the write queue to drain before the remaining commands are discarded. Bounds how long a restart can block on a backlog; anything still queued when it expires is logged and lost. |
+| `app_puppetdb_aggregateCacheTtl` | `60` | Seconds to cache the unfiltered results of `fact-names`, `environments` and `producers`. These group over every node and cannot be narrowed by a filter, so they are recomputed on every request otherwise. Set to `0` to disable; the price of caching is that a newly appearing fact name or environment may take up to this long to show up. |
+| `app_puppetdb_maxQueryDepth` | `50` | Maximum nesting depth of a query AST. Rejected with `400` above it. The deepest query in the upstream conformance corpus nests 12 levels, so this leaves ~4x headroom while keeping a deliberately deep query from exhausting the Python stack (which would otherwise surface as a `500`). Set to `0` to disable. |
+| `app_puppetdb_maxSubqueryDepth` | `3` | Maximum number of nested subquery levels (`select_*`, `subquery`, a nested `from`). Each level costs one extra MongoDB round trip, so this bounds the work a single request can trigger. The upstream corpus never exceeds 2 and real console traffic never exceeds 1. Set to `0` to disable. |
+| `app_puppetdb_queryTimeout` | `600` | Seconds a query may run, matching OpenVoxDB's `query-timeout-default`. Applied both as `maxTimeMS` on every MongoDB operation and as a wall-clock limit around the whole request, so it also bounds the sequential round trips of a nested subquery. A client may override it per request with `?timeout=<seconds>`. Set to `0` for no limit. |
+| `app_puppetdb_queryTimeoutMax` | `0` | Upper bound for `?timeout=`, matching OpenVoxDB's `query-timeout-max`. `0` means clients may pick any timeout. |
+| `app_puppetdb_resourceQueryInternal` | `true` | **Deprecated.** Superseded by `app_puppetdb_querySource`. When set to `false` it still forces `pdb/query/v4/resources` (and only that endpoint) upstream. |
+
+The current queue depth and the number of accepted, rejected and failed commands are
+reported under `/status/v1/services` as `depth`, `accepted`, `dropped` (rejected with a
+`503` because the queue was full) and `failed` (accepted with a `200`, then lost because
+the background write raised). A `200` from `/pdb/cmd/v1` therefore means *queued*, not
+*persisted*: the queue is in memory only, so `failed` and `dropped` are the only signal
+that a command did not make it. See
+[PuppetDB compatibility](puppetdb.md#what-a-200-means) for the full semantics.
+
+Write commands (`/pdb/cmd/v1`) are always forwarded to `app_puppetdb_serverurl` when
+one is configured, regardless of `app_puppetdb_querySource`, and are always stored in
+pyppetdb's own database as well. The switch only decides who answers *queries*.
 
 ## Certificate Authority (`ca_`)
 

@@ -15,7 +15,7 @@
 import typing
 import json
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log_levels = typing.Literal[
@@ -94,12 +94,24 @@ class ConfigAppPuppet(BaseModel):
         return v
 
 
+query_sources = typing.Literal["internal", "upstream"]
+
+
 class ConfigAppPuppetdb(BaseModel):
     enable: bool = True
     serverurl: typing.Optional[str] = None
     timeout: int = 60
     trustedCns: typing.Optional[list[str]] = []
+    querySource: query_sources = "internal"
     resourceQueryInternal: bool = True
+    writeQueueSize: int = 500
+    writeQueueWorkers: int = 32
+    writeQueueDrainTimeout: float = 30.0
+    aggregateCacheTtl: int = 60
+    maxQueryDepth: int = 50
+    maxSubqueryDepth: int = 3
+    queryTimeout: int = 600
+    queryTimeoutMax: int = 0
 
     @field_validator("trustedCns", mode="before")
     @classmethod
@@ -107,6 +119,21 @@ class ConfigAppPuppetdb(BaseModel):
         if isinstance(v, str):
             return json.loads(v)
         return v
+
+    @model_validator(mode="after")
+    def validate_query_source(self):
+        if self.querySource == "upstream" and not self.serverurl:
+            raise ValueError(
+                "app_puppetdb_querySource 'upstream' requires app_puppetdb_serverurl"
+            )
+        return self
+
+    def query_upstream(self, entity: typing.Optional[str] = None) -> bool:
+        if self.querySource == "upstream":
+            return True
+        if entity == "resources" and not self.resourceQueryInternal:
+            return bool(self.serverurl)
+        return False
 
 
 class ConfigApp(BaseModel):

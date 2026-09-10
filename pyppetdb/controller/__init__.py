@@ -95,6 +95,7 @@ class Controller:
         redactor: NodesSecretsRedactor,
         pyhiera,
         ws_hub,
+        ingest_queue,
     ):
         self._log = log
         self._router_main = APIRouter()
@@ -143,7 +144,7 @@ class Controller:
             http=http,
         ).router
 
-        router_pdb = ControllerPdb(
+        controller_pdb = ControllerPdb(
             log=log,
             config=config,
             crud_nodes=crud_nodes,
@@ -152,7 +153,9 @@ class Controller:
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,
             authorize_client_cert=authorize_client_cert_pdb,
-        ).router
+            ingest_queue=ingest_queue,
+        )
+        router_pdb = controller_pdb.router
 
         router_puppet = ControllerPuppet(
             log=log,
@@ -188,6 +191,10 @@ class Controller:
         self.router_puppetdb.include_router(
             router_pdb,
             prefix="/pdb",
+            responses={404: {"description": "Not found"}},
+        )
+        self.router_puppetdb.include_router(
+            controller_pdb.router_status,
             responses={404: {"description": "Not found"}},
         )
         self.router_puppet.include_router(

@@ -25,6 +25,13 @@ class TestNodesRedactors(IntegrationTestBase):
                 "environment": "production",
                 "disabled": False,
                 "node_groups": [],
+                "facts": {"osfamily": "Debian"},
+                "catalog": {
+                    "catalog_uuid": "seed",
+                    "resources": [],
+                    "edges": [],
+                    "content_hash": "seed",
+                },
             }
         )
 
@@ -91,7 +98,10 @@ class TestNodesRedactors(IntegrationTestBase):
             f"/pdb/cmd/v1?certname={node_id}&command=store_report&version=8&producer-timestamp=2023-01-01T00:00:00Z",
             json=report_payload,
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 200)
+        self._wait_until(
+            lambda: self._db["nodes_reports"].find_one({"node_id": node_id})
+        )
 
         # Get the report via API and verify redaction
         response = self.client.get(
@@ -137,7 +147,12 @@ class TestNodesRedactors(IntegrationTestBase):
             f"/pdb/cmd/v1?certname={node_id}&command=replace_catalog&version=9&producer-timestamp=2023-01-01T00:00:00Z",
             json=catalog_payload,
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 200)
+        self._wait_until(
+            lambda: self._db["nodes"].find_one(
+                {"id": node_id, "catalog.resources": {"$exists": True}}
+            )
+        )
 
         # Get the catalog via API and verify redaction
         response = self.client.get(

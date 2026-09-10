@@ -75,11 +75,22 @@ class NodeGetCatalogResource(BaseModel):
     title: str
     tags: List[str]
     parameters: Dict[str, Any]
+    file: Optional[str] = None
+    line: Optional[int] = None
+    resource: Optional[str] = None
 
 
 class NodeGetCatalogResources(BaseModel):
     result: List[NodeGetCatalogResource]
     meta: MetaMulti
+
+
+class NodeGetCatalogEdge(BaseModel):
+    relationship: Optional[str] = None
+    source_type: Optional[str] = None
+    source_title: Optional[str] = None
+    target_type: Optional[str] = None
+    target_title: Optional[str] = None
 
 
 class NodeGetCatalog(BaseModel):
@@ -88,6 +99,21 @@ class NodeGetCatalog(BaseModel):
     num_resources_exported: Optional[int] = None
     resources: Optional[List[NodeGetCatalogResource]] = None
     resources_exported: Optional[List[NodeGetCatalogResource]] = None
+    edges: Optional[List[NodeGetCatalogEdge]] = None
+    hash: Optional[str] = None
+    content_hash: Optional[str] = None
+    version: Optional[str] = None
+    transaction_uuid: Optional[str] = None
+    code_id: Optional[str] = None
+    job_id: Optional[str] = None
+    producer: Optional[str] = None
+    producer_timestamp: Optional[datetime] = None
+
+
+class NodeGetCatalogInputs(BaseModel):
+    catalog_uuid: Optional[str] = None
+    producer_timestamp: Optional[datetime] = None
+    inputs: Optional[List[List[str]]] = None
 
 
 class NodeGetReportLogs(BaseModel):
@@ -97,7 +123,7 @@ class NodeGetReportLogs(BaseModel):
     message: str
     source: str
     tags: List[str]
-    time: str
+    time: Optional[str] = None
 
 
 class NodeGetReportMetrics(BaseModel):
@@ -108,18 +134,18 @@ class NodeGetReportMetrics(BaseModel):
 
 class NodeGetReportResourcesEvents(BaseModel):
     status: str
-    timestamp: str
-    name: str
-    property: str | None
-    new_value: str
-    old_value: str
-    corrective_change: bool
-    message: str
+    timestamp: Optional[datetime] = None
+    name: Optional[str] = None
+    property: Optional[str] = None
+    new_value: Any = None
+    old_value: Any = None
+    corrective_change: Optional[bool] = None
+    message: Optional[str] = None
 
 
 class NodeGetReportResources(BaseModel):
     skipped: bool
-    timestamp: str
+    timestamp: Optional[datetime] = None
     resource_type: str
     resource_title: str
     file: str | None
@@ -138,6 +164,21 @@ class NodeGetReport(BaseModel):
     logs: Optional[List[NodeGetReportLogs]] = None
     metrics: Optional[List[NodeGetReportMetrics]] = None
     resources: Optional[List[NodeGetReportResources]] = None
+    hash: Optional[str] = None
+    puppet_version: Optional[str] = None
+    report_format: Optional[int] = None
+    configuration_version: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    producer_timestamp: Optional[datetime] = None
+    producer: Optional[str] = None
+    transaction_uuid: Optional[str] = None
+    code_id: Optional[str] = None
+    job_id: Optional[str] = None
+    cached_catalog_status: Optional[str] = None
+    environment: Optional[str] = None
+    type: Optional[str] = None
+    latest: Optional[bool] = None
 
 
 class NodeRemoteAgent(BaseModel):
@@ -166,6 +207,11 @@ class NodeGet(BaseModel):
     disabled: Optional[bool] = None
     environment: Optional[str] = None
     facts: Optional[Dict] = None
+    facts_hash: Optional[str] = None
+    package_inventory: Optional[List[List[str]]] = None
+    producer: Optional[str] = None
+    producer_timestamp: Optional[datetime] = None
+    catalog_inputs: Optional[NodeGetCatalogInputs] = None
     report: Optional[NodeGetReport] = None
     report_status_computed: Optional[str] = None
     facts_inject: Optional[Dict[str, str]] = None
@@ -199,6 +245,11 @@ class NodePutInternal(BaseModel):
     disabled: Optional[bool] = False
     environment: Optional[str] = None
     facts: Optional[Dict] = None
+    facts_hash: Optional[str] = None
+    package_inventory: Optional[List[List[str]]] = None
+    producer: Optional[str] = None
+    producer_timestamp: Optional[datetime] = None
+    catalog_inputs: Optional[NodeGetCatalogInputs] = None
     facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None
     node_groups: Optional[List[str]] = None

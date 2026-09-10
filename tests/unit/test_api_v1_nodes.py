@@ -22,6 +22,7 @@ from pyppetdb.authorize import (
     PERM_NODES_CATALOG_CACHE_DELETE,
 )
 from pyppetdb.controller.api.v1.nodes import ControllerApiV1Nodes
+from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.nodes import NodePut
 
 
@@ -35,6 +36,7 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_catalogs = MagicMock()
         self.mock_crud_groups = MagicMock()
         self.mock_crud_reports = MagicMock()
+        self.mock_crud_reports.set_node_disabled = AsyncMock(return_value=0)
         self.mock_crud_teams = MagicMock()
         self.mock_crud_jobs = MagicMock()
         self.mock_crud_jobs.remove_node_from_jobs = AsyncMock()
@@ -70,6 +72,29 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_nodes.get.assert_called_once_with(
             _id="node1", user_node_groups=[], fields=[], outdated_threshold=None
         )
+
+    async def test_delete_node_ignores_missing_certificate(self):
+        self.mock_authorize.require_perm = AsyncMock()
+        self.mock_ca_service.update_certificate_status = AsyncMock(
+            side_effect=ResourceNotFound(
+                details="Certificate for node1 in space puppet-ca not found"
+            )
+        )
+        self.mock_crud_groups.delete_node_from_nodes_groups = AsyncMock()
+        self.mock_crud_catalogs.delete_all_from_node = AsyncMock()
+        self.mock_crud_reports.delete_all_from_node = AsyncMock()
+        self.mock_crud_jobs.remove_node_from_jobs = AsyncMock()
+        self.mock_crud_node_jobs.delete_by_node = AsyncMock()
+        self.mock_crud_nodes.delete = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.delete(node_id="node1", request=mock_request)
+
+        self.mock_crud_groups.delete_node_from_nodes_groups.assert_called_once_with(
+            node_id="node1"
+        )
+        self.mock_crud_reports.delete_all_from_node.assert_called_once()
+        self.mock_crud_nodes.delete.assert_called_once_with(_id="node1")
 
     async def test_delete_node_cascades(self):
         self.mock_authorize.require_perm = AsyncMock()
@@ -170,6 +195,8 @@ class TestApiV1NodesEnrichmentUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize.get_user_node_groups = AsyncMock(return_value=["group-a"])
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_catalog_cache = MagicMock()
+        self.mock_crud_reports = MagicMock()
+        self.mock_crud_reports.set_node_disabled = AsyncMock(return_value=0)
 
         self.controller = ControllerApiV1Nodes(
             log=self.log,
@@ -178,7 +205,7 @@ class TestApiV1NodesEnrichmentUnit(unittest.IsolatedAsyncioTestCase):
             crud_nodes_catalog_cache=self.mock_crud_catalog_cache,
             crud_nodes_catalogs=MagicMock(),
             crud_nodes_groups=MagicMock(),
-            crud_nodes_reports=MagicMock(),
+            crud_nodes_reports=self.mock_crud_reports,
             crud_teams=MagicMock(),
             crud_jobs=MagicMock(),
             crud_node_jobs=MagicMock(),

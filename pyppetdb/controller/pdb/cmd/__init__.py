@@ -17,6 +17,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
+from pyppetdb.ingest import IngestQueue
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes
@@ -37,6 +38,7 @@ class ControllerPdbCmd:
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
         authorize_client_cert: AuthorizeClientCert,
+        ingest_queue: IngestQueue,
     ):
         self._log = log
         self._router = APIRouter()
@@ -51,6 +53,7 @@ class ControllerPdbCmd:
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
                 authorize_client_cert=authorize_client_cert,
+                ingest_queue=ingest_queue,
             ).router
         )
 

@@ -47,6 +47,7 @@ from pyppetdb.ca.service import CAService
 from pyppetdb.jobs.service import JobService
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.ws.hub import WsHub
+from pyppetdb.ingest import IngestQueue
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
@@ -295,6 +296,13 @@ class AppContainer:
             crud_ca_certificates=self.crud_ca_certificates,
         )
 
+        self.ingest_queue = IngestQueue(
+            log=log,
+            size=config.app.puppetdb.writeQueueSize,
+            workers=config.app.puppetdb.writeQueueWorkers,
+            drain_timeout=config.app.puppetdb.writeQueueDrainTimeout,
+        )
+
         self.ws_hub = WsHub(
             log=log,
             config=config,
@@ -428,6 +436,9 @@ class AppContainer:
                 )
 
     async def close(self):
+        self.log.info(msg="Stopping ingest queue...")
+        await self.ingest_queue.stop()
+
         instance_id = f"{socket.getfqdn()}:{self.config.app.main.port}"
         self.log.info(msg=f"Removing PyppetDB node '{instance_id}' from database...")
         try:

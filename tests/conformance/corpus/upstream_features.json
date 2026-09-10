@@ -1,0 +1,604 @@
+{
+ "/pdb/query/v4/aggregate-event-counts": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   "and",
+   "extract",
+   "in",
+   "in+subquery",
+   "or",
+   "select_facts",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "environment",
+   "intentional_successes",
+   "latest_report?",
+   "report_receive_time",
+   "run_end_time",
+   "run_start_time",
+   "status",
+   "successes",
+   "timestamp"
+  ],
+  "entities": [],
+  "functions": []
+ },
+ "/pdb/query/v4/catalog-input-contents": {
+  "operators": [
+   "=",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "select_catalog_input_contents",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "catalog_uuid",
+   "certname",
+   "name",
+   "producer_timestamp",
+   "type"
+  ],
+  "entities": [
+   "catalog_input_contents"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/catalog-inputs": {
+  "operators": [
+   "=",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "select_catalog_inputs",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "catalog_uuid",
+   "certname",
+   "producer_timestamp"
+  ],
+  "entities": [
+   "catalog_inputs"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/catalogs": {
+  "operators": [
+   "<",
+   "=",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "select_edges",
+   "select_resources",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "edges",
+   "environment",
+   "producer_timestamp",
+   "target_type",
+   "type"
+  ],
+  "entities": [
+   "edges",
+   "resources"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/cmd/v1": {
+  "operators": [],
+  "fields": [],
+  "entities": [],
+  "functions": []
+ },
+ "/pdb/query/v4/environments": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   ">=",
+   "and",
+   "extract",
+   "from",
+   "in",
+   "in+subquery",
+   "not",
+   "select_facts",
+   "select_resources",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "environment",
+   "name",
+   "title",
+   "type",
+   "value"
+  ],
+  "entities": [
+   "facts",
+   "resources"
+  ],
+  "functions": []
+ },
+ "/pdb/query/v4/event-counts": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   ">=",
+   "extract",
+   "in",
+   "in+subquery",
+   "not",
+   "or",
+   "select_resources",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "corrective_successes",
+   "environment",
+   "intentional_successes",
+   "latest_report?",
+   "property",
+   "status",
+   "successes",
+   "tag",
+   "timestamp"
+  ],
+  "entities": [],
+  "functions": []
+ },
+ "/pdb/query/v4/events": {
+  "operators": [
+   "<",
+   "=",
+   ">",
+   "and",
+   "extract",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "null?",
+   "or",
+   "select_facts",
+   "select_resources",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "containing_class",
+   "corrective_change",
+   "environment",
+   "latest_report?",
+   "line",
+   "nothing",
+   "nothing2",
+   "property",
+   "report",
+   "report_receive_time",
+   "resource_title",
+   "resource_type",
+   "run_end_time",
+   "run_start_time",
+   "status",
+   "timestamp",
+   "title",
+   "type",
+   "value"
+  ],
+  "entities": [],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4": {
+  "operators": [
+   "<",
+   "=",
+   "and",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "limit",
+   "offset",
+   "or",
+   "order_by",
+   "select_facts",
+   "~"
+  ],
+  "fields": [
+   "[node active]",
+   "bar",
+   "certname",
+   "foo",
+   "name",
+   "node_state",
+   "title",
+   "type",
+   "value"
+  ],
+  "entities": [
+   "catalogs",
+   "fact_contents",
+   "facts",
+   "foo",
+   "foobar",
+   "nodes",
+   "resources",
+   "thing"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/facts": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   ">=",
+   "and",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "not",
+   "null?",
+   "or",
+   "order_by",
+   "select_fact_contents",
+   "select_facts",
+   "select_resources",
+   "subquery",
+   "~",
+   "~>"
+  ],
+  "fields": [
+   "<dynamic>",
+   "[node active]",
+   "certname",
+   "environment",
+   "hash",
+   "name",
+   "node_state",
+   "nothing",
+   "nothing2",
+   "path",
+   "producer",
+   "producer_timestamp",
+   "test",
+   "timestamp",
+   "title",
+   "type",
+   "value"
+  ],
+  "entities": [
+   "fact_contents",
+   "fact_paths",
+   "facts"
+  ],
+  "functions": [
+   "avg",
+   "count",
+   "max",
+   "to_string"
+  ]
+ },
+ "/pdb/query/v4/inventory": {
+  "operators": [
+   "<=",
+   "=",
+   "array",
+   "extract",
+   "function",
+   "group_by",
+   "in",
+   "null?",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "facts",
+   "facts.array_fact.foo[0]",
+   "facts.array_fact.foo[1]",
+   "facts.backslash",
+   "facts.custom.nested.fact",
+   "facts.domain",
+   "facts.double_quote",
+   "facts.kernel",
+   "facts.my_structured_fact",
+   "facts.my_structured_fact.foo.baz",
+   "facts.my_weird_fact.blah.\"dotted.thing\".\"dashed-thing\"",
+   "facts.my_weird_fact.blah.\"dotted.thing\".\"dashed-thing\".\"quoted\"thing\"",
+   "facts.my_weird_fact.blah.\"double\"quoted\"",
+   "facts.my_weird_fact.blah.\"single'quoted\"",
+   "facts.os.family",
+   "facts.path.doesnt.exist",
+   "facts.trusted.foo.baz",
+   "trusted.foo.baz",
+   "trusted.foo.bin",
+   "trusted.path.doesnt.exist"
+  ],
+  "entities": [],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/nodes": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   ">=",
+   "and",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "not",
+   "null?",
+   "order_by",
+   "select_catalogs",
+   "select_events",
+   "select_fact_contents",
+   "select_facts",
+   "select_factsets",
+   "select_reports",
+   "select_resources",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "[fact *]",
+   "cached_catalog_status",
+   "catalog_timestamp",
+   "certname",
+   "fact",
+   "facts_environment",
+   "facts_timestamp",
+   "fake_fact",
+   "file",
+   "latest_report_corrective_change",
+   "latest_report_hash",
+   "latest_report_job_id",
+   "latest_report_noop",
+   "latest_report_status",
+   "line",
+   "name",
+   "nothing",
+   "nothing2",
+   "report_timestamp",
+   "sourcefile",
+   "sourceline",
+   "title",
+   "type",
+   "uptime_seconds",
+   "value"
+  ],
+  "entities": [
+   "catalogs",
+   "events",
+   "fact_contents",
+   "facts",
+   "factsets",
+   "reports",
+   "resources"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/packages": {
+  "operators": [
+   "=",
+   "and",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "limit",
+   "order_by",
+   "subquery",
+   "~",
+   "~>"
+  ],
+  "fields": [
+   "certname",
+   "package_name",
+   "path",
+   "provider",
+   "value",
+   "version"
+  ],
+  "entities": [
+   "package_inventory",
+   "packages"
+  ],
+  "functions": [
+   "count"
+  ]
+ },
+ "/pdb/query/v4/producers": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   ">=",
+   "and",
+   "extract",
+   "from",
+   "in",
+   "in+subquery",
+   "not",
+   "select_factsets",
+   "select_reports",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "certname",
+   "environment",
+   "name",
+   "producer"
+  ],
+  "entities": [
+   "factsets",
+   "reports"
+  ],
+  "functions": []
+ },
+ "/pdb/query/v4/reports": {
+  "operators": [
+   "<",
+   "<=",
+   "=",
+   ">",
+   "and",
+   "array",
+   "extract",
+   "from",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "not",
+   "null?",
+   "or",
+   "order_by",
+   "select_events",
+   "subquery",
+   "~"
+  ],
+  "fields": [
+   "<dynamic>",
+   "certname",
+   "configuration_version",
+   "corrective_change",
+   "end_time",
+   "environment",
+   "file",
+   "hash",
+   "latest_report?",
+   "logs",
+   "metrics",
+   "node_state",
+   "noop",
+   "nothing",
+   "nothing2",
+   "puppet_version",
+   "receive_time",
+   "report",
+   "report_format",
+   "start_time",
+   "status",
+   "timestamp",
+   "transaction_uuid",
+   "type"
+  ],
+  "entities": [
+   "events"
+  ],
+  "functions": [
+   "count",
+   "min",
+   "sum",
+   "to_string"
+  ]
+ },
+ "/pdb/query/v4/resources": {
+  "operators": [
+   "<",
+   "=",
+   ">",
+   "and",
+   "extract",
+   "function",
+   "group_by",
+   "in",
+   "in+subquery",
+   "not",
+   "null?",
+   "or",
+   "select_facts",
+   "select_resources",
+   "~"
+  ],
+  "fields": [
+   "[parameter *]",
+   "certname",
+   "environment",
+   "exported",
+   "file",
+   "line",
+   "name",
+   "nothing",
+   "nothing2",
+   "parameters.acl",
+   "parameters.backslash",
+   "parameters.boolean",
+   "parameters.double",
+   "parameters.double_quote",
+   "parameters.ensure",
+   "parameters.nested.foo",
+   "parameters.numeric",
+   "parameters.owner",
+   "parameters.path.doesnt.exist",
+   "sourcefile",
+   "sourceline",
+   "tag",
+   "title",
+   "type",
+   "value"
+  ],
+  "entities": [],
+  "functions": [
+   "count"
+  ]
+ }
+}

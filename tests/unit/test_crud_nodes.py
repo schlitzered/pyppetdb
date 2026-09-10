@@ -34,6 +34,59 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.delete(_id="node1")
         self.crud._delete.assert_called_once_with(query={"id": "node1"})
 
+    async def test_update_catalog_metadata_sets_dotted_fields(self):
+        self.mock_coll.update_one = AsyncMock()
+        await self.crud.update_catalog_metadata(
+            _id="node1",
+            metadata={"version": "2-1", "catalog_uuid": "uuid1"},
+        )
+        self.mock_coll.update_one.assert_called_once_with(
+            filter={"id": "node1"},
+            update={
+                "$set": {
+                    "catalog.version": "2-1",
+                    "catalog.catalog_uuid": "uuid1",
+                }
+            },
+        )
+
+    async def test_update_catalog_metadata_ignores_empty_metadata(self):
+        self.mock_coll.update_one = AsyncMock()
+        await self.crud.update_catalog_metadata(_id="node1", metadata={})
+        self.mock_coll.update_one.assert_not_called()
+
+    def _aggregate_returning(self, rows):
+        cursor = MagicMock()
+        cursor.to_list = AsyncMock(return_value=rows)
+        self.mock_coll.aggregate = MagicMock(return_value=cursor)
+
+    async def test_get_ingest_state_reports_facts_catalog_and_hash(self):
+        self._aggregate_returning(
+            [{"has_facts": True, "has_catalog": True, "content_hash": "abc"}]
+        )
+        state = await self.crud.get_ingest_state(_id="node1")
+        self.assertEqual(
+            state, {"has_facts": True, "has_catalog": True, "content_hash": "abc"}
+        )
+        pipeline = self.mock_coll.aggregate.call_args.args[0]
+        self.assertEqual(pipeline[0], {"$match": {"id": "node1"}})
+        self.assertEqual(pipeline[1], {"$limit": 1})
+        self.assertEqual(
+            pipeline[2]["$project"]["has_facts"],
+            {"$eq": [{"$type": "$facts"}, "object"]},
+        )
+
+    async def test_get_ingest_state_without_catalog_has_no_hash(self):
+        self._aggregate_returning([{"has_facts": True, "has_catalog": False}])
+        state = await self.crud.get_ingest_state(_id="node1")
+        self.assertEqual(
+            state, {"has_facts": True, "has_catalog": False, "content_hash": None}
+        )
+
+    async def test_get_ingest_state_for_unknown_node_is_none(self):
+        self._aggregate_returning([])
+        self.assertIsNone(await self.crud.get_ingest_state(_id="missing"))
+
     async def test_delete_node_group_from_all(self):
         self.mock_coll.update_many = AsyncMock()
         await self.crud.delete_node_group_from_all(node_group_id="group1")
@@ -280,54 +333,3 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].type, "File")
-
-    def test_translate_resource_query_basic(self):
-        ast = ["and", ["=", "type", "File"], ["=", "exported", True]]
-        expected = {"catalog.resources_exported.type": "File"}
-        self.assertEqual(self.crud.translate_resource_query(ast), expected)
-
-    def test_translate_resource_query_no_exported(self):
-        # Now it should NOT return None, but translate the query as is
-        ast = ["=", "type", "File"]
-        expected = {"catalog.resources_exported.type": "File"}
-        self.assertEqual(self.crud.translate_resource_query(ast), expected)
-
-    def test_translate_resource_query_complex(self):
-        ast = [
-            "and",
-            ["=", "type", "File"],
-            ["=", "exported", True],
-            ["not", ["=", "certname", "node1"]],
-            ["=", ["parameter", "owner"], "root"],
-            ["=", "fact_pyppetdb__role", "web"],
-            ["~", "tag", "shared"],
-            [">", "fact_os__release__major", "7"],
-            ["null?", "fact_old", True],
-        ]
-        result = self.crud.translate_resource_query(ast)
-        # Order might change due to how cleanup handles single-element $and
-        self.assertEqual(result["$and"][0], {"catalog.resources_exported.type": "File"})
-        self.assertEqual(result["$and"][1], {"id": {"$ne": "node1"}})
-        self.assertEqual(
-            result["$and"][2], {"catalog.resources_exported.parameters.owner": "root"}
-        )
-        self.assertEqual(result["$and"][3], {"facts.pyppetdb.role": "web"})
-        self.assertEqual(
-            result["$and"][4], {"catalog.resources_exported.tags": {"$regex": "shared"}}
-        )
-        self.assertEqual(result["$and"][5], {"facts.os.release.major": {"$gt": "7"}})
-        self.assertEqual(result["$and"][6], {"facts.old": {"$type": 10}})
-
-    def test_translate_resource_query_in_array(self):
-        ast = [
-            "and",
-            ["=", "exported", True],
-            ["in", "certname", ["array", ["n1", "n2"]]],
-        ]
-        result = self.crud.translate_resource_query(ast)
-        self.assertEqual(result, {"id": {"$in": ["n1", "n2"]}})
-
-    def test_translate_resource_query_tag(self):
-        ast = ["=", "tag", "foo"]
-        expected = {"catalog.resources_exported.tags": "foo"}
-        self.assertEqual(self.crud.translate_resource_query(ast), expected)
