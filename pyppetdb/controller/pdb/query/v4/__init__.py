@@ -163,6 +163,7 @@ class ControllerPdbQueryV4:
             max_subquery_depth=config.app.puppetdb.maxSubqueryDepth,
             query_timeout=config.app.puppetdb.queryTimeout,
             query_timeout_max=config.app.puppetdb.queryTimeoutMax,
+            max_page_size=config.app.puppetdb.maxPageSize,
         )
         self._router = APIRouter(tags=["pdb_query_v4"])
 

@@ -316,6 +316,57 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             node = ["and", node]
         await engine.run("nodes", node)
 
+    async def test_page_cap_limits_unbounded_query(self):
+        nodes = FakeCollection()
+        engine = QueryEngine(
+            log=logging.getLogger("test"),
+            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            max_page_size=5000,
+        )
+        await engine.run("resources", ["=", "type", "File"])
+        limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
+        self.assertEqual(limits, [5000])
+
+    async def test_page_cap_shrinks_oversized_limit(self):
+        nodes = FakeCollection()
+        engine = QueryEngine(
+            log=logging.getLogger("test"),
+            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            max_page_size=5000,
+        )
+        await engine.run(
+            "resources", ["=", "type", "File"], paging=Paging(limit=99999)
+        )
+        limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
+        self.assertEqual(limits, [5000])
+
+    async def test_page_cap_leaves_small_limit_and_aggregates_alone(self):
+        nodes = FakeCollection()
+        engine = QueryEngine(
+            log=logging.getLogger("test"),
+            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            max_page_size=5000,
+        )
+        await engine.run(
+            "resources", ["=", "type", "File"], paging=Paging(limit=100)
+        )
+        self.assertEqual(
+            [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s], [100]
+        )
+        nodes.pipelines.clear()
+        await engine.run("resources", ["extract", [["function", "count"]]])
+        self.assertEqual(
+            [s for s in nodes.pipelines[-1] if "$limit" in s], []
+        )
+
+    async def test_no_page_cap_when_disabled(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)  # max_page_size default 0
+        await engine.run("resources", ["=", "type", "File"])
+        self.assertEqual(
+            [s for s in nodes.pipelines[-1] if "$limit" in s], []
+        )
+
     async def test_query_timeout_applies_max_time_ms(self):
         nodes = FakeCollection()
         engine = QueryEngine(

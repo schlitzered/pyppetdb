@@ -50,6 +50,7 @@ class QueryEngine:
         max_subquery_depth: int = 0,
         query_timeout: int = 0,
         query_timeout_max: int = 0,
+        max_page_size: int = 0,
     ):
         self._log = log
         self._collections = collections
@@ -58,6 +59,7 @@ class QueryEngine:
         self._max_subquery_depth = max_subquery_depth
         self._query_timeout = query_timeout
         self._query_timeout_max = query_timeout_max
+        self._max_page_size = max_page_size
         self._aggregate_cache = {}
 
     @property
@@ -148,6 +150,12 @@ class QueryEngine:
         finally:
             _query_timeout.reset(token)
 
+    def _apply_page_cap(self, query: Query) -> None:
+        if not self._max_page_size or query.functions:
+            return
+        if query.limit is None or query.limit > self._max_page_size:
+            query.limit = self._max_page_size
+
     def effective_timeout(self, requested: Optional[int]) -> int:
         seconds = self._query_timeout if requested is None else requested
         if self._query_timeout_max and (
@@ -172,6 +180,7 @@ class QueryEngine:
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
+        self._apply_page_cap(query)
 
         cache_key = self._cache_key(target, query, paging)
         if cache_key is not None:
