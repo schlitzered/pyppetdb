@@ -35,6 +35,8 @@ from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_resources import CrudNodesResources
+from pyppetdb.crud.nodes_edges import CrudNodesEdges
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -189,6 +191,22 @@ class AppContainer:
                 log=log,
                 coll=mongo_db["nodes_catalogs"],
                 secret_manager=self.nodes_catalogs_redactor,
+            )
+        )
+
+        self.crud_nodes_resources = self.crud_manager.register(
+            crud=CrudNodesResources(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_resources"],
+            )
+        )
+
+        self.crud_nodes_edges = self.crud_manager.register(
+            crud=CrudNodesEdges(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_edges"],
             )
         )
 

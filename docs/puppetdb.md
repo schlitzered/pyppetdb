@@ -91,19 +91,46 @@ or an `in` over an array) bypasses the fact-map expansion entirely: the key is k
 the value is read straight from `facts.<name>` instead of turning the whole map into an
 array and unwinding it.
 
-## Aggregate cache
+## Fact index
 
-`fact-names`, `environments` and `producers` group over every node and have no filter to
-push down, so an unfiltered request recomputes the whole aggregation. Their results are
-cached for `app_puppetdb_aggregateCacheTtl` seconds (60 by default, `0` disables it).
-Only the unfiltered, unpaged form is cached; anything with a query, `limit`, `offset` or
-`order_by` always goes to the database.
+Facts are stored embedded on the node document, so only the facts listed in
+`app_main_facts_index` get a dedicated index; everything else would be a collection scan.
+Every fact write therefore also stores a flat companion array `facts_index`, one entry per
+indexable fact path, covered by a single compound multikey index
+`(facts_index.p, facts_index.v)`. One index serves every fact instead of one index per
+configured fact, and the planner picks the most selective fact of a multi-fact query
+itself.
 
-The cache is per instance and expires by time, not by invalidation: a fact name that
-appears on a node for the first time can take up to the TTL to show up in `/fact-names`.
-A write-maintained collection would avoid that for additions, but it cannot notice a fact
-name that stops being used anywhere without a full rebuild — hence the simpler bounded
-staleness.
+Every top-level fact name is present in the index — that is what `/fact-names` reads —
+and costs exactly one entry when its value is an indexable scalar: `{p: <name>, v: <value>}`.
+A fact whose value is structured, denied or too long to index keeps a bare `{p: <name>}`
+entry instead, so the name stays visible without the value ever churning. A value is
+indexable when its path is no deeper than `app_main_facts_indexDepth`, is not matched by
+`app_main_facts_indexDeny`, and the value is a bool, a number, or a string no longer than
+`app_main_facts_indexMaxValueLen` characters. Lists do not consume a depth level; their
+scalar elements are indexed under the path of the list itself, mirroring MongoDB's implicit
+array traversal, so `{"facts.roles": "web"}` and the index agree on a list-valued fact.
+
+A fact equality compiles to **both** an `$elemMatch` on `facts_index` and the direct
+`facts.<path>` predicate. The `$elemMatch` is what the generic index can serve; the direct
+predicate is an O(1) residual check that also uses a dedicated `app_main_facts_index`
+index when one exists. Emitting only the `$elemMatch` form is measurably slower on
+multi-fact queries, so both are always emitted.
+
+The document pre-filter may only over-match — it runs before the exact `$match` and
+anything it drops is gone. An `$elemMatch` is therefore only emitted when the engine's
+indexability check says ingest is guaranteed to have written that entry, using exactly the
+same rule (type, length, depth, deny list) as the ingest side. Everything else — regular
+expressions, ranges, `null?`, oversized or denied values, paths deeper than the configured
+depth — falls back to the direct predicate alone.
+
+There is no backfill: changing `indexDepth`, `indexMaxValueLen` or `indexDeny` only takes
+effect for nodes that send facts again afterwards.
+
+`fact-names` is served by a `distinct` on `facts_index.p` (a covered `DISTINCT_SCAN` that
+examines no documents), `environments` and `producers` by a `distinct` on their own indexed
+fields. A filtered, projected or aggregated query on those entities still runs the full
+pipeline.
 
 ## Sizing
 

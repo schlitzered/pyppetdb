@@ -18,6 +18,7 @@ from datetime import datetime
 from pyppetdb.helpers.puppetdb import catalog_metadata
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
+from pyppetdb.helpers.puppetdb import build_facts_index
 from pyppetdb.helpers.puppetdb import build_resource_params
 from pyppetdb.helpers.puppetdb import normalise_edges
 from pyppetdb.model.nodes import NodeGetCatalog
@@ -124,6 +125,140 @@ class TestResourceParams(unittest.TestCase):
         self.assertNotIn("list", names)
         self.assertIn("count", names)
         self.assertIn("flag", names)
+
+
+class TestFactsIndex(unittest.TestCase):
+    def paths(self, entries):
+        return [entry["p"] for entry in entries]
+
+    def values(self, entries):
+        return {
+            (entry["p"], entry["v"]) for entry in entries if "v" in entry
+        }
+
+    def test_each_top_level_fact_costs_one_entry(self):
+        facts = {f"f{index}": f"value{index}" for index in range(20)}
+        facts["structured"] = {"a": 1}
+        self.assertEqual(len(build_facts_index(facts, depth=1)), 21)
+        self.assertEqual(len(build_facts_index(facts)), 22)
+
+    def test_every_top_level_key_is_listed_by_name(self):
+        entries = build_facts_index(
+            {
+                "osfamily": "Debian",
+                "os": {"family": "Debian"},
+                "secret": "s3cr3t",
+                "huge": "x" * 300,
+            },
+            deny=["secret"],
+            depth=1,
+        )
+        self.assertEqual(
+            sorted(set(self.paths(entries))),
+            ["huge", "os", "osfamily", "secret"],
+        )
+        self.assertEqual(self.values(entries), {("osfamily", "Debian")})
+
+    def test_an_indexable_scalar_yields_exactly_one_entry(self):
+        self.assertEqual(
+            build_facts_index({"osfamily": "Debian"}),
+            [{"p": "osfamily", "v": "Debian"}],
+        )
+
+    def test_a_list_fact_is_named_by_its_element_entries(self):
+        self.assertEqual(
+            build_facts_index({"roles": ["web", "db"]}),
+            [{"p": "roles", "v": "web"}, {"p": "roles", "v": "db"}],
+        )
+
+    def test_a_list_without_indexable_elements_keeps_a_bare_entry(self):
+        self.assertEqual(build_facts_index({"roles": []}), [{"p": "roles"}])
+        self.assertEqual(
+            build_facts_index({"ifaces": [{"name": "eth0"}]}, depth=1),
+            [{"p": "ifaces"}],
+        )
+
+    def test_structured_and_denied_facts_keep_a_bare_entry(self):
+        entries = build_facts_index(
+            {"os": {"family": "Debian"}, "role": "web"}, deny=["role"], depth=1
+        )
+        self.assertIn({"p": "os"}, entries)
+        self.assertIn({"p": "role"}, entries)
+        self.assertEqual(self.values(entries), set())
+
+    def test_value_length_boundary(self):
+        exact = build_facts_index({"a": "x" * 8}, max_value_len=8)
+        too_long = build_facts_index({"a": "x" * 9}, max_value_len=8)
+        self.assertEqual(self.values(exact), {("a", "x" * 8)})
+        self.assertEqual(self.values(too_long), set())
+
+    def test_scalars_of_every_type_are_indexed(self):
+        entries = build_facts_index(
+            {"b": True, "i": 7, "f": 1.5, "s": "x", "n": None}
+        )
+        self.assertEqual(
+            self.values(entries),
+            {("b", True), ("i", 7), ("f", 1.5), ("s", "x")},
+        )
+
+    def test_depth_one_ignores_nested_leaves(self):
+        entries = build_facts_index({"os": {"family": "Debian"}}, depth=1)
+        self.assertEqual(self.values(entries), set())
+
+    def test_depth_two_emits_dotted_paths(self):
+        entries = build_facts_index(
+            {"os": {"family": "Debian", "release": {"major": "12"}}}, depth=2
+        )
+        self.assertEqual(self.values(entries), {("os.family", "Debian")})
+        self.assertEqual(
+            entries, [{"p": "os"}, {"p": "os.family", "v": "Debian"}]
+        )
+
+    def test_depth_three_reaches_deeper_leaves(self):
+        entries = build_facts_index(
+            {"os": {"release": {"major": "12"}}}, depth=3
+        )
+        self.assertEqual(self.values(entries), {("os.release.major", "12")})
+
+    def test_lists_do_not_consume_a_depth_level(self):
+        entries = build_facts_index(
+            {"ifaces": [{"name": "eth0"}, "eth1"]}, depth=1
+        )
+        self.assertEqual(self.values(entries), {("ifaces", "eth1")})
+        entries = build_facts_index(
+            {"ifaces": [{"name": "eth0"}, "eth1"]}, depth=2
+        )
+        self.assertEqual(
+            self.values(entries),
+            {("ifaces", "eth1"), ("ifaces.name", "eth0")},
+        )
+
+    def test_positional_and_unsafe_paths_are_not_value_indexed(self):
+        entries = build_facts_index({"0day": "yes", "we ird": "x"})
+        self.assertEqual(sorted(set(self.paths(entries))), ["0day", "we ird"])
+        self.assertEqual(self.values(entries), set())
+
+    def test_scalar_list_elements_are_indexed(self):
+        entries = build_facts_index({"roles": ["web", "db", "web"]})
+        self.assertEqual(
+            self.values(entries), {("roles", "web"), ("roles", "db")}
+        )
+
+    def test_deny_matches_exact_name_and_prefix(self):
+        entries = build_facts_index(
+            {"os": {"family": "Debian"}, "uptime": 5},
+            depth=2,
+            deny=["os", "uptime"],
+        )
+        self.assertEqual(self.values(entries), set())
+        entries = build_facts_index(
+            {"os": {"family": "Debian"}}, depth=2, deny=["os.family"]
+        )
+        self.assertEqual(self.values(entries), set())
+
+    def test_non_dict_facts_yield_nothing(self):
+        self.assertEqual(build_facts_index(None), [])
+        self.assertEqual(build_facts_index(["a"]), [])
 
 
 class TestPayloads(unittest.TestCase):

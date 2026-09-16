@@ -30,6 +30,12 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         self.addCleanup(
             self._db["nodes_reports"].delete_many, {"node_id": self.certname}
         )
+        self.addCleanup(
+            self._db["nodes_resources"].delete_many, {"node_id": self.certname}
+        )
+        self.addCleanup(
+            self._db["nodes_edges"].delete_many, {"node_id": self.certname}
+        )
         self._seed()
 
     def _post(self, command, payload, version=1):
@@ -101,8 +107,8 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
             version=9,
         )
         self._wait_until(
-            lambda: self._db["nodes"].find_one(
-                {"id": self.certname, "catalog.resources.type": "File"}
+            lambda: self._db["nodes_resources"].find_one(
+                {"node_id": self.certname, "type": "File"}
             )
         )
         self._post(

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import random
 import uuid
 from datetime import UTC
@@ -51,6 +52,72 @@ def _iso(value: datetime) -> str:
 
 def _timestamp(index: int) -> str:
     return _iso(_base_time() + timedelta(seconds=index % 600))
+
+
+REAL_FACTS = None
+
+
+def load_real_facts(path: str) -> None:
+    global REAL_FACTS
+    with open(path) as handle:
+        loaded = json.load(handle)
+    if isinstance(loaded, dict) and isinstance(loaded.get("values"), dict):
+        loaded = loaded["values"]
+    REAL_FACTS = loaded
+
+
+def _substitute(value, mapping: dict):
+    if isinstance(value, dict):
+        return {key: _substitute(item, mapping) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_substitute(item, mapping) for item in value]
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    return value
+
+
+def _real_values(index: int, synthetic: dict) -> dict:
+    networking = REAL_FACTS.get("networking") or {}
+    original_fqdn = REAL_FACTS.get("clientcert") or networking.get("fqdn") or ""
+    original_host = networking.get("hostname") or original_fqdn.split(".")[0]
+    original_domain = networking.get("domain") or original_fqdn.partition(".")[2]
+    node = certname(index)
+    mapping = {
+        original_fqdn: node,
+        original_host: node.split(".")[0],
+        original_domain: "example.com",
+    }
+    mapping.pop("", None)
+    values = _substitute(REAL_FACTS, mapping)
+    values["clientcert"] = node
+    for key in (
+        "osfamily",
+        "kernel",
+        "uptime_seconds",
+        "memorysize_mb",
+        "processorcount",
+        "virtual",
+        "role",
+        "datacenter",
+        "bench_generation",
+        "trusted",
+    ):
+        values[key] = synthetic[key]
+    real_os = values.get("os") if isinstance(values.get("os"), dict) else {}
+    values["os"] = {
+        **real_os,
+        "family": synthetic["os"]["family"],
+        "name": synthetic["os"]["name"],
+    }
+    real_net = values.get("networking") if isinstance(values.get("networking"), dict) else {}
+    values["networking"] = {
+        **real_net,
+        "fqdn": node,
+        "hostname": node.split(".")[0],
+        "domain": "example.com",
+        "ip": synthetic["networking"]["ip"],
+    }
+    return values
 
 
 def facts_payload(index: int, seed: int, fact_count: int = 150, generation: int = 0) -> dict:
@@ -96,6 +163,8 @@ def facts_payload(index: int, seed: int, fact_count: int = 150, generation: int 
                 rng.random() < 0.5,
             ]
         )
+    if REAL_FACTS is not None:
+        values = _real_values(index, values)
     return {
         "certname": certname(index),
         "environment": environment,
@@ -379,6 +448,11 @@ def build_queries(node_count: int) -> list:
             "resources_by_parameter",
             "/pdb/query/v4/resources",
             ["=", ["parameter", "role"], "role07"],
+        ),
+        query(
+            "resources_by_parameter_worst",
+            "/pdb/query/v4/resources",
+            ["=", ["parameter", "owner"], "nobody"],
         ),
         query(
             "resources_exported",

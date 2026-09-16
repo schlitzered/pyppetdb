@@ -25,8 +25,11 @@ log_levels = typing.Literal[
 
 class ConfigAppFacts(BaseModel):
     index: typing.Optional[typing.List[str]] = None
+    indexMaxValueLen: int = 256
+    indexDepth: int = 3
+    indexDeny: typing.List[str] = []
 
-    @field_validator("index", mode="before")
+    @field_validator("index", "indexDeny", mode="before")
     @classmethod
     def parse_index(cls, v):
         if isinstance(v, str):
@@ -107,7 +110,7 @@ class ConfigAppPuppetdb(BaseModel):
     writeQueueSize: int = 500
     writeQueueWorkers: int = 32
     writeQueueDrainTimeout: float = 30.0
-    aggregateCacheTtl: int = 60
+    writeQueueWaitTimeout: float = 30.0
     maxQueryDepth: int = 50
     maxSubqueryDepth: int = 3
     queryTimeout: int = 600

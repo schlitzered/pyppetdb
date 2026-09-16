@@ -59,8 +59,10 @@ class Entity(BaseModel):
     python_expand: Optional[str] = None
     scalar_result: Optional[str] = None
     element_filter: Optional[Dict[str, Any]] = None
-    cacheable: bool = False
     distinct_rows: bool = False
+    distinct_field: Optional[str] = None
+    distinct_top_level: bool = False
+    fact_pair: Optional[Dict[str, str]] = None
 
     _by_name: Dict[str, Column] = PrivateAttr(default_factory=dict)
 
@@ -295,6 +297,7 @@ FACTS = Entity(
     name="facts",
     collection="nodes",
     element_filter=FACT_ELEMENT_FILTER,
+    fact_pair={"name": "name", "value": "value", "path": "facts"},
     columns=[
         Column("certname", "string", "$id"),
         Column("name", "string", "$kv.k"),
@@ -312,7 +315,8 @@ FACT_NAMES = Entity(
         "tail": ({"$group": {"_id": "$kv.k"}}, {"$sort": {"_id": 1}}),
     },
     scalar_result="name",
-    cacheable=True,
+    distinct_field="facts_index.p",
+    distinct_top_level=True,
     columns=[Column("name", "string", "$_id")],
 )
 
@@ -376,7 +380,6 @@ FACT_PATHS = Entity(
     collection="nodes",
     python_expand="fact_paths",
     distinct_rows=True,
-    cacheable=True,
     columns=[
         Column("name", "string", None),
         Column("path", "path", None),
@@ -386,51 +389,39 @@ FACT_PATHS = Entity(
 
 RESOURCES = Entity(
     name="resources",
-    collection="nodes",
+    collection="nodes_resources",
     field_forms={"parameter": "parameters"},
-    element_filter={
-        "array": "catalog.resources",
-        "field": "resource",
-        "prefix": "catalog.resources.",
-        "keep": ("id", "environment", "disabled"),
-    },
     columns=[
-        Column("certname", "string", "$id"),
+        Column("certname", "string", "$node_id"),
         Column("environment", "string", "$environment"),
-        Column("resource", "string", "$resource.resource"),
-        Column("type", "string", "$resource.type"),
-        Column("title", "string", "$resource.title"),
-        Column("exported", "boolean", {"$ifNull": ["$resource.exported", False]}),
-        Column("tags", "array", {"$ifNull": ["$resource.tags", []]}),
-        Column("file", "string", "$resource.file"),
-        Column("line", "integer", "$resource.line"),
+        Column("resource", "string", "$resource"),
+        Column("type", "string", "$type"),
+        Column("title", "string", "$title"),
+        Column("exported", "boolean", {"$ifNull": ["$exported", False]}),
+        Column("tags", "array", {"$ifNull": ["$tags", []]}),
+        Column("file", "string", "$file"),
+        Column("line", "integer", "$line"),
         Column(
             "parameters",
             "json",
-            {"$ifNull": ["$resource.parameters", {}]},
+            {"$ifNull": ["$parameters", {}]},
             dotted=True,
         ),
         Column("node_state", "state", _node_state(), projected=False),
-        Column("tag", "string", {"$ifNull": ["$resource.tags", []]}, projected=False),
+        Column("tag", "string", {"$ifNull": ["$tags", []]}, projected=False),
     ],
 )
 
 EDGES = Entity(
     name="edges",
-    collection="nodes",
-    element_filter={
-        "array": "catalog.edges",
-        "field": "edge",
-        "prefix": "catalog.edges.",
-        "keep": ("id", "environment", "disabled"),
-    },
+    collection="nodes_edges",
     columns=[
-        Column("certname", "string", "$id"),
-        Column("relationship", "string", "$edge.relationship"),
-        Column("source_type", "string", "$edge.source_type"),
-        Column("source_title", "string", "$edge.source_title"),
-        Column("target_type", "string", "$edge.target_type"),
-        Column("target_title", "string", "$edge.target_title"),
+        Column("certname", "string", "$node_id"),
+        Column("relationship", "string", "$relationship"),
+        Column("source_type", "string", "$source_type"),
+        Column("source_title", "string", "$source_title"),
+        Column("target_type", "string", "$target_type"),
+        Column("target_title", "string", "$target_title"),
         Column("node_state", "state", _node_state(), projected=False),
     ],
 )
@@ -438,7 +429,52 @@ EDGES = Entity(
 CATALOGS = Entity(
     name="catalogs",
     collection="nodes",
-    stages=[{"$match": {"catalog": {"$type": "object"}}}],
+    stages=[
+        {"$match": {"catalog": {"$type": "object"}}},
+        {
+            "$lookup": {
+                "from": "nodes_edges",
+                "let": {"nid": "$id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$node_id", "$$nid"]}}},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "relationship": 1,
+                            "source_type": 1,
+                            "source_title": 1,
+                            "target_type": 1,
+                            "target_title": 1,
+                        }
+                    },
+                ],
+                "as": "_edges",
+            }
+        },
+        {
+            "$lookup": {
+                "from": "nodes_resources",
+                "let": {"nid": "$id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$node_id", "$$nid"]}}},
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "resource": 1,
+                            "type": 1,
+                            "title": 1,
+                            "exported": 1,
+                            "tags": 1,
+                            "file": 1,
+                            "line": 1,
+                            "parameters": 1,
+                        }
+                    },
+                ],
+                "as": "_resources",
+            }
+        },
+    ],
     columns=[
         Column("certname", "string", "$id"),
         Column("version", "string", "$catalog.version"),
@@ -458,7 +494,7 @@ CATALOGS = Entity(
             "edges",
             "json",
             _child(
-                {"$ifNull": ["$catalog.edges", []]},
+                {"$ifNull": ["$_edges", []]},
                 ["/pdb/query/v4/catalogs/", "$id", "/edges"],
             ),
         ),
@@ -466,7 +502,7 @@ CATALOGS = Entity(
             "resources",
             "json",
             _child(
-                {"$ifNull": ["$catalog.resources", []]},
+                {"$ifNull": ["$_resources", []]},
                 ["/pdb/query/v4/catalogs/", "$id", "/resources"],
             ),
         ),
@@ -673,7 +709,7 @@ ENVIRONMENTS = Entity(
         {"$match": {"environment": {"$type": "string"}}},
         {"$group": {"_id": "$environment"}},
     ],
-    cacheable=True,
+    distinct_field="environment",
     columns=[Column("name", "string", "$_id")],
 )
 
@@ -684,7 +720,7 @@ PRODUCERS = Entity(
         {"$match": {"producer": {"$type": "string"}}},
         {"$group": {"_id": "$producer"}},
     ],
-    cacheable=True,
+    distinct_field="producer",
     columns=[Column("name", "string", "$_id")],
 )
 
@@ -769,7 +805,7 @@ PREFILTERS = {
         "latest_report_corrective_change": "report.corrective_change",
         "latest_report_job_id": "report.job_id",
         "cached_catalog_status": "report.cached_catalog_status",
-        "facts": "facts",
+        "facts": ("facts", "fact_value"),
         "node_state": ("disabled", "node_state"),
     },
     "facts": {
@@ -803,31 +839,31 @@ PREFILTERS = {
         "certname": "id",
         "environment": "environment",
         "timestamp": "change_facts",
-        "facts": "facts",
-        "trusted": "facts.trusted",
+        "facts": ("facts", "fact_value"),
+        "trusted": ("facts.trusted", "fact_value"),
         "node_state": ("disabled", "node_state"),
     },
     "resources": {
-        "certname": "id",
+        "certname": "node_id",
         "environment": "environment",
-        "resource": "catalog.resources.resource",
-        "type": "catalog.resources.type",
-        "title": "catalog.resources.title",
-        "file": "catalog.resources.file",
-        "line": "catalog.resources.line",
-        "exported": ("catalog.resources.exported", "path", False),
-        "tags": ("catalog.resources.tags", "path", []),
-        "tag": ("catalog.resources.tags", "path", []),
-        "parameters": ("catalog.resources.parameters", "resource_param", {}),
+        "resource": "resource",
+        "type": "type",
+        "title": "title",
+        "file": "file",
+        "line": "line",
+        "exported": ("exported", "path", False),
+        "tags": ("tags", "path", []),
+        "tag": ("tags", "path", []),
+        "parameters": ("parameters", "resource_param", {}),
         "node_state": ("disabled", "node_state"),
     },
     "edges": {
-        "certname": "id",
-        "relationship": "catalog.edges.relationship",
-        "source_type": "catalog.edges.source_type",
-        "source_title": "catalog.edges.source_title",
-        "target_type": "catalog.edges.target_type",
-        "target_title": "catalog.edges.target_title",
+        "certname": "node_id",
+        "relationship": "relationship",
+        "source_type": "source_type",
+        "source_title": "source_title",
+        "target_type": "target_type",
+        "target_title": "target_title",
         "node_state": ("disabled", "node_state"),
     },
     "catalogs": {

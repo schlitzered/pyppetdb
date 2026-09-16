@@ -149,9 +149,7 @@ class TestNodesRedactors(IntegrationTestBase):
         )
         self.assertEqual(response.status_code, 200)
         self._wait_until(
-            lambda: self._db["nodes"].find_one(
-                {"id": node_id, "catalog.resources": {"$exists": True}}
-            )
+            lambda: self._db["nodes_catalogs"].find_one({"node_id": node_id})
         )
 
         # Get the catalog via API and verify redaction

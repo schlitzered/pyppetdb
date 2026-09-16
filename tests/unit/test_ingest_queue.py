@@ -210,6 +210,91 @@ class TestIngestQueue(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queue.size, 1)
         self.assertEqual(queue.workers, 1)
 
+    async def _fill(self, queue, release):
+        async def blocking():
+            await release.wait()
+
+        self.assertTrue(queue.submit(blocking))
+        await asyncio.sleep(0.05)
+        while queue.depth < queue.size:
+            self.assertTrue(queue.submit(blocking))
+        return blocking
+
+    async def test_enqueue_waits_for_room(self):
+        queue = self.queue(size=1, workers=1)
+        release = asyncio.Event()
+        seen = []
+
+        async def job():
+            seen.append(True)
+
+        await self._fill(queue, release)
+        waiter = asyncio.create_task(queue.enqueue([job], wait_timeout=5))
+        await asyncio.sleep(0.05)
+        self.assertFalse(waiter.done())
+        self.assertEqual(queue.stats["dropped"], 0)
+        release.set()
+        self.assertTrue(await waiter)
+        await queue.stop()
+        self.assertEqual(seen, [True])
+        self.assertEqual(queue.stats["waited"], 1)
+        self.assertEqual(queue.stats["accepted"], 3)
+
+    async def test_enqueue_gives_up_after_the_wait_timeout(self):
+        queue = self.queue(size=1, workers=1)
+        release = asyncio.Event()
+        blocking = await self._fill(queue, release)
+        self.assertFalse(await queue.enqueue([blocking], wait_timeout=0.1))
+        self.assertEqual(queue.stats["dropped"], 1)
+        self.assertEqual(queue.stats["waited"], 0)
+        release.set()
+        await queue.stop()
+
+    async def test_enqueue_without_wait_rejects_immediately(self):
+        queue = self.queue(size=1, workers=1)
+        release = asyncio.Event()
+        blocking = await self._fill(queue, release)
+        started = asyncio.get_running_loop().time()
+        self.assertFalse(await queue.enqueue([blocking], wait_timeout=0))
+        self.assertLess(asyncio.get_running_loop().time() - started, 0.05)
+        self.assertEqual(queue.stats["dropped"], 1)
+        release.set()
+        await queue.stop()
+
+    async def test_enqueue_keeps_every_job_or_none(self):
+        queue = self.queue(size=2, workers=1)
+        release = asyncio.Event()
+        seen = []
+
+        def job(name):
+            async def run():
+                seen.append(name)
+
+            return run
+
+        await self._fill(queue, release)
+        waiter = asyncio.create_task(
+            queue.enqueue([job("a"), job("b")], wait_timeout=5)
+        )
+        await asyncio.sleep(0.05)
+        self.assertFalse(waiter.done())
+        self.assertEqual(queue.depth, 2)
+        release.set()
+        self.assertTrue(await waiter)
+        await queue.stop()
+        self.assertEqual(seen, ["a", "b"])
+
+    async def test_enqueue_after_stop_is_rejected(self):
+        queue = self.queue(size=1, workers=1)
+        queue.start()
+        await queue.stop()
+
+        async def job():
+            pass
+
+        self.assertFalse(await queue.enqueue([job], wait_timeout=5))
+        self.assertEqual(queue.stats["dropped"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

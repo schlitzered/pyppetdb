@@ -14,6 +14,7 @@
 
 import hashlib
 import json
+import re
 from datetime import UTC
 from datetime import datetime
 from typing import Optional
@@ -146,6 +147,187 @@ def build_resource_params(resources, max_value_len: int = RESOURCE_PARAM_MAX_VAL
             seen.add(key)
             pairs.append({"n": name, "v": value})
     return pairs
+
+
+FACTS_INDEX_FIELD = "facts_index"
+FACTS_INDEX_MAX_VALUE_LEN = 256
+FACTS_INDEX_DEPTH = 3
+
+SAFE_FACT_PATH = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*$"
+)
+
+
+class FactsIndexSpec:
+    def __init__(
+        self,
+        max_value_len: int = FACTS_INDEX_MAX_VALUE_LEN,
+        depth: int = FACTS_INDEX_DEPTH,
+        deny=None,
+    ):
+        self._max_value_len = max_value_len
+        self._depth = max(1, depth or 1)
+        self._deny = tuple(deny or ())
+
+    @property
+    def max_value_len(self) -> int:
+        return self._max_value_len
+
+    @property
+    def depth(self) -> int:
+        return self._depth
+
+    @property
+    def deny(self) -> tuple:
+        return self._deny
+
+    def denied(self, path: str) -> bool:
+        for entry in self._deny:
+            if path == entry or path.startswith(f"{entry}."):
+                return True
+        return False
+
+    def indexable_value(self, value) -> bool:
+        if isinstance(value, bool) or isinstance(value, (int, float)):
+            return True
+        if isinstance(value, str):
+            return len(value) <= self._max_value_len
+        return False
+
+    def indexable_path(self, path: str) -> bool:
+        if not isinstance(path, str) or not path:
+            return False
+        if path.count(".") + 1 > self._depth:
+            return False
+        if not SAFE_FACT_PATH.match(path):
+            return False
+        return not self.denied(path)
+
+    def indexable(self, path: str, value) -> bool:
+        return self.indexable_path(path) and self.indexable_value(value)
+
+
+def build_facts_index(
+    facts,
+    max_value_len: int = FACTS_INDEX_MAX_VALUE_LEN,
+    depth: int = FACTS_INDEX_DEPTH,
+    deny=None,
+) -> list:
+    entries = []
+    if not isinstance(facts, dict):
+        return entries
+    spec = FactsIndexSpec(max_value_len=max_value_len, depth=depth, deny=deny)
+    seen = set()
+    for name, value in facts.items():
+        start = len(entries)
+        _index_fact(entries, seen, spec, name, value)
+        if not any(entry["p"] == name for entry in entries[start:]):
+            entries.insert(start, {"p": name})
+    return entries
+
+
+def _index_fact(entries: list, seen: set, spec: FactsIndexSpec, path: str, value):
+    if isinstance(value, list):
+        for item in value:
+            _index_fact(entries, seen, spec, path, item)
+        return
+    if isinstance(value, dict):
+        if path.count(".") + 1 >= spec.depth:
+            return
+        for key, item in value.items():
+            _index_fact(entries, seen, spec, f"{path}.{key}", item)
+        return
+    _add_fact_entry(entries, seen, spec, path, value)
+
+
+def _add_fact_entry(entries: list, seen: set, spec: FactsIndexSpec, path: str, value):
+    if not spec.indexable(path, value):
+        return
+    key = (path, type(value).__name__, value)
+    if key in seen:
+        return
+    seen.add(key)
+    entries.append({"p": path, "v": value})
+
+
+def _param_index(params: dict, max_value_len: int) -> list:
+    out = []
+    if not isinstance(params, dict):
+        return out
+    for name, value in params.items():
+        if isinstance(value, bool) or isinstance(value, (int, float)):
+            pass
+        elif isinstance(value, str):
+            if len(value) > max_value_len:
+                continue
+        else:
+            continue
+        out.append({"n": name, "v": value})
+    return out
+
+
+def build_resource_documents(
+    node_id: str,
+    placement: Optional[dict],
+    environment: Optional[str],
+    disabled: bool,
+    resources,
+    max_value_len: int = RESOURCE_PARAM_MAX_VALUE_LEN,
+) -> list:
+    docs = []
+    if not isinstance(resources, list):
+        return docs
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        params = resource.get("parameters") or {}
+        docs.append(
+            {
+                "node_id": node_id,
+                "placement": placement,
+                "environment": environment,
+                "disabled": disabled,
+                "resource": resource.get("resource"),
+                "type": resource.get("type"),
+                "title": resource.get("title"),
+                "exported": bool(resource.get("exported")),
+                "tags": resource.get("tags") or [],
+                "file": resource.get("file"),
+                "line": resource.get("line"),
+                "parameters": params,
+                "params_index": _param_index(params, max_value_len),
+            }
+        )
+    return docs
+
+
+def build_edge_documents(
+    node_id: str,
+    placement: Optional[dict],
+    environment: Optional[str],
+    disabled: bool,
+    edges,
+) -> list:
+    docs = []
+    if not isinstance(edges, list):
+        return docs
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        docs.append(
+            {
+                "node_id": node_id,
+                "placement": placement,
+                "environment": environment,
+                "disabled": disabled,
+                "relationship": edge.get("relationship"),
+                "source_type": edge.get("source_type"),
+                "source_title": edge.get("source_title"),
+                "target_type": edge.get("target_type"),
+                "target_title": edge.get("target_title"),
+            }
+        )
+    return docs
 
 
 def catalog_payload(data: dict) -> dict:

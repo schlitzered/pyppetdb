@@ -24,6 +24,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from pyppetdb.config import ConfigAppFacts
 from pyppetdb.config import ConfigAppPuppetdb
 from pyppetdb.controller.pdb.query.v4 import ControllerPdbQueryV4
 from pyppetdb.controller.pdb.query.v4 import apply_local_paging
@@ -35,6 +36,7 @@ from pyppetdb.pdbquery.paging import Paging
 def build(config_kwargs=None):
     config = MagicMock()
     config.app.puppetdb = ConfigAppPuppetdb(**(config_kwargs or {}))
+    config.app.main.facts = ConfigAppFacts()
     config.app.main.ssl = None
     authorize = MagicMock()
     authorize.require_cn_trusted = AsyncMock(return_value="admin")

@@ -17,12 +17,13 @@ import contextvars
 import json
 import logging
 import re
-import time
 from datetime import datetime
 from typing import Optional
 
 import pymongo.errors
 
+from pyppetdb.helpers.puppetdb import FACTS_INDEX_FIELD
+from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
 from pyppetdb.pdbquery import matcher
 from pyppetdb.pdbquery.ast import FilterCompiler
@@ -34,8 +35,11 @@ from pyppetdb.pdbquery.entities import get_entity
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
 from pyppetdb.pdbquery.errors import unknown_entity
 from pyppetdb.pdbquery.errors import unknown_field
+from pyppetdb.pdbquery.entities import _UNSET
 
 SUBQUERY_LIMIT = 100000
+
+DEFAULT_FACTS_INDEX = FactsIndexSpec()
 
 _query_timeout = contextvars.ContextVar("pdb_query_timeout", default=0)
 
@@ -45,26 +49,29 @@ class QueryEngine:
         self,
         log: logging.Logger,
         collections: dict,
-        aggregate_cache_ttl: int = 0,
         max_query_depth: int = 0,
         max_subquery_depth: int = 0,
         query_timeout: int = 0,
         query_timeout_max: int = 0,
         max_page_size: int = 0,
+        facts_index: Optional[FactsIndexSpec] = None,
     ):
         self._log = log
         self._collections = collections
-        self._aggregate_cache_ttl = aggregate_cache_ttl
+        self._facts_index = facts_index or DEFAULT_FACTS_INDEX
         self._max_query_depth = max_query_depth
         self._max_subquery_depth = max_subquery_depth
         self._query_timeout = query_timeout
         self._query_timeout_max = query_timeout_max
         self._max_page_size = max_page_size
-        self._aggregate_cache = {}
 
     @property
     def log(self):
         return self._log
+
+    @property
+    def facts_index(self) -> FactsIndexSpec:
+        return self._facts_index
 
     @property
     def aggregate_options(self) -> dict:
@@ -97,19 +104,6 @@ class QueryEngine:
         await compiler.compile(query.filter)
         self._check_columns(target, query)
         return query
-
-    def _cache_key(self, entity, query: Query, paging) -> Optional[str]:
-        if not self._aggregate_cache_ttl or not entity.cacheable:
-            return None
-        if query.filter or query.columns or query.functions:
-            return None
-        if query.limit or query.offset or query.order_by or query.group_by:
-            return None
-        if paging is not None and (
-            paging.limit or paging.offset or paging.order_by
-        ):
-            return None
-        return entity.name
 
     @staticmethod
     def _check_columns(entity, query: Query) -> None:
@@ -182,11 +176,8 @@ class QueryEngine:
             self._check_columns(target, query)
         self._apply_page_cap(query)
 
-        cache_key = self._cache_key(target, query, paging)
-        if cache_key is not None:
-            cached = self._aggregate_cache.get(cache_key)
-            if cached is not None and cached[0] > time.monotonic():
-                return cached[1], cached[2]
+        if _is_distinct_query(target, query):
+            return await self._run_distinct(target, query)
 
         compiler = FilterCompiler(target, engine=self)
         match = await compiler.compile(query.filter)
@@ -202,12 +193,6 @@ class QueryEngine:
         rows = convert_timestamps(target, query, rows)
         if target.scalar_result and not query.columns and not query.functions:
             rows = [row.get(target.scalar_result) for row in rows]
-        if cache_key is not None:
-            self._aggregate_cache[cache_key] = (
-                time.monotonic() + self._aggregate_cache_ttl,
-                rows,
-                total,
-            )
         return rows, total
 
     async def select(self, entity_name: str, columns: list, ast) -> list:
@@ -248,7 +233,11 @@ class QueryEngine:
         if _is_never(match):
             return [], 0
         head = []
-        prefilter = build_prefilter(entity, match) if match else {}
+        prefilter, exact = (
+            build_prefilter_plan(entity, match, self._facts_index)
+            if match
+            else ({}, True)
+        )
         if prefilter:
             head.append({"$match": prefilter})
         element_cond = build_element_filter(entity, match) if match else None
@@ -257,6 +246,16 @@ class QueryEngine:
         early_sort = build_early_sort(entity, query)
         if early_sort:
             head.append({"$sort": early_sort})
+
+        collection = self.collection(entity.collection)
+        count_filter = None
+        if exact and not distinct and not element_cond and not pinned:
+            count_filter = _exact_count_filter(entity, prefilter)
+        if count_filter is not None and _count_only(query):
+            total = await self._count(collection, count_filter)
+            if not total:
+                return [], 0
+            return [{query.functions[0].alias: total}], 1
 
         selected, filter_only = projection_plan(entity, query, match)
         tail = [{"$project": build_projection(entity, selected)}]
@@ -268,12 +267,11 @@ class QueryEngine:
             tail.extend(_distinct_stages(query.columns))
 
         total = None
-        collection = self.collection(entity.collection)
         if include_total and (query.limit is not None or query.offset is not None):
-            counted = await collection.aggregate(
-                head + tail + [{"$count": "count"}], **self.aggregate_options
-            ).to_list(length=1)
-            total = counted[0]["count"] if counted else 0
+            if count_filter is not None:
+                total = await self._count(collection, count_filter)
+            else:
+                total = await self._count_pipeline(collection, entity, head, match)
 
         early_paging = (
             bool(early_sort)
@@ -298,11 +296,53 @@ class QueryEngine:
             total = len(rows)
         return rows, total
 
+    async def _count(self, collection, count_filter: dict) -> int:
+        options = {}
+        timeout = _query_timeout.get()
+        if timeout:
+            options["maxTimeMS"] = timeout * 1000
+        if not count_filter:
+            options["hint"] = "_id_"
+        return await collection.count_documents(count_filter, **options)
+
+    async def _count_pipeline(self, collection, entity, head: list, match: dict) -> int:
+        pipeline = [stage for stage in head if "$sort" not in stage]
+        helpers = set()
+        _collect_match_columns(match, helpers)
+        needed = _resolve_names(entity, helpers)
+        if needed:
+            pipeline.append({"$project": build_projection(entity, needed)})
+        if match:
+            pipeline.append({"$match": _mongo_safe(match)})
+        pipeline.append({"$count": "count"})
+        counted = await collection.aggregate(
+            pipeline, **self.aggregate_options
+        ).to_list(length=1)
+        return counted[0]["count"] if counted else 0
+
+    async def _run_distinct(self, entity, query: Query):
+        collection = self.collection(entity.collection)
+        values = await collection.distinct(entity.distinct_field)
+        names = sorted(
+            value
+            for value in values
+            if isinstance(value, str)
+            and not (entity.distinct_top_level and "." in value)
+        )
+        rows = [{entity.columns[0].name: name} for name in names]
+        total = len(rows)
+        rows = _python_paging(rows, query)
+        if entity.scalar_result:
+            rows = [row.get(entity.scalar_result) for row in rows]
+        return rows, total
+
     async def _run_python(self, entity, query: Query, match: dict):
         if _is_never(match):
             return [], 0
         collection = self.collection(entity.collection)
-        prefilter = build_prefilter(entity, match) if match else {}
+        prefilter = (
+            build_prefilter(entity, match, self._facts_index) if match else {}
+        )
         cursor = collection.find(
             prefilter, projection=PYTHON_PROJECTIONS[entity.python_expand]
         )
@@ -466,42 +506,70 @@ def _collect_match_columns(node, into: set) -> None:
             into.add(key)
 
 
-def build_prefilter(entity, match: dict) -> dict:
-    clauses = _prefilter_node(entity, match)
+def _is_distinct_query(entity, query: Query) -> bool:
+    if not entity.distinct_field:
+        return False
+    return not (
+        query.filter or query.columns or query.functions or query.group_by
+    )
+
+
+def build_prefilter(entity, match: dict, facts_index=None) -> dict:
+    return build_prefilter_plan(entity, match, facts_index)[0]
+
+
+def build_prefilter_plan(entity, match: dict, facts_index=None) -> tuple:
+    if not match:
+        return {}, True
+    clauses, exact = _prefilter_node(
+        entity, match, facts_index or DEFAULT_FACTS_INDEX
+    )
     if not clauses:
-        return {}
+        return {}, False
     if len(clauses) == 1:
-        return clauses[0]
-    return {"$and": clauses}
+        return clauses[0], exact
+    return {"$and": clauses}, exact
 
 
-def _prefilter_node(entity, node) -> list:
+def _prefilter_node(entity, node, facts_index) -> tuple:
     if not isinstance(node, dict) or not node:
-        return []
+        return [], False
     clauses = []
+    exact = True
     for key, value in node.items():
         if key == "$and":
             for child in value:
-                clauses.extend(_prefilter_node(entity, child))
+                derived, child_exact = _prefilter_node(entity, child, facts_index)
+                clauses.extend(derived)
+                exact = exact and child_exact
         elif key == "$or":
             branches = []
+            branches_exact = True
             for child in value:
-                derived = _prefilter_node(entity, child)
+                derived, child_exact = _prefilter_node(entity, child, facts_index)
                 if not derived:
                     branches = []
                     break
                 branches.append(
                     derived[0] if len(derived) == 1 else {"$and": derived}
                 )
+                branches_exact = branches_exact and child_exact
             if branches:
                 clauses.append({"$or": branches})
+                exact = exact and branches_exact
+            else:
+                exact = False
         elif key in ("$nor", "__never__"):
-            continue
+            exact = False
         else:
-            leaf = _prefilter_leaf(entity, key, value)
+            leaf, leaf_exact = _prefilter_leaf(entity, key, value, facts_index)
             if leaf:
                 clauses.append(leaf)
-    return clauses
+            exact = exact and bool(leaf) and leaf_exact
+    pair = _fact_pair_prefilter(entity, node, facts_index)
+    if pair:
+        clauses.append(pair)
+    return clauses, exact
 
 
 def _indexable_param_value(value) -> bool:
@@ -512,7 +580,7 @@ def _indexable_param_value(value) -> bool:
     return False
 
 
-RESOURCE_PARAMS_FIELD = "resource_params"
+RESOURCE_PARAMS_FIELD = "params_index"
 
 
 def _resource_param_prefilter(name: str, condition) -> Optional[dict]:
@@ -532,7 +600,82 @@ def _resource_param_prefilter(name: str, condition) -> Optional[dict]:
     return None
 
 
-def _prefilter_leaf(entity, key: str, condition) -> Optional[dict]:
+def _facts_index_prefilter(path: str, condition, facts_index) -> Optional[dict]:
+    if not facts_index.indexable_path(path):
+        return None
+    if isinstance(condition, dict):
+        values = condition.get("$in")
+        if (
+            len(condition) == 1
+            and isinstance(values, list)
+            and values
+            and all(facts_index.indexable_value(item) for item in values)
+        ):
+            return {
+                FACTS_INDEX_FIELD: {"$elemMatch": {"p": path, "v": {"$in": values}}}
+            }
+        return None
+    if facts_index.indexable_value(condition):
+        return {FACTS_INDEX_FIELD: {"$elemMatch": {"p": path, "v": condition}}}
+    return None
+
+
+def _with_facts_index(
+    path: str, condition, direct, direct_exact: bool, facts_index
+) -> tuple:
+    element = _facts_index_prefilter(path, condition, facts_index)
+    if element is None:
+        return direct, direct_exact
+    if direct is None:
+        return element, False
+    return {"$and": [element, direct]}, direct_exact
+
+
+def _fact_pair_prefilter(entity, node, facts_index) -> Optional[dict]:
+    spec = entity.fact_pair
+    if not spec:
+        return None
+    names = None
+    for condition in _conjunct_leaves(node, spec["name"]):
+        found = _pinned_leaf(condition)
+        if found is not None and (names is None or len(found) < len(names)):
+            names = found
+    if not names or len(names) > MAX_PINNED_KEYS:
+        return None
+    if any("." in name for name in names):
+        return None
+    clauses = []
+    for condition in _conjunct_leaves(node, spec["value"]):
+        branches = []
+        for name in sorted(names):
+            element = _facts_index_prefilter(name, condition, facts_index)
+            if element is None:
+                branches = []
+                break
+            branches.append(
+                {"$and": [element, {f"{spec['path']}.{name}": condition}]}
+            )
+        if branches:
+            clauses.append(branches[0] if len(branches) == 1 else {"$or": branches})
+    if not clauses:
+        return None
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
+
+
+def _conjunct_leaves(node, column_name: str) -> list:
+    found = []
+    if not isinstance(node, dict):
+        return found
+    for key, value in node.items():
+        if key == "$and":
+            for child in value:
+                found.extend(_conjunct_leaves(child, column_name))
+        elif key == column_name:
+            found.append(value)
+    return found
+
+
+def _prefilter_leaf(entity, key: str, condition, facts_index) -> Optional[dict]:
     column = entity.by_name.get(key)
     rest = ""
     if column is None and "." in key:
@@ -540,37 +683,50 @@ def _prefilter_leaf(entity, key: str, condition) -> Optional[dict]:
         column = entity.by_name.get(head)
         rest = "." + rest
     if column is None or not column.prefilter:
-        return None
+        return None, False
 
     if column.prefilter_kind == "fact_key":
         if rest:
-            return None
+            return None, False
         if isinstance(condition, str):
-            return {f"{column.prefilter}.{condition}": {"$exists": True}}
+            return {f"{column.prefilter}.{condition}": {"$exists": True}}, False
         keys = _pinned_leaf(condition)
         if not keys or len(keys) > MAX_PINNED_KEYS:
-            return None
+            return None, False
         return {
             "$or": [
                 {f"{column.prefilter}.{key}": {"$exists": True}}
                 for key in sorted(keys)
             ]
-        }
+        }, False
 
     if column.prefilter_kind == "node_state":
         if rest or not isinstance(condition, str):
-            return None
+            return None, False
         if condition == "inactive":
-            return {column.prefilter: True}
-        return {column.prefilter: {"$ne": True}}
+            return {column.prefilter: True}, True
+        return {column.prefilter: {"$ne": True}}, condition == "active"
 
     if column.prefilter_kind == "resource_param":
         if not rest:
-            return None
-        return _resource_param_prefilter(rest[1:], condition)
+            return None, False
+        return _resource_param_prefilter(rest[1:], condition), False
 
     path = f"{column.prefilter}{rest}"
+    direct, direct_exact = _path_prefilter(path, rest, column, condition)
 
+    if column.prefilter_kind == "fact_value":
+        fact_path = path.split(".", 1)[1] if "." in path else ""
+        if fact_path:
+            return _with_facts_index(
+                fact_path, condition, direct, direct_exact, facts_index
+            )
+
+    return direct, direct_exact
+
+
+def _path_prefilter(path: str, rest: str, column, condition) -> tuple:
+    identity = bool(rest) or column.prefilter_default is _UNSET
     if isinstance(condition, dict):
         operators = {
             operator: operand
@@ -578,16 +734,16 @@ def _prefilter_leaf(entity, key: str, condition) -> Optional[dict]:
             if operator in SOUND_OPERATORS
         }
         if len(operators) != len(condition):
-            return None
+            return None, False
         if not operators:
-            return None
-        return {path: operators}
+            return None, False
+        return {path: operators}, identity
 
     if condition is None:
-        return None
+        return None, False
     if not rest and condition == column.prefilter_default:
-        return None
-    return {path: condition}
+        return None, False
+    return {path: condition}, True
 
 
 ARRAY_COLUMNS = ("tag", "tags", "containment_path")
@@ -820,6 +976,30 @@ def _element_operator(field: str, is_array: bool, operator: str, operand):
 
 
 NEVER_MATCH = {"$expr": {"$eq": [1, 0]}}
+
+
+def _count_only(query: Query) -> bool:
+    if len(query.functions) != 1 or query.columns or query.group_by or query.offset:
+        return False
+    function = query.functions[0]
+    return function.name == "count" and not function.column
+
+
+def _exact_count_filter(entity, prefilter: dict) -> Optional[dict]:
+    if not entity.document_rows:
+        return None
+    clauses = [
+        stage["$match"]
+        for stage in entity.build_stages(None, None)
+        if "$match" in stage
+    ]
+    if prefilter:
+        clauses.append(prefilter)
+    if not clauses:
+        return {}
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
 
 
 def _is_never(match) -> bool:

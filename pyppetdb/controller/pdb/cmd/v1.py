@@ -14,6 +14,7 @@
 
 from datetime import datetime
 from datetime import UTC
+import asyncio
 import functools
 import gzip
 import logging
@@ -36,9 +37,12 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_resources import CrudNodesResources
+from pyppetdb.crud.nodes_edges import CrudNodesEdges
 
 from pyppetdb.helpers.placement import calculate_placement
-from pyppetdb.helpers.puppetdb import build_resource_params
+from pyppetdb.helpers.puppetdb import build_resource_documents
+from pyppetdb.helpers.puppetdb import build_edge_documents
 from pyppetdb.helpers.puppetdb import catalog_metadata
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
@@ -58,6 +62,36 @@ from pyppetdb.model.nodes_reports import NodeReportPostInternal
 GZIP_MAGIC = b"\x1f\x8b"
 
 
+def _decode_command_body(body: bytes, is_gzip: bool) -> tuple:
+    raw = gzip.decompress(body) if is_gzip else body
+    return raw, json.loads(raw)
+
+
+def _catalog_documents(
+    node_id: str,
+    placement,
+    environment,
+    disabled: bool,
+    catalog: dict,
+) -> tuple:
+    return (
+        build_resource_documents(
+            node_id=node_id,
+            placement=placement,
+            environment=environment,
+            disabled=disabled,
+            resources=catalog.get("resources"),
+        ),
+        build_edge_documents(
+            node_id=node_id,
+            placement=placement,
+            environment=environment,
+            disabled=disabled,
+            edges=catalog.get("edges"),
+        ),
+    )
+
+
 class ControllerPdbCmdV1:
     def __init__(
         self,
@@ -68,6 +102,8 @@ class ControllerPdbCmdV1:
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        crud_nodes_resources: CrudNodesResources,
+        crud_nodes_edges: CrudNodesEdges,
         authorize_client_cert: AuthorizeClientCert,
         ingest_queue: IngestQueue,
     ):
@@ -80,6 +116,8 @@ class ControllerPdbCmdV1:
         self._crud_nodes_catalogs = crud_nodes_catalogs
         self._crud_nodes_groups = crud_nodes_groups
         self._crud_nodes_reports = crud_nodes_reports
+        self._crud_nodes_resources = crud_nodes_resources
+        self._crud_nodes_edges = crud_nodes_edges
         self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(
             prefix="/v1",
@@ -114,6 +152,14 @@ class ControllerPdbCmdV1:
     @property
     def crud_nodes_catalogs(self):
         return self._crud_nodes_catalogs
+
+    @property
+    def crud_nodes_resources(self):
+        return self._crud_nodes_resources
+
+    @property
+    def crud_nodes_edges(self):
+        return self._crud_nodes_edges
 
     @property
     def crud_nodes_catalog_cache(self):
@@ -167,12 +213,9 @@ class ControllerPdbCmdV1:
         is_gzip = request.headers.get(
             "content-encoding", ""
         ).lower() == "gzip" or body.startswith(GZIP_MAGIC)
-        if is_gzip:
-            body_json_bytes = gzip.decompress(body)
-        else:
-            body_json_bytes = body
-
-        data_decomp = json.loads(body_json_bytes)
+        body_json_bytes, data_decomp = await asyncio.to_thread(
+            _decode_command_body, body, is_gzip
+        )
 
         _datetime = datetime.now(UTC)
         start_time_ns = time.perf_counter_ns()
@@ -208,10 +251,11 @@ class ControllerPdbCmdV1:
             )
         elif command == "replace_catalog":
             result["change_catalog"] = _datetime
+            catalog = await asyncio.to_thread(catalog_payload, data_decomp)
             job = functools.partial(
                 self._job_replace_catalog,
                 node_id=certname,
-                catalog=catalog_payload(data_decomp),
+                catalog=catalog,
                 catalog_uuid=data_decomp["catalog_uuid"],
                 base=result,
                 created=_datetime,
@@ -232,8 +276,8 @@ class ControllerPdbCmdV1:
             )
         elif command == "store_report":
             result["change_report"] = _datetime
-            result["report"] = report_payload(
-                {**data_decomp, "certname": certname}
+            result["report"] = await asyncio.to_thread(
+                report_payload, {**data_decomp, "certname": certname}
             )
             job = functools.partial(
                 self._job_store_report,
@@ -256,7 +300,9 @@ class ControllerPdbCmdV1:
                 )
             )
 
-        if not self.ingest_queue.submit_all(jobs):
+        if not await self.ingest_queue.enqueue(
+            jobs, wait_timeout=self.config.app.puppetdb.writeQueueWaitTimeout
+        ):
             raise IngestOverloaded()
 
         stop_time_ns = time.perf_counter_ns()
@@ -278,9 +324,18 @@ class ControllerPdbCmdV1:
     async def _propagate_node_state(self, node_id: str, base: dict) -> None:
         if "disabled" not in base:
             return
+        disabled = bool(base["disabled"])
         await self.crud_nodes_reports.set_node_disabled(
             node_id=node_id,
-            disabled=bool(base["disabled"]),
+            disabled=disabled,
+        )
+        await self.crud_nodes_resources.set_node_disabled(
+            node_id=node_id,
+            disabled=disabled,
+        )
+        await self.crud_nodes_edges.set_node_disabled(
+            node_id=node_id,
+            disabled=disabled,
         )
 
     async def _job_replace_facts(
@@ -316,9 +371,9 @@ class ControllerPdbCmdV1:
                 f"discarding catalog for {node_id}: no facts have been stored yet"
             )
             return
-        if state["content_hash"] != catalog.get("content_hash"):
-            base["catalog"] = catalog
-            base["resource_params"] = build_resource_params(catalog["resources"])
+        changed = state["content_hash"] != catalog.get("content_hash")
+        if changed:
+            base["catalog"] = catalog_metadata(catalog)
         else:
             metadata = catalog_metadata(catalog)
             self.log.debug(
@@ -326,6 +381,26 @@ class ControllerPdbCmdV1:
                 f"edges, updating {len(metadata)} catalog metadata fields"
             )
         await self._job_update_node(node_id=node_id, base=base)
+        if changed:
+            placement = base.get("placement") or state.get("placement")
+            resource_docs, edge_docs = await asyncio.to_thread(
+                _catalog_documents,
+                node_id,
+                placement,
+                base.get("environment"),
+                bool(base.get("disabled", False)),
+                catalog,
+            )
+            await self.crud_nodes_resources.replace_for_node(
+                node_id=node_id,
+                placement=placement,
+                docs=resource_docs,
+            )
+            await self.crud_nodes_edges.replace_for_node(
+                node_id=node_id,
+                placement=placement,
+                docs=edge_docs,
+            )
         if metadata is not None:
             await self.crud_nodes.update_catalog_metadata(
                 _id=node_id,
@@ -385,17 +460,17 @@ class ControllerPdbCmdV1:
         created: datetime,
     ):
         placement = await self.crud_nodes.get_placement(_id=node_id)
+        payload = await asyncio.to_thread(
+            NodeCatalogPostInternal,
+            placement=placement,
+            created=created,
+            created_no_report_ttl=created,
+            catalog=catalog,
+        )
         await self.crud_nodes_catalogs.create(
             _id=catalog_uuid,
             node_id=node_id,
-            payload=NodeCatalogPostInternal(
-                **{
-                    "placement": placement,
-                    "created": created,
-                    "created_no_report_ttl": created,
-                    "catalog": catalog,
-                }
-            ),
+            payload=payload,
             fields=["id"],
             return_none=True,
         )

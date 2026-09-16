@@ -32,6 +32,13 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_authorize = MagicMock()
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.get_placement = AsyncMock(return_value={})
+        self.mock_sibling_coll = MagicMock()
+        self.mock_sibling_coll.delete_many = AsyncMock()
+        self.mock_sibling_coll.update_many = AsyncMock()
+        self.mock_crud_nodes.coll.database = {
+            "nodes_resources": self.mock_sibling_coll,
+            "nodes_edges": self.mock_sibling_coll,
+        }
         self.mock_crud_catalog_cache = MagicMock()
         self.mock_crud_catalogs = MagicMock()
         self.mock_crud_groups = MagicMock()

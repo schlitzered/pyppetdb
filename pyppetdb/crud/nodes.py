@@ -41,6 +41,7 @@ from pyppetdb.model.nodes import NodeGetCatalogResources
 from pyppetdb.errors import BackendError
 
 from pyppetdb.helpers.placement import calculate_placement
+from pyppetdb.helpers.puppetdb import build_facts_index
 
 
 class CrudNodes(CrudMongo):
@@ -86,47 +87,6 @@ class CrudNodes(CrudMongo):
                     name="idx_remote_agent_connected",
                 ),
                 pymongo.IndexModel(
-                    [
-                        ("catalog.resources_exported.type", pymongo.ASCENDING),
-                        ("catalog.resources_exported.title", pymongo.ASCENDING),
-                    ],
-                    name="idx_exported_resources_title",
-                ),
-                pymongo.IndexModel(
-                    [
-                        ("catalog.resources_exported.type", pymongo.ASCENDING),
-                        ("catalog.resources_exported.tags", pymongo.ASCENDING),
-                    ],
-                    name="idx_exported_resources_tags",
-                ),
-                pymongo.IndexModel(
-                    [("catalog.resources.type", pymongo.ASCENDING)],
-                    name="idx_resources_type",
-                ),
-                pymongo.IndexModel(
-                    [("catalog.resources.title", pymongo.ASCENDING)],
-                    name="idx_resources_title",
-                ),
-                pymongo.IndexModel(
-                    [("catalog.resources.tags", pymongo.ASCENDING)],
-                    name="idx_resources_tags",
-                ),
-                pymongo.IndexModel(
-                    [("catalog.resources.exported", pymongo.ASCENDING)],
-                    name="idx_resources_exported",
-                ),
-                pymongo.IndexModel(
-                    [("catalog.resources.resource", pymongo.ASCENDING)],
-                    name="idx_resources_hash",
-                ),
-                pymongo.IndexModel(
-                    [
-                        ("resource_params.n", pymongo.ASCENDING),
-                        ("resource_params.v", pymongo.ASCENDING),
-                    ],
-                    name="idx_resource_params",
-                ),
-                pymongo.IndexModel(
                     [("producer", pymongo.ASCENDING)], name="idx_producer"
                 ),
                 pymongo.IndexModel(
@@ -138,6 +98,13 @@ class CrudNodes(CrudMongo):
                 ),
                 pymongo.IndexModel(
                     [("report.hash", pymongo.ASCENDING)], name="idx_report_hash"
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("facts_index.p", pymongo.ASCENDING),
+                        ("facts_index.v", pymongo.ASCENDING),
+                    ],
+                    name="idx_facts_index",
                 ),
             ]
         )
@@ -290,42 +257,42 @@ class CrudNodes(CrudMongo):
         fact: Optional[set[str]] = None,
         environment: Optional[str] = None,
     ) -> NodeGetCatalogResources:
-        query = {}
-        self._filter_list(query, "node_groups", user_node_groups)
-        self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
-        self._filter_boolean(query, "disabled", disabled)
-        self._filter_literal(query, "environment", environment)
-        project_filter = [
-            {"$eq": ["$$resource.type", resource_type]},
-        ]
+        node_query = {}
+        self._filter_list(node_query, "node_groups", user_node_groups)
+        self._filter_complex_search(
+            node_query, base_attribute="facts", complex_search=fact
+        )
+
+        resource_query = {"exported": True, "type": resource_type}
+        self._filter_boolean(resource_query, "disabled", disabled)
+        self._filter_literal(resource_query, "environment", environment)
         if resource_title:
-            project_filter.append({"$eq": ["$$resource.title", resource_title]})
+            resource_query["title"] = resource_title
         if resource_tags:
-            for tag in resource_tags:
-                project_filter.append(
-                    {"$in": [tag, "$$resource.tags"]},
-                )
-        pipeline = [
-            {"$match": query},
-            {
-                "$project": {
-                    "resources_exported": {
-                        "$filter": {
-                            "input": "$catalog.resources_exported",
-                            "as": "resource",
-                            "cond": {"$and": project_filter},
-                        }
-                    }
-                }
+            resource_query["tags"] = {"$all": resource_tags}
+
+        if node_query:
+            node_ids = await self._coll.distinct("id", filter=node_query)
+            resource_query["node_id"] = {"$in": node_ids}
+
+        resources_coll = self.coll.database["nodes_resources"]
+        cursor = resources_coll.find(
+            filter=resource_query,
+            projection={
+                "_id": 0,
+                "resource": 1,
+                "type": 1,
+                "title": 1,
+                "exported": 1,
+                "tags": 1,
+                "file": 1,
+                "line": 1,
+                "parameters": 1,
             },
-            {"$unwind": "$resources_exported"},
-            {"$group": {"_id": None, "results": {"$push": "$resources_exported"}}},
-        ]
+        )
         result = list()
-        _results = await self.coll.aggregate(pipeline).to_list(length=None)
-        for _result in _results:
-            for item in _result["results"]:
-                result.append(NodeGetCatalogResource(**item))
+        async for item in cursor:
+            result.append(NodeGetCatalogResource(**item))
         return NodeGetCatalogResources(
             **{"result": result, "meta": {"result_size": len(result)}}
         )
@@ -541,6 +508,9 @@ class CrudNodes(CrudMongo):
                     "has_facts": {"$eq": [{"$type": "$facts"}, "object"]},
                     "has_catalog": {"$eq": [{"$type": "$catalog"}, "object"]},
                     "content_hash": "$catalog.content_hash",
+                    "disabled": {"$ifNull": ["$disabled", False]},
+                    "environment": "$environment",
+                    "placement": "$placement",
                 }
             },
         ]
@@ -555,6 +525,9 @@ class CrudNodes(CrudMongo):
             "has_facts": rows[0]["has_facts"],
             "has_catalog": rows[0]["has_catalog"],
             "content_hash": rows[0].get("content_hash"),
+            "disabled": bool(rows[0].get("disabled")),
+            "environment": rows[0].get("environment"),
+            "placement": rows[0].get("placement"),
         }
 
     async def update_catalog_metadata(self, _id: str, metadata: dict) -> None:
@@ -584,13 +557,26 @@ class CrudNodes(CrudMongo):
         facts = node.get("facts", {}) if node else {}
         return calculate_placement(self.config, facts)
 
+    def _with_facts_index(self, data: dict) -> dict:
+        facts = data.get("facts")
+        if not isinstance(facts, dict):
+            return data
+        settings = self.config.app.main.facts
+        data["facts_index"] = build_facts_index(
+            facts,
+            max_value_len=settings.indexMaxValueLen,
+            depth=settings.indexDepth,
+            deny=settings.indexDeny,
+        )
+        return data
+
     async def create(
         self,
         _id: str,
         payload: NodePutInternal,
         fields: list,
     ) -> NodeGet:
-        data = payload.model_dump()
+        data = self._with_facts_index(payload.model_dump())
         data["id"] = _id
 
         result = await self._create(
@@ -608,7 +594,7 @@ class CrudNodes(CrudMongo):
         return_none: bool = False,
     ) -> NodeGet | None:
         query = {"id": _id}
-        data = payload.model_dump()
+        data = self._with_facts_index(payload.model_dump())
 
         result = await self._update(
             query=query,

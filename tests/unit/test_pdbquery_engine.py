@@ -20,10 +20,15 @@ from datetime import datetime
 from pyppetdb.pdbquery.engine import NEVER_MATCH
 from pyppetdb.pdbquery.engine import QueryEngine
 from pyppetdb.pdbquery.engine import build_prefilter
+from pyppetdb.pdbquery.engine import build_prefilter_plan
+from pyppetdb.pdbquery.paging import parse_paging
 from pyppetdb.pdbquery.engine import expand_fact_contents
 from pyppetdb.pdbquery.engine import expand_fact_paths
 from pyppetdb.pdbquery.engine import convert_timestamps
 from pyppetdb.pdbquery.engine import output_timestamp_fields
+from pyppetdb.pdbquery import matcher
+from pyppetdb.helpers.puppetdb import FactsIndexSpec
+from pyppetdb.helpers.puppetdb import build_facts_index
 from pyppetdb.pdbquery.entities import ENTITIES
 from pyppetdb.pdbquery.entities import get_entity
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
@@ -41,12 +46,24 @@ class FakeCursor:
 
 
 class FakeCollection:
-    def __init__(self, docs=None, counts=None):
+    def __init__(self, docs=None, counts=None, distinct_values=None):
         self.docs = docs or []
         self.counts = counts
+        self.distinct_values = distinct_values or []
         self.pipelines = []
         self.options = []
         self.finds = []
+        self.distincts = []
+
+    async def distinct(self, key, filter=None):
+        self.distincts.append((key, filter))
+        return list(self.distinct_values)
+
+    async def count_documents(self, filter=None, **options):
+        if not hasattr(self, "counts_calls"):
+            self.counts_calls = []
+        self.counts_calls.append((filter, options))
+        return self.counts if self.counts is not None else len(self.docs)
 
     def aggregate(self, pipeline, **options):
         self.pipelines.append(pipeline)
@@ -71,14 +88,18 @@ def stages(pipeline, name):
     return [item[name] for item in pipeline if name in item]
 
 
-def engine_with(nodes=None, reports=None, aggregate_cache_ttl=0):
+def engine_with(
+    nodes=None, reports=None, resources=None, edges=None, facts_index=None
+):
     return QueryEngine(
         log=logging.getLogger("test"),
         collections={
             "nodes": nodes or FakeCollection(),
             "nodes_reports": reports or FakeCollection(),
+            "nodes_resources": resources or FakeCollection(),
+            "nodes_edges": edges or FakeCollection(),
         },
-        aggregate_cache_ttl=aggregate_cache_ttl,
+        facts_index=facts_index,
     )
 
 
@@ -119,22 +140,19 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(match_at, project_at)
 
     async def test_prefilter_precedes_the_projection(self):
-        nodes = FakeCollection()
-        engine = engine_with(nodes)
+        res = FakeCollection()
+        engine = engine_with(resources=res)
         await engine.run("resources", ["=", "type", "File"])
-        pipeline = nodes.pipelines[0]
-        self.assertEqual(
-            pipeline[0], {"$match": {"catalog.resources.type": "File"}}
-        )
+        pipeline = res.pipelines[0]
+        self.assertEqual(pipeline[0], {"$match": {"type": "File"}})
         project_at = next(i for i, s in enumerate(pipeline) if "$project" in s)
         self.assertLess(0, project_at)
 
     async def test_no_prefilter_when_nothing_is_derivable(self):
-        nodes = FakeCollection()
-        engine = engine_with(nodes)
+        res = FakeCollection()
+        engine = engine_with(resources=res)
         await engine.run("resources", ["not", ["=", "type", "File"]])
-        entity = get_entity("resources")
-        self.assertEqual(nodes.pipelines[0][0], entity.build_stages()[0])
+        self.assertIn("$project", res.pipelines[0][0])
 
     async def test_empty_subquery_becomes_impossible_filter(self):
         nodes = FakeCollection()
@@ -197,8 +215,8 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_subquery_deduplicates_in_the_pipeline(self):
-        nodes = FakeCollection(docs=[{"certname": "a"}, {"certname": "b"}])
-        engine = engine_with(nodes)
+        res = FakeCollection(docs=[{"certname": "a"}, {"certname": "b"}])
+        engine = engine_with(resources=res)
         await engine.run(
             "nodes",
             [
@@ -207,7 +225,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
                 ["extract", "certname", ["select_resources", ["=", "type", "File"]]],
             ],
         )
-        pipeline = nodes.pipelines[0]
+        pipeline = res.pipelines[0]
         group_at = next(i for i, s in enumerate(pipeline) if "$group" in s)
         limit_at = next(i for i, s in enumerate(pipeline) if "$limit" in s)
         self.assertEqual(
@@ -216,16 +234,16 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         self.assertLess(group_at, limit_at)
 
     async def test_subquery_rows_are_deduplicated(self):
-        nodes = FakeCollection(
+        res = FakeCollection(
             docs=[{"certname": "a"}, {"certname": "a"}, {"certname": "b"}]
         )
-        engine = engine_with(nodes)
+        engine = engine_with(resources=res)
         rows = await engine.select("resources", ["certname"], ["=", "type", "File"])
         self.assertEqual(rows, [("a",), ("b",)])
 
     async def test_subquery_keeps_unhashable_rows(self):
-        nodes = FakeCollection(docs=[{"tags": ["a"]}, {"tags": ["a"]}])
-        engine = engine_with(nodes)
+        res = FakeCollection(docs=[{"tags": ["a"]}, {"tags": ["a"]}])
+        engine = engine_with(resources=res)
         rows = await engine.select("resources", ["tags"], ["=", "type", "File"])
         self.assertEqual(rows, [(["a"],), (["a"],)])
 
@@ -320,7 +338,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection()
         engine = QueryEngine(
             log=logging.getLogger("test"),
-            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": nodes, "nodes_edges": FakeCollection()},
             max_page_size=5000,
         )
         await engine.run("resources", ["=", "type", "File"])
@@ -331,7 +349,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection()
         engine = QueryEngine(
             log=logging.getLogger("test"),
-            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": nodes, "nodes_edges": FakeCollection()},
             max_page_size=5000,
         )
         await engine.run(
@@ -344,7 +362,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection()
         engine = QueryEngine(
             log=logging.getLogger("test"),
-            collections={"nodes": nodes, "nodes_reports": FakeCollection()},
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": nodes, "nodes_edges": FakeCollection()},
             max_page_size=5000,
         )
         await engine.run(
@@ -355,16 +373,15 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         )
         nodes.pipelines.clear()
         await engine.run("resources", ["extract", [["function", "count"]]])
-        self.assertEqual(
-            [s for s in nodes.pipelines[-1] if "$limit" in s], []
-        )
+        self.assertEqual(nodes.pipelines, [])
+        self.assertEqual(nodes.counts_calls, [({}, {"hint": "_id_"})])
 
     async def test_no_page_cap_when_disabled(self):
-        nodes = FakeCollection()
-        engine = engine_with(nodes)  # max_page_size default 0
+        res = FakeCollection()
+        engine = engine_with(resources=res)  # max_page_size default 0
         await engine.run("resources", ["=", "type", "File"])
         self.assertEqual(
-            [s for s in nodes.pipelines[-1] if "$limit" in s], []
+            [s for s in res.pipelines[-1] if "$limit" in s], []
         )
 
     async def test_query_timeout_applies_max_time_ms(self):
@@ -435,21 +452,21 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         self.assertIn({"$limit": 5}, stages)
 
     async def test_implicit_filter_is_merged(self):
-        nodes = FakeCollection()
-        engine = engine_with(nodes)
+        res = FakeCollection()
+        engine = engine_with(resources=res)
         await engine.run(
             "resources",
             ["=", "title", "t"],
             implicit=[["=", "type", "File"]],
         )
-        match = nodes.pipelines[0][-1]["$match"]
+        match = res.pipelines[0][-1]["$match"]
         self.assertEqual(match, {"$and": [{"type": "File"}, {"title": "t"}]})
 
     async def test_fact_names_returns_scalars(self):
-        nodes = FakeCollection(docs=[{"name": "os"}, {"name": "kernel"}])
+        nodes = FakeCollection(distinct_values=["os", "kernel"])
         engine = engine_with(nodes)
         rows, _total = await engine.run("fact-names", None)
-        self.assertEqual(rows, ["os", "kernel"])
+        self.assertEqual(rows, ["kernel", "os"])
 
     async def test_reports_use_report_collection(self):
         reports = FakeCollection(docs=[{"certname": "a"}])
@@ -513,7 +530,7 @@ class TestProjectionPushdown(unittest.IsolatedAsyncioTestCase):
 
     async def test_count_without_columns_keeps_a_placeholder(self):
         projection = await self.projection(
-            "nodes", ["extract", [["function", "count"]]]
+            "catalogs", ["extract", [["function", "count"]]]
         )
         self.assertEqual(set(projection), {"_id", "_row"})
 
@@ -527,62 +544,10 @@ class TestElementFilter(unittest.IsolatedAsyncioTestCase):
 
         return build_element_filter(entity, match)
 
-    async def test_equality_on_element_field(self):
-        self.assertEqual(
-            await self.cond("resources", ["=", "type", "File"]),
-            {"$eq": ["$$item.type", "File"]},
-        )
-
-    async def test_conjunction(self):
-        self.assertEqual(
-            await self.cond(
-                "resources", ["and", ["=", "type", "File"], ["=", "title", "/x"]]
-            ),
-            {"$and": [{"$eq": ["$$item.type", "File"]}, {"$eq": ["$$item.title", "/x"]}]},
-        )
-
-    async def test_document_level_clause_is_ignored(self):
-        self.assertEqual(
-            await self.cond(
-                "resources", ["and", ["=", "certname", "a"], ["=", "type", "File"]]
-            ),
-            {"$eq": ["$$item.type", "File"]},
-        )
-
-    async def test_or_with_a_document_level_branch_yields_nothing(self):
+    async def test_flat_resource_entity_has_no_element_filter(self):
+        self.assertIsNone(await self.cond("resources", ["=", "type", "File"]))
         self.assertIsNone(
-            await self.cond(
-                "resources", ["or", ["=", "certname", "a"], ["=", "type", "File"]]
-            )
-        )
-
-    async def test_negation_yields_nothing(self):
-        self.assertIsNone(
-            await self.cond("resources", ["not", ["=", "type", "File"]])
-        )
-
-    async def test_tag_uses_membership(self):
-        self.assertEqual(
-            await self.cond("resources", ["=", "tag", "one"]),
-            {"$in": ["one", {"$ifNull": ["$$item.tags", []]}]},
-        )
-
-    async def test_dotted_parameter(self):
-        self.assertEqual(
-            await self.cond("resources", ["=", ["parameter", "owner"], "root"]),
-            {"$eq": ["$$item.parameters.owner", "root"]},
-        )
-
-    async def test_regex(self):
-        self.assertEqual(
-            await self.cond("resources", ["~", "title", "^/opt"]),
-            {
-                "$cond": [
-                    {"$eq": [{"$type": "$$item.title"}, "string"]},
-                    {"$regexMatch": {"input": "$$item.title", "regex": "^/opt"}},
-                    False,
-                ]
-            },
+            await self.cond("resources", ["=", ["parameter", "owner"], "root"])
         )
 
     async def test_regex_on_json_column_guards_non_strings(self):
@@ -596,15 +561,6 @@ class TestElementFilter(unittest.IsolatedAsyncioTestCase):
                 ]
             },
         )
-
-    async def test_range_excludes_null(self):
-        self.assertEqual(
-            await self.cond("resources", [">", "line", 5]),
-            {"$and": [{"$ne": ["$$item.line", None]}, {"$gt": ["$$item.line", 5]}]},
-        )
-
-    async def test_default_value_equality_is_skipped(self):
-        self.assertIsNone(await self.cond("resources", ["=", "exported", False]))
 
     async def test_entity_without_array_yields_nothing(self):
         self.assertIsNone(await self.cond("nodes", ["=", "certname", "a"]))
@@ -636,15 +592,13 @@ class TestElementFilter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(built[-2], {"$group": {"_id": "$kv.k"}})
         self.assertEqual(built[-1], {"$sort": {"_id": 1}})
 
-    async def test_filter_is_wired_into_the_pipeline(self):
-        nodes = FakeCollection()
-        engine = engine_with(nodes)
+    async def test_flat_resource_projection_has_no_element_filter(self):
+        res = FakeCollection()
+        engine = engine_with(resources=res)
         await engine.run("resources", ["=", "type", "File"])
-        project = stage(nodes.pipelines[0], "$project")
-        self.assertEqual(
-            project["resource"]["$filter"]["cond"],
-            {"$eq": ["$$item.type", "File"]},
-        )
+        project = stage(res.pipelines[0], "$project")
+        self.assertEqual(project["type"], "$type")
+        self.assertNotIn("$filter", project.get("resource", {}))
 
 
 class TestPinnedFactKeys(unittest.IsolatedAsyncioTestCase):
@@ -711,59 +665,6 @@ class TestPinnedFactKeys(unittest.IsolatedAsyncioTestCase):
         self.assertIn({"name": "osfamily"}, matches)
 
 
-class TestAggregateCache(unittest.IsolatedAsyncioTestCase):
-    async def test_repeated_query_hits_the_cache(self):
-        nodes = FakeCollection(docs=[{"name": "os"}])
-        engine = engine_with(nodes, aggregate_cache_ttl=60)
-        first, _ = await engine.run("fact-names", None)
-        second, _ = await engine.run("fact-names", None)
-        self.assertEqual(first, ["os"])
-        self.assertEqual(second, ["os"])
-        self.assertEqual(len(nodes.pipelines), 1)
-
-    async def test_cache_is_off_by_default_in_tests(self):
-        nodes = FakeCollection(docs=[{"name": "os"}])
-        engine = engine_with(nodes)
-        await engine.run("fact-names", None)
-        await engine.run("fact-names", None)
-        self.assertEqual(len(nodes.pipelines), 2)
-
-    async def test_only_cacheable_entities_are_cached(self):
-        nodes = FakeCollection(docs=[{"certname": "a"}])
-        engine = engine_with(nodes, aggregate_cache_ttl=60)
-        await engine.run("nodes", None)
-        await engine.run("nodes", None)
-        self.assertEqual(len(nodes.pipelines), 2)
-
-    async def test_a_filtered_query_is_never_cached(self):
-        nodes = FakeCollection(docs=[{"name": "prod"}])
-        engine = engine_with(nodes, aggregate_cache_ttl=60)
-        await engine.run("environments", ["=", "name", "prod"])
-        await engine.run("environments", ["=", "name", "prod"])
-        self.assertEqual(len(nodes.pipelines), 2)
-
-    async def test_paging_bypasses_the_cache(self):
-        from pyppetdb.pdbquery.paging import parse_paging
-
-        nodes = FakeCollection(docs=[{"name": "prod"}])
-        engine = engine_with(nodes, aggregate_cache_ttl=60)
-        await engine.run("environments", None, paging=parse_paging({"limit": "1"}))
-        after_first = len(nodes.pipelines)
-        await engine.run("environments", None, paging=parse_paging({"limit": "1"}))
-        self.assertGreater(len(nodes.pipelines), after_first)
-
-    async def test_expired_entry_is_refetched(self):
-        nodes = FakeCollection(docs=[{"name": "os"}])
-        engine = engine_with(nodes, aggregate_cache_ttl=60)
-        await engine.run("fact-names", None)
-        engine._aggregate_cache["fact-names"] = (
-            0.0,
-            *engine._aggregate_cache["fact-names"][1:],
-        )
-        await engine.run("fact-names", None)
-        self.assertEqual(len(nodes.pipelines), 2)
-
-
 class TestNestedElementFilter(unittest.IsolatedAsyncioTestCase):
     async def cond(self, ast):
         from pyppetdb.pdbquery.engine import build_element_filter
@@ -809,6 +710,201 @@ class TestNestedElementFilter(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("$addFields" in item for item in stages))
 
 
+class TestPrefilterExactness(unittest.IsolatedAsyncioTestCase):
+    async def plan(self, entity_name, ast):
+        entity = get_entity(entity_name)
+        match = await FilterCompiler(entity, engine=engine_with()).compile(ast)
+        return build_prefilter_plan(entity, match)
+
+    async def test_empty_match_is_exact(self):
+        self.assertEqual(build_prefilter_plan(get_entity("nodes"), {}), ({}, True))
+
+    async def test_node_state_is_exact(self):
+        self.assertEqual(
+            await self.plan("nodes", ["=", "node_state", "active"]),
+            ({"disabled": {"$ne": True}}, True),
+        )
+        self.assertEqual(
+            await self.plan("nodes", ["=", "node_state", "inactive"]),
+            ({"disabled": True}, True),
+        )
+
+    async def test_identity_paths_are_exact(self):
+        self.assertEqual(
+            await self.plan("nodes", ["=", "certname", "a"]), ({"id": "a"}, True)
+        )
+        self.assertEqual(
+            await self.plan("resources", ["in", "type", ["array", ["File", "User"]]]),
+            ({"type": {"$in": ["File", "User"]}}, True),
+        )
+        self.assertEqual(
+            await self.plan("resources", ["~", "title", "^/opt"]),
+            ({"title": {"$regex": "^/opt"}}, True),
+        )
+        self.assertEqual(
+            await self.plan("resources", [">", "line", 5]),
+            ({"line": {"$gt": 5}}, True),
+        )
+
+    async def test_default_valued_columns(self):
+        self.assertEqual(
+            await self.plan("resources", ["=", "exported", True]),
+            ({"exported": True}, True),
+        )
+        self.assertEqual(
+            await self.plan("resources", ["=", "exported", False]), ({}, False)
+        )
+        _prefilter, exact = await self.plan(
+            "resources", ["in", "exported", ["array", [True, False]]]
+        )
+        self.assertFalse(exact)
+
+    async def test_conjunction_and_disjunction(self):
+        self.assertEqual(
+            await self.plan(
+                "resources", ["and", ["=", "type", "File"], ["=", "title", "/x"]]
+            ),
+            ({"$and": [{"type": "File"}, {"title": "/x"}]}, True),
+        )
+        self.assertEqual(
+            await self.plan(
+                "resources", ["or", ["=", "type", "File"], ["=", "type", "User"]]
+            ),
+            ({"$or": [{"type": "File"}, {"type": "User"}]}, True),
+        )
+        self.assertEqual(
+            await self.plan(
+                "resources", ["or", ["=", "type", "File"], ["=", "exported", False]]
+            ),
+            ({}, False),
+        )
+
+    async def test_negation_and_dropped_leaves_are_not_exact(self):
+        self.assertEqual(
+            await self.plan("resources", ["not", ["=", "type", "File"]]), ({}, False)
+        )
+        prefilter, exact = await self.plan(
+            "resources", ["and", ["=", "type", "File"], ["not", ["=", "title", "/x"]]]
+        )
+        self.assertEqual(prefilter, {"type": "File"})
+        self.assertFalse(exact)
+        prefilter, exact = await self.plan(
+            "resources", ["and", ["=", "type", "File"], ["null?", "line", False]]
+        )
+        self.assertEqual(prefilter, {"type": "File"})
+        self.assertFalse(exact)
+
+    async def test_fact_equality_is_exact_through_the_direct_predicate(self):
+        prefilter, exact = await self.plan("nodes", ["=", ["fact", "osfamily"], "Debian"])
+        self.assertTrue(exact)
+        self.assertIn({"facts.osfamily": "Debian"}, prefilter["$and"])
+        self.assertEqual(
+            await self.plan("nodes", ["=", ["fact", "big"], "x" * 300]),
+            ({"facts.big": "x" * 300}, True),
+        )
+
+    async def test_existence_and_parameter_leaves_are_not_exact(self):
+        _prefilter, exact = await self.plan("facts", ["=", "name", "osfamily"])
+        self.assertFalse(exact)
+        _prefilter, exact = await self.plan(
+            "resources", ["=", ["parameter", "owner"], "root"]
+        )
+        self.assertFalse(exact)
+
+
+class TestCountShortcut(unittest.IsolatedAsyncioTestCase):
+    COUNT = ["extract", [["function", "count"]], ["=", "node_state", "active"]]
+    PAGED = {
+        "limit": "25",
+        "offset": "0",
+        "include_total": "true",
+        "order_by": '[{"field":"certname","order":"asc"}]',
+    }
+
+    async def test_exact_count_uses_count_documents(self):
+        nodes = FakeCollection(counts=7)
+        engine = engine_with(nodes)
+        rows, total = await engine.run("nodes", self.COUNT)
+        self.assertEqual(rows, [{"count": 7}])
+        self.assertEqual(total, 1)
+        self.assertEqual(nodes.counts_calls, [({"disabled": {"$ne": True}}, {})])
+        self.assertEqual(nodes.pipelines, [])
+
+    async def test_zero_count_keeps_the_empty_shape(self):
+        nodes = FakeCollection(counts=0)
+        engine = engine_with(nodes)
+        rows, total = await engine.run("nodes", self.COUNT)
+        self.assertEqual((rows, total), ([], 0))
+
+    async def test_include_total_uses_count_documents_and_pages_normally(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}], counts=10000)
+        engine = engine_with(nodes)
+        rows, total = await engine.run(
+            "nodes", None, paging=parse_paging(self.PAGED)
+        )
+        self.assertEqual(total, 10000)
+        self.assertEqual([row["certname"] for row in rows], ["a"])
+        self.assertEqual(nodes.counts_calls, [({}, {"hint": "_id_"})])
+        self.assertEqual(len(nodes.pipelines), 1)
+        self.assertIn({"$limit": 25}, nodes.pipelines[0])
+
+    async def test_inexact_total_falls_back_to_a_slim_count_pipeline(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}], counts=3)
+        engine = engine_with(nodes)
+        rows, total = await engine.run(
+            "nodes",
+            ["not", ["=", "certname", "b"]],
+            paging=parse_paging(self.PAGED),
+        )
+        self.assertEqual(total, 3)
+        self.assertFalse(hasattr(nodes, "counts_calls"))
+        count_pipeline = nodes.pipelines[0]
+        self.assertNotIn("$sort", [key for item in count_pipeline for key in item])
+        self.assertEqual(count_pipeline[-1], {"$count": "count"})
+        self.assertEqual(
+            set(stage(count_pipeline, "$project")) - {"_id"}, {"certname"}
+        )
+        self.assertIn({"$limit": 25}, nodes.pipelines[1])
+
+    async def test_row_entities_never_take_the_shortcut(self):
+        nodes = FakeCollection(docs=[{"count": 5}], counts=5)
+        engine = engine_with(nodes)
+        await engine.run(
+            "facts", ["extract", [["function", "count"]], ["=", "name", "osfamily"]]
+        )
+        self.assertFalse(hasattr(nodes, "counts_calls"))
+        self.assertTrue(nodes.pipelines)
+
+    async def test_stage_matches_join_the_count_filter(self):
+        nodes = FakeCollection(counts=4)
+        engine = engine_with(nodes)
+        rows, _total = await engine.run(
+            "catalog-inputs",
+            ["extract", [["function", "count"]], ["=", "certname", "a"]],
+        )
+        self.assertEqual(rows, [{"count": 4}])
+        self.assertEqual(
+            nodes.counts_calls,
+            [({"$and": [{"catalog_inputs": {"$type": "object"}}, {"id": "a"}]}, {})],
+        )
+
+    async def test_grouped_counts_use_the_pipeline(self):
+        nodes = FakeCollection(
+            docs=[{"count": 1, "catalog_environment": "p"}], counts=1
+        )
+        engine = engine_with(nodes)
+        await engine.run(
+            "nodes",
+            [
+                "extract",
+                [["function", "count"], "catalog_environment"],
+                ["group_by", "catalog_environment"],
+            ],
+        )
+        self.assertFalse(hasattr(nodes, "counts_calls"))
+        self.assertTrue(nodes.pipelines)
+
+
 class TestPrefilter(unittest.IsolatedAsyncioTestCase):
     async def compile(self, entity_name, ast):
         entity = get_entity(entity_name)
@@ -822,7 +918,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
     async def test_maps_columns_to_storage_paths(self):
         self.assertEqual(
             await self.prefilter("resources", ["=", "type", "File"]),
-            {"catalog.resources.type": "File"},
+            {"type": "File"},
         )
         self.assertEqual(
             await self.prefilter("nodes", ["=", "certname", "a"]),
@@ -836,7 +932,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
     async def test_dotted_parameters(self):
         self.assertEqual(
             await self.prefilter("resources", ["=", ["parameter", "owner"], "root"]),
-            {"resource_params": {"$elemMatch": {"n": "owner", "v": "root"}}},
+            {"params_index": {"$elemMatch": {"n": "owner", "v": "root"}}},
         )
 
     async def test_parameter_large_value_has_no_prefilter(self):
@@ -878,7 +974,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
         pf = await self.prefilter(
             "resources", ["=", ["parameter", "ensure"], "present"]
         )
-        self.assertTrue(elem_match(pf["resource_params"]["$elemMatch"]))
+        self.assertTrue(elem_match(pf["params_index"]["$elemMatch"]))
 
         # grosser Wert -> kein Prefilter (Node wird nicht gedroppt)
         pf_big = await self.prefilter(
@@ -901,8 +997,8 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
             ),
             {
                 "$and": [
-                    {"catalog.resources.type": "File"},
-                    {"catalog.resources.title": "/x"},
+                    {"type": "File"},
+                    {"title": "/x"},
                 ]
             },
         )
@@ -917,7 +1013,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
             "resources",
             ["and", ["=", "type", "File"], ["not", ["=", "title", "/x"]]],
         )
-        self.assertEqual(result, {"catalog.resources.type": "File"})
+        self.assertEqual(result, {"type": "File"})
 
     async def test_or_requires_every_branch(self):
         both = await self.prefilter(
@@ -927,8 +1023,8 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
             both,
             {
                 "$or": [
-                    {"catalog.resources.type": "File"},
-                    {"catalog.resources.type": "Package"},
+                    {"type": "File"},
+                    {"type": "Package"},
                 ]
             },
         )
@@ -953,17 +1049,17 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             await self.prefilter("resources", ["=", "exported", True]),
-            {"catalog.resources.exported": True},
+            {"exported": True},
         )
 
     async def test_range_and_regex_are_derivable(self):
         self.assertEqual(
             await self.prefilter("resources", [">", "line", 5]),
-            {"catalog.resources.line": {"$gt": 5}},
+            {"line": {"$gt": 5}},
         )
         self.assertEqual(
             await self.prefilter("resources", ["~", "title", "^/opt"]),
-            {"catalog.resources.title": {"$regex": "^/opt"}},
+            {"title": {"$regex": "^/opt"}},
         )
 
     async def test_fact_name_becomes_a_key_existence_check(self):
@@ -1042,27 +1138,22 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
     async def test_prefilter_never_narrows_the_result(self):
         from pyppetdb.pdbquery import matcher
 
-        documents = [
+        resources = [
             {
-                "id": "one",
-                "environment": "prod",
-                "catalog": {
-                    "resources": [
-                        {"type": "File", "title": "/a", "exported": True, "line": 3},
-                        {"type": "Package", "title": "/b", "line": 9},
-                    ]
-                },
+                "node_id": "one", "environment": "prod", "type": "File",
+                "title": "/a", "exported": True, "line": 3,
+                "parameters": {}, "tags": [],
             },
             {
-                "id": "two",
-                "environment": "dev",
-                "catalog": {
-                    "resources": [
-                        {"type": "Service", "title": "/a", "line": 1},
-                    ]
-                },
+                "node_id": "one", "environment": "prod", "type": "Package",
+                "title": "/b", "exported": False, "line": 9,
+                "parameters": {}, "tags": [],
             },
-            {"id": "three", "environment": "prod", "catalog": {"resources": []}},
+            {
+                "node_id": "two", "environment": "dev", "type": "Service",
+                "title": "/a", "exported": False, "line": 1,
+                "parameters": {}, "tags": [],
+            },
         ]
         queries = [
             ["=", "type", "File"],
@@ -1083,32 +1174,27 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
             prefilter = build_prefilter(entity, match)
             if not prefilter:
                 continue
-            unwound = [
-                {**document, "resource": resource}
-                for document in documents
-                for resource in document["catalog"]["resources"]
-            ]
             projected = [
                 {
-                    "certname": row["id"],
-                    "environment": row["environment"],
-                    "type": row["resource"].get("type"),
-                    "title": row["resource"].get("title"),
-                    "exported": row["resource"].get("exported", False),
-                    "line": row["resource"].get("line"),
-                    "parameters": row["resource"].get("parameters", {}),
-                    "tags": row["resource"].get("tags", []),
-                    "_source": row["id"],
+                    "certname": resource["node_id"],
+                    "environment": resource["environment"],
+                    "type": resource.get("type"),
+                    "title": resource.get("title"),
+                    "exported": resource.get("exported", False),
+                    "line": resource.get("line"),
+                    "parameters": resource.get("parameters", {}),
+                    "tags": resource.get("tags", []),
+                    "_source": index,
                 }
-                for row in unwound
+                for index, resource in enumerate(resources)
             ]
             expected = {
                 row["_source"] for row in projected if matcher.matches(row, match)
             }
             kept = {
-                document["id"]
-                for document in documents
-                if matcher.matches(document, prefilter)
+                index
+                for index, resource in enumerate(resources)
+                if matcher.matches(resource, prefilter)
             }
             self.assertTrue(
                 expected <= kept,
@@ -1209,6 +1295,470 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
                 f"prefilter dropped documents for {query}: "
                 f"expected {expected}, prefilter kept {kept}",
             )
+
+
+class TestFactValuePrefilter(unittest.IsolatedAsyncioTestCase):
+    spec = FactsIndexSpec(max_value_len=8, depth=2, deny=["secret"])
+
+    async def prefilter(self, entity_name, ast, spec=None):
+        entity = get_entity(entity_name)
+        match = await FilterCompiler(entity, engine=engine_with()).compile(ast)
+        return build_prefilter(entity, match, spec or self.spec)
+
+    async def test_equality_emits_both_forms(self):
+        self.assertEqual(
+            await self.prefilter("nodes", ["=", ["fact", "osfamily"], "Debian"]),
+            {
+                "$and": [
+                    {"facts_index": {"$elemMatch": {"p": "osfamily", "v": "Debian"}}},
+                    {"facts.osfamily": "Debian"},
+                ]
+            },
+        )
+
+    async def test_inventory_facts_and_trusted(self):
+        self.assertEqual(
+            await self.prefilter("inventory", ["=", "facts.osfamily", "Debian"]),
+            {
+                "$and": [
+                    {"facts_index": {"$elemMatch": {"p": "osfamily", "v": "Debian"}}},
+                    {"facts.osfamily": "Debian"},
+                ]
+            },
+        )
+        self.assertEqual(
+            await self.prefilter("inventory", ["=", "trusted.authenticated", "remote"]),
+            {
+                "$and": [
+                    {
+                        "facts_index": {
+                            "$elemMatch": {"p": "trusted.authenticated", "v": "remote"}
+                        }
+                    },
+                    {"facts.trusted.authenticated": "remote"},
+                ]
+            },
+        )
+
+    async def test_in_becomes_an_indexed_disjunction(self):
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["in", ["fact", "osfamily"], ["array", ["Debian", "RedHat"]]]
+            ),
+            {
+                "$and": [
+                    {
+                        "facts_index": {
+                            "$elemMatch": {
+                                "p": "osfamily",
+                                "v": {"$in": ["Debian", "RedHat"]},
+                            }
+                        }
+                    },
+                    {"facts.osfamily": {"$in": ["Debian", "RedHat"]}},
+                ]
+            },
+        )
+
+    async def test_regex_and_comparison_stay_direct(self):
+        self.assertEqual(
+            await self.prefilter("nodes", ["~", ["fact", "osfamily"], "^Deb"]),
+            {"facts.osfamily": {"$regex": "^Deb"}},
+        )
+        self.assertEqual(
+            await self.prefilter("nodes", [">", ["fact", "uptime"], 5]),
+            {"facts.uptime": {"$gt": 5}},
+        )
+
+    async def test_non_indexable_values_stay_direct(self):
+        self.assertEqual(
+            await self.prefilter("nodes", ["=", ["fact", "osfamily"], "x" * 9]),
+            {"facts.osfamily": "x" * 9},
+        )
+        self.assertEqual(
+            await self.prefilter("nodes", ["=", ["fact", "secret"], "hunter2"]),
+            {"facts.secret": "hunter2"},
+        )
+        self.assertEqual(
+            await self.prefilter("nodes", ["=", "facts.os.release.major", "12"]),
+            {"facts.os.release.major": "12"},
+        )
+
+    async def test_null_fact_is_not_derivable(self):
+        self.assertEqual(
+            await self.prefilter("nodes", ["null?", ["fact", "osfamily"], True]), {}
+        )
+
+    async def test_pinned_fact_name_and_value_pair_up(self):
+        self.assertEqual(
+            await self.prefilter(
+                "facts",
+                ["and", ["=", "name", "osfamily"], ["=", "value", "Debian"]],
+            ),
+            {
+                "$and": [
+                    {"facts.osfamily": {"$exists": True}},
+                    {
+                        "$and": [
+                            {
+                                "facts_index": {
+                                    "$elemMatch": {"p": "osfamily", "v": "Debian"}
+                                }
+                            },
+                            {"facts.osfamily": "Debian"},
+                        ]
+                    },
+                ]
+            },
+        )
+
+    async def test_pinned_name_set_pairs_with_every_name(self):
+        prefilter = await self.prefilter(
+            "facts",
+            [
+                "and",
+                ["in", "name", ["array", ["a", "b"]]],
+                ["=", "value", "x"],
+            ],
+        )
+        pair = prefilter["$and"][-1]
+        self.assertEqual(
+            pair,
+            {
+                "$or": [
+                    {
+                        "$and": [
+                            {"facts_index": {"$elemMatch": {"p": "a", "v": "x"}}},
+                            {"facts.a": "x"},
+                        ]
+                    },
+                    {
+                        "$and": [
+                            {"facts_index": {"$elemMatch": {"p": "b", "v": "x"}}},
+                            {"facts.b": "x"},
+                        ]
+                    },
+                ]
+            },
+        )
+
+    async def test_a_dotted_fact_name_is_not_paired(self):
+        self.assertEqual(
+            await self.prefilter(
+                "facts",
+                ["and", ["=", "name", "a.b"], ["=", "value", "x"]],
+                FactsIndexSpec(depth=2),
+            ),
+            {"facts.a.b": {"$exists": True}},
+        )
+
+    async def test_value_without_a_pinned_name_is_not_derivable(self):
+        self.assertEqual(await self.prefilter("facts", ["=", "value", "Debian"]), {})
+
+    async def test_denied_name_falls_back_to_the_existence_check(self):
+        self.assertEqual(
+            await self.prefilter(
+                "facts", ["and", ["=", "name", "secret"], ["=", "value", "hunter2"]]
+            ),
+            {"facts.secret": {"$exists": True}},
+        )
+
+    async def test_fact_contents_keeps_its_key_existence_prefilter(self):
+        self.assertEqual(
+            await self.prefilter(
+                "fact-contents",
+                ["and", ["=", "name", "osfamily"], ["=", "value", "Debian"]],
+            ),
+            {"facts.osfamily": {"$exists": True}},
+        )
+
+    async def test_engine_defaults_index_scalars_down_to_depth_three(self):
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["=", ["fact", "osfamily"], "Debian"], FactsIndexSpec()
+            ),
+            {
+                "$and": [
+                    {"facts_index": {"$elemMatch": {"p": "osfamily", "v": "Debian"}}},
+                    {"facts.osfamily": "Debian"},
+                ]
+            },
+        )
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["=", "facts.os.release.major", "12"], FactsIndexSpec()
+            ),
+            {
+                "$and": [
+                    {
+                        "facts_index": {
+                            "$elemMatch": {"p": "os.release.major", "v": "12"}
+                        }
+                    },
+                    {"facts.os.release.major": "12"},
+                ]
+            },
+        )
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["=", "facts.a.b.c.d", "deep"], FactsIndexSpec()
+            ),
+            {"facts.a.b.c.d": "deep"},
+        )
+
+
+def _entry_matches(entry, condition) -> bool:
+    for key, want in condition.items():
+        if key not in entry:
+            return False
+        if isinstance(want, dict) and "$in" in want:
+            if not any(entry[key] == item for item in want["$in"]):
+                return False
+        elif entry[key] != want:
+            return False
+    return True
+
+
+def document_matches(document, condition) -> bool:
+    from pyppetdb.pdbquery import matcher
+
+    if not condition:
+        return True
+    for key, value in condition.items():
+        if key == "$and":
+            if not all(document_matches(document, item) for item in value):
+                return False
+        elif key == "$or":
+            if not any(document_matches(document, item) for item in value):
+                return False
+        elif key == "facts_index":
+            entries = document.get("facts_index") or []
+            if not any(
+                _entry_matches(entry, value["$elemMatch"]) for entry in entries
+            ):
+                return False
+        elif not matcher.matches(document, {key: value}):
+            return False
+    return True
+
+
+class TestFactValuePrefilterSoundness(unittest.IsolatedAsyncioTestCase):
+    max_value_len = 8
+    depth = 2
+    deny = ["secret"]
+
+    facts = [
+        {
+            "osfamily": "Debian",
+            "roles": ["web", "db"],
+            "secret": "hunter2",
+            "huge": "x" * 20,
+            "uptime": 5,
+            "virtual": True,
+            "os": {"family": "Debian", "release": {"major": "12"}},
+        },
+        {
+            "osfamily": "RedHat",
+            "roles": ["db"],
+            "uptime": 9,
+            "virtual": False,
+            "os": {"family": "RedHat"},
+        },
+        {"osfamily": "Debian", "os": [{"family": "Debian"}]},
+        {},
+    ]
+
+    queries = [
+        ["=", ["fact", "osfamily"], "Debian"],
+        ["=", ["fact", "roles"], "web"],
+        ["=", ["fact", "secret"], "hunter2"],
+        ["=", ["fact", "huge"], "x" * 20],
+        ["=", ["fact", "uptime"], 5],
+        ["=", ["fact", "virtual"], True],
+        ["=", ["fact", "virtual"], False],
+        ["=", "facts.os.family", "Debian"],
+        ["=", "facts.os.release.major", "12"],
+        ["in", ["fact", "osfamily"], ["array", ["Debian", "RedHat"]]],
+        ["~", ["fact", "osfamily"], "^Deb"],
+        ["and", ["=", ["fact", "osfamily"], "Debian"], ["=", ["fact", "uptime"], 5]],
+        ["or", ["=", ["fact", "osfamily"], "Debian"], ["=", ["fact", "uptime"], 9]],
+        ["and", ["=", ["fact", "osfamily"], "Debian"], ["=", ["fact", "secret"], "hunter2"]],
+        ["not", ["=", ["fact", "osfamily"], "Debian"]],
+        ["null?", ["fact", "osfamily"], True],
+    ]
+
+    fact_queries = [
+        ["and", ["=", "name", "osfamily"], ["=", "value", "Debian"]],
+        ["and", ["=", "name", "roles"], ["=", "value", "web"]],
+        ["and", ["=", "name", "secret"], ["=", "value", "hunter2"]],
+        ["and", ["=", "name", "huge"], ["=", "value", "x" * 20]],
+        ["and", ["=", "name", "os"], ["=", "value", "Debian"]],
+        ["and", ["in", "name", ["array", ["osfamily", "uptime"]]], ["=", "value", "Debian"]],
+        ["and", ["=", "name", "osfamily"], ["~", "value", "^Deb"]],
+        ["or",
+         ["and", ["=", "name", "osfamily"], ["=", "value", "Debian"]],
+         ["and", ["=", "name", "uptime"], ["=", "value", 9]]],
+    ]
+
+    @property
+    def spec(self):
+        return FactsIndexSpec(
+            max_value_len=self.max_value_len, depth=self.depth, deny=self.deny
+        )
+
+    def documents(self):
+        return [
+            {
+                "id": f"node{index}",
+                "environment": "prod",
+                "disabled": False,
+                "facts": facts,
+                "facts_index": build_facts_index(
+                    facts,
+                    max_value_len=self.max_value_len,
+                    depth=self.depth,
+                    deny=self.deny,
+                ),
+            }
+            for index, facts in enumerate(self.facts)
+        ]
+
+    async def compile(self, entity_name, ast):
+        entity = get_entity(entity_name)
+        return entity, await FilterCompiler(
+            entity, engine=engine_with()
+        ).compile(ast)
+
+    async def assert_sound(self, entity_name, queries, project):
+        documents = self.documents()
+        for query in queries:
+            entity, match = await self.compile(entity_name, query)
+            prefilter = build_prefilter(entity, match, self.spec)
+            if not prefilter:
+                continue
+            expected = {
+                document["id"]
+                for document in documents
+                for row in project(document)
+                if matcher.matches(row, match)
+            }
+            kept = {
+                document["id"]
+                for document in documents
+                if document_matches(document, prefilter)
+            }
+            self.assertTrue(
+                expected <= kept,
+                f"prefilter dropped documents for {query}: "
+                f"expected {expected}, prefilter kept {kept}",
+            )
+
+    async def test_node_fact_prefilter_never_narrows_the_result(self):
+        await self.assert_sound(
+            "nodes",
+            self.queries,
+            lambda document: [
+                {
+                    "certname": document["id"],
+                    "facts": document["facts"],
+                    "node_state": "active",
+                }
+            ],
+        )
+
+    async def test_inventory_prefilter_never_narrows_the_result(self):
+        queries = [
+            ["=", "facts.osfamily", "Debian"],
+            ["=", "facts.roles", "web"],
+            ["=", "facts.secret", "hunter2"],
+            ["=", "facts.huge", "x" * 20],
+            ["=", "facts.uptime", 5],
+            ["=", "facts.os.family", "Debian"],
+            ["=", "facts.os.release.major", "12"],
+            ["in", "facts.osfamily", ["array", ["Debian", "RedHat"]]],
+            ["~", "facts.osfamily", "^Deb"],
+            ["and", ["=", "facts.osfamily", "Debian"], ["=", "facts.uptime", 5]],
+            ["or", ["=", "facts.osfamily", "Debian"], ["=", "facts.uptime", 9]],
+        ]
+        await self.assert_sound(
+            "inventory",
+            queries,
+            lambda document: [
+                {
+                    "certname": document["id"],
+                    "facts": document["facts"],
+                    "trusted": document["facts"].get("trusted"),
+                }
+            ],
+        )
+
+    async def test_fact_prefilter_never_narrows_the_result(self):
+        await self.assert_sound(
+            "facts",
+            self.fact_queries,
+            lambda document: [
+                {"certname": document["id"], "name": name, "value": value}
+                for name, value in document["facts"].items()
+            ],
+        )
+
+
+class TestDistinctEntities(unittest.IsolatedAsyncioTestCase):
+    async def test_fact_names_uses_a_distinct_scan(self):
+        nodes = FakeCollection(distinct_values=["osfamily", "os", "os.family"])
+        engine = engine_with(nodes)
+        rows, total = await engine.run("fact-names", None)
+        self.assertEqual(nodes.distincts, [("facts_index.p", None)])
+        self.assertEqual(rows, ["os", "osfamily"])
+        self.assertEqual(total, 2)
+        self.assertEqual(nodes.pipelines, [])
+
+    async def test_environments_and_producers_use_distinct(self):
+        nodes = FakeCollection(distinct_values=["prod", "dev"])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run("environments", None)
+        self.assertEqual(rows, [{"name": "dev"}, {"name": "prod"}])
+        self.assertEqual(nodes.distincts, [("environment", None)])
+        nodes = FakeCollection(distinct_values=["pm1"])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run("producers", None)
+        self.assertEqual(rows, [{"name": "pm1"}])
+        self.assertEqual(nodes.distincts, [("producer", None)])
+
+    async def test_paging_applies_to_the_distinct_result(self):
+        nodes = FakeCollection(distinct_values=["a", "b", "c"])
+        engine = engine_with(nodes)
+        rows, total = await engine.run(
+            "fact-names", None, paging=Paging(limit=2, include_total=True)
+        )
+        self.assertEqual(rows, ["a", "b"])
+        self.assertEqual(total, 3)
+        rows, _total = await engine.run(
+            "fact-names", None, paging=Paging(limit=2, offset=2)
+        )
+        self.assertEqual(rows, ["c"])
+
+    async def test_order_by_applies_to_the_distinct_result(self):
+        nodes = FakeCollection(distinct_values=["a", "b"])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run(
+            "fact-names", None, paging=Paging(order_by=[("name", -1)])
+        )
+        self.assertEqual(rows, ["b", "a"])
+
+    async def test_a_filtered_query_still_aggregates(self):
+        nodes = FakeCollection(docs=[{"name": "prod"}])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run("environments", ["=", "name", "prod"])
+        self.assertEqual(nodes.distincts, [])
+        self.assertEqual(rows, [{"name": "prod"}])
+
+    async def test_an_extract_still_aggregates(self):
+        nodes = FakeCollection(docs=[{"name": "os"}])
+        engine = engine_with(nodes)
+        await engine.run("fact-names", ["extract", [["function", "count"]]])
+        self.assertEqual(nodes.distincts, [])
+        self.assertTrue(nodes.pipelines)
 
 
 class TestPythonEntities(unittest.IsolatedAsyncioTestCase):
@@ -1314,19 +1864,23 @@ class TestTotalCount(unittest.IsolatedAsyncioTestCase):
         _rows, total = await engine.run(
             "nodes", None, paging=Paging(limit=5, include_total=True)
         )
-        self.assertEqual(len(nodes.pipelines), 2)
-        self.assertEqual(nodes.pipelines[0][-1], {"$count": "count"})
+        self.assertEqual(len(nodes.pipelines), 1)
+        self.assertEqual(nodes.counts_calls, [({}, {"hint": "_id_"})])
         self.assertEqual(total, 42)
 
     async def test_count_pipeline_has_no_paging_stages(self):
         nodes = FakeCollection(counts=42)
         engine = engine_with(nodes)
         await engine.run(
-            "nodes", None, paging=Paging(limit=5, offset=3, include_total=True)
+            "nodes",
+            ["not", ["=", "certname", "zzz"]],
+            paging=Paging(limit=5, offset=3, include_total=True),
         )
         counting = nodes.pipelines[0]
+        self.assertEqual(counting[-1], {"$count": "count"})
         self.assertIsNone(stage(counting, "$limit"))
         self.assertIsNone(stage(counting, "$skip"))
+        self.assertIsNone(stage(counting, "$sort"))
 
     async def test_include_total_without_paging_needs_no_count(self):
         nodes = FakeCollection(docs=[{"certname": "a"}], counts=42)
@@ -1482,14 +2036,14 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
             "reports": True,
             "factsets": True,
             "inventory": True,
-            "catalogs": True,
+            "catalogs": False,
             "catalog-inputs": True,
             "facts": False,
             "fact-names": False,
             "fact-contents": False,
             "fact-paths": False,
-            "resources": False,
-            "edges": False,
+            "resources": True,
+            "edges": True,
             "events": False,
             "packages": False,
             "catalog-input-contents": False,
@@ -1503,7 +2057,9 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection(counts=3)
         engine = engine_with(nodes)
         await engine.run(
-            "nodes", None, paging=Paging(limit=5, include_total=True)
+            "nodes",
+            ["not", ["=", "certname", "zzz"]],
+            paging=Paging(limit=5, include_total=True),
         )
         self.assertEqual(len(nodes.options), 2)
         for options in nodes.options:

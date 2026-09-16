@@ -183,23 +183,41 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
 
+        self.addCleanup(
+            self._db["nodes_resources"].delete_many, {"node_id": certname}
+        )
+        self.addCleanup(self._db["nodes_edges"].delete_many, {"node_id": certname})
         node = self._wait_until(
             lambda: self._db["nodes"].find_one(
                 {"id": certname, "catalog.catalog_uuid": catalog_uuid}
             )
         )
-        stored = node["catalog"]["resources"][0]
-        self.assertEqual(stored["file"], "/etc/puppetlabs/code/site.pp")
-        self.assertEqual(stored["line"], 17)
-        self.assertEqual(len(node["catalog"]["edges"]), 1)
-        self.assertEqual(node["catalog"]["edges"][0]["relationship"], "contains")
+        self.assertIsNone(node["catalog"].get("resources"))
+        self.assertIsNone(node["catalog"].get("edges"))
         self.assertEqual(node["catalog"]["version"], "42")
         self.assertEqual(node["catalog"]["transaction_uuid"], "tx-detail")
         self.assertEqual(node["catalog"]["producer"], "puppetmaster")
 
-        # normalisierte Parameter fuer den indizierten Prefilter
-        rp = {(e["n"], e["v"]) for e in node.get("resource_params", [])}
-        self.assertIn(("ensure", "present"), rp)
+        stored = self._wait_until(
+            lambda: self._db["nodes_resources"].find_one(
+                {"node_id": certname, "type": "File"}
+            )
+        )
+        self.assertEqual(stored["file"], "/etc/puppetlabs/code/site.pp")
+        self.assertEqual(stored["line"], 17)
+        self.assertEqual(stored["environment"], "production")
+        self.assertEqual(stored["disabled"], False)
+        self.assertIn(
+            ("ensure", "present"),
+            {(e["n"], e["v"]) for e in stored["params_index"]},
+        )
+
+        edge = self._wait_until(
+            lambda: self._db["nodes_edges"].find_one({"node_id": certname})
+        )
+        self.assertEqual(edge["relationship"], "contains")
+        self.assertEqual(edge["source_type"], "Class")
+        self.assertEqual(edge["target_title"], "/tmp/detail")
 
         resources = self.client.get(
             "/pdb/query/v4/resources",

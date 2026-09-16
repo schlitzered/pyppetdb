@@ -37,7 +37,15 @@ A pyppetdb process always binds on the `app_main_host` / `app_main_port` pair an
 | `app_main_ssl_cert` | *(unset)* | Path to the server certificate (PEM). Required to enable TLS. |
 | `app_main_ssl_key` | *(unset)* | Path to the server private key (PEM). Required to enable TLS. |
 | `app_main_ssl_ca` | *(unset)* | Path to the CA bundle used to validate client certificates (enables mTLS). |
-| `app_main_facts_index` | *(unset)* | JSON list of facts to index in the database for faster searching. |
+| `app_main_facts_index` | *(unset)* | JSON list of facts that get a dedicated single-field index (`facts.<name>`). An optional fast path — every fact is already reachable through the generic `facts_index` described below. |
+| `app_main_facts_indexMaxValueLen` | `256` | Maximum character length of a fact value that is value-indexed in `facts_index`. Longer strings still appear by name, but a query for them falls back to a scan. |
+| `app_main_facts_indexDepth` | `3` | How deep into structured facts the value index reaches. `1` indexes top-level facts only; `2` also indexes the scalar leaves of a nested map under dotted paths such as `os.family`, `3` reaches `os.release.major`. Deep, wide subtrees such as `kmods` or `mountpoints` multiply the entries per node and change every run; put them on `indexDeny` rather than lowering the depth. Lists do not consume a level: their scalar elements are indexed under the path of the list itself. Each level multiplies the number of index entries per node. |
+| `app_main_facts_indexDeny` | `[]` | JSON list of fact names or dotted path prefixes whose *values* are never indexed (`["os"]` also covers `os.family`). Volatile facts are indexed by default; this is the opt-out for facts that change on every run and are never filtered on. The fact name itself stays visible in `/pdb/query/v4/fact-names`. |
+
+!!! warning "The fact index is built on write"
+    `indexMaxValueLen`, `indexDepth` and `indexDeny` are applied when a node's facts are
+    stored. There is no backfill: after changing them, nodes keep their old index entries
+    until they send facts again (one Puppet run).
 | `app_main_hiera_keyModels` | *(unset)* | JSON list of import paths for **static** Hiera key model plugins to register at startup. |
 | `app_main_interApiIdleTimeout` | `300` | Idle timeout (seconds) for the inter-instance WebSocket mesh. |
 
@@ -83,10 +91,10 @@ Serves `/pdb`. Binding and TLS are configured via `app_main_*` (see above).
 | `app_puppetdb_timeout` | `60` | Upstream request timeout (seconds). |
 | `app_puppetdb_trustedCns` | `[]` | JSON list of trusted client CNs. |
 | `app_puppetdb_querySource` | `internal` | Where query results come from: `internal` (pyppetdb's own store) or `upstream` (the configured OpenVoxDB/PuppetDB). Requires `app_puppetdb_serverurl` when set to `upstream`. |
-| `app_puppetdb_writeQueueSize` | `500` | Maximum number of commands waiting to be written. Bounds memory: a queued catalog holds its parsed payload (~90 KB for 200 resources), so this is the knob that decides how much RAM a backlog may consume. When the queue is full, `/pdb/cmd/v1` answers `503` with `Retry-After` instead of accumulating work. |
+| `app_puppetdb_writeQueueSize` | `500` | Maximum number of commands waiting to be written. Bounds memory: a queued catalog holds its parsed payload (~90 KB for 200 resources), so this is the knob that decides how much RAM a backlog may consume. When the queue is full, `/pdb/cmd/v1` waits up to `app_puppetdb_writeQueueWaitTimeout` for room and only then answers `503` with `Retry-After` instead of accumulating work. |
+| `app_puppetdb_writeQueueWaitTimeout` | `30` | Seconds a command request blocks waiting for a free slot when the write queue is full before it is rejected with `503`. Puppet Server does not spool rejected commands, so a `503` on `store_report` loses that report; the wait turns a full queue into back-pressure on the agent instead of data loss. `0` restores immediate rejection. |
 | `app_puppetdb_writeQueueWorkers` | `32` | Number of workers draining the queue, i.e. the cap on concurrent MongoDB write operations. The MongoDB driver pool holds 100 connections by default, so leave headroom for reads. |
 | `app_puppetdb_writeQueueDrainTimeout` | `30` | Seconds a graceful shutdown waits for the write queue to drain before the remaining commands are discarded. Bounds how long a restart can block on a backlog; anything still queued when it expires is logged and lost. |
-| `app_puppetdb_aggregateCacheTtl` | `60` | Seconds to cache the unfiltered results of `fact-names`, `environments` and `producers`. These group over every node and cannot be narrowed by a filter, so they are recomputed on every request otherwise. Set to `0` to disable; the price of caching is that a newly appearing fact name or environment may take up to this long to show up. |
 | `app_puppetdb_maxQueryDepth` | `50` | Maximum nesting depth of a query AST. Rejected with `400` above it. The deepest query in the upstream conformance corpus nests 12 levels, so this leaves ~4x headroom while keeping a deliberately deep query from exhausting the Python stack (which would otherwise surface as a `500`). Set to `0` to disable. |
 | `app_puppetdb_maxSubqueryDepth` | `3` | Maximum number of nested subquery levels (`select_*`, `subquery`, a nested `from`). Each level costs one extra MongoDB round trip, so this bounds the work a single request can trigger. The upstream corpus never exceeds 2 and real console traffic never exceeds 1. Set to `0` to disable. |
 | `app_puppetdb_queryTimeout` | `600` | Seconds a query may run, matching OpenVoxDB's `query-timeout-default`. Applied both as `maxTimeMS` on every MongoDB operation and as a wall-clock limit around the whole request, so it also bounds the sequential round trips of a nested subquery. A client may override it per request with `?timeout=<seconds>`. Set to `0` for no limit. |

@@ -18,7 +18,9 @@ from unittest.mock import MagicMock, AsyncMock
 import logging
 import json
 import gzip
+from pyppetdb.config import ConfigAppFacts
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
+from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ingest import IngestQueue
 
 
@@ -27,6 +29,9 @@ def ingest_state(content_hash=None, has_facts=True, has_catalog=True):
         "has_facts": has_facts,
         "has_catalog": has_catalog,
         "content_hash": content_hash,
+        "disabled": False,
+        "environment": "production",
+        "placement": {"provider": "aws"},
     }
 
 
@@ -35,9 +40,11 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_config.mongodb.placementFacts = ["provider"]
+        self.mock_config.app.main.facts = ConfigAppFacts()
         self.mock_config.app.main.storeHistory.catalog = True
         self.mock_config.app.main.storeHistory.catalogUnchanged = True
         self.mock_config.app.puppetdb.serverurl = None
+        self.mock_config.app.puppetdb.writeQueueWaitTimeout = 0
 
         self.mock_nodes = MagicMock()
         self.mock_nodes.calculate_placement = MagicMock(
@@ -58,6 +65,14 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_catalogs.update_placement = AsyncMock()
         self.mock_reports.update_placement = AsyncMock()
         self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_resources = MagicMock()
+        self.mock_resources.replace_for_node = AsyncMock()
+        self.mock_resources.set_node_disabled = AsyncMock(return_value=0)
+        self.mock_resources.update_placement = AsyncMock()
+        self.mock_edges = MagicMock()
+        self.mock_edges.replace_for_node = AsyncMock()
+        self.mock_edges.set_node_disabled = AsyncMock(return_value=0)
+        self.mock_edges.update_placement = AsyncMock()
 
         self.queue = IngestQueue(log=self.log, size=100, workers=4)
         self.controller = ControllerPdbCmdV1(
@@ -68,6 +83,8 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             crud_nodes_catalogs=self.mock_catalogs,
             crud_nodes_groups=self.mock_groups,
             crud_nodes_reports=self.mock_reports,
+            crud_nodes_resources=self.mock_resources,
+            crud_nodes_edges=self.mock_edges,
             authorize_client_cert=self.mock_auth_cert,
             ingest_queue=self.queue,
         )
@@ -98,6 +115,44 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0.1)
         self.mock_groups.reevaluate_node_membership.assert_called_once()
         self.mock_nodes.update.assert_called_once()
+
+    async def test_replace_facts_stores_a_facts_index(self):
+        crud = CrudNodes(self.log, self.mock_config, MagicMock())
+        crud.get_placement = AsyncMock(return_value={})
+        crud._update = AsyncMock(return_value={"id": "node1"})
+        self.controller._crud_nodes = crud
+
+        mock_request = MagicMock()
+        data = {
+            "certname": "node1",
+            "environment": "prod",
+            "values": {"os": "linux", "structured": {"a": 1}},
+            "producer_timestamp": "2026-03-06T00:00:00Z",
+            "producer": "pm1",
+        }
+        mock_request.body = AsyncMock(return_value=json.dumps(data).encode())
+        mock_request.headers = {}
+        self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])
+
+        await self.controller.create(
+            request=mock_request,
+            certname="node1",
+            command="replace_facts",
+            producer_timestamp="2026-03-06T00:00:00Z",
+            version=5,
+        )
+        await asyncio.sleep(0.1)
+
+        payload = crud._update.call_args.kwargs["payload"]
+        self.assertEqual(payload["facts"], {"os": "linux", "structured": {"a": 1}})
+        self.assertEqual(
+            payload["facts_index"],
+            [
+                {"p": "os", "v": "linux"},
+                {"p": "structured"},
+                {"p": "structured.a", "v": 1},
+            ],
+        )
 
     async def test_deactivate_node_propagates_to_stored_reports(self):
         mock_request = MagicMock()
@@ -140,7 +195,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             request=mock_request,
             certname="node1",
             command="replace_facts",
-            producer_timestamp=None,
+            producer_timestamp="2026-03-06T00:00:00Z",
             version=5,
         )
         await asyncio.sleep(0.1)
@@ -181,6 +236,47 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_nodes.update.assert_called_once()
         self.mock_catalogs.create.assert_called_once()
 
+    async def test_full_queue_waits_for_room_when_a_wait_timeout_is_set(self):
+        self.mock_config.app.puppetdb.writeQueueWaitTimeout = 5
+        self.mock_nodes.update = AsyncMock()
+        release = asyncio.Event()
+
+        async def blocking():
+            await release.wait()
+
+        self.queue._size = 1
+        self.queue._workers = 1
+        self.queue.submit(blocking)
+        await asyncio.sleep(0.05)
+        self.queue.submit(blocking)
+
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(
+            return_value=json.dumps(
+                {"certname": "node1", "environment": "prod", "disabled": True}
+            ).encode()
+        )
+        mock_request.headers = {}
+
+        pending = asyncio.create_task(
+            self.controller.create(
+                request=mock_request,
+                certname="node1",
+                command="deactivate_node",
+                producer_timestamp="2026-03-06T00:00:00Z",
+                version=3,
+            )
+        )
+        await asyncio.sleep(0.1)
+        self.assertFalse(pending.done())
+        self.assertEqual(self.queue.stats["dropped"], 0)
+        release.set()
+        result = await pending
+        self.assertIn("uuid", result)
+        self.assertEqual(self.queue.stats["waited"], 1)
+        await self.queue.stop()
+        self.mock_nodes.update.assert_called()
+
     async def test_rejects_with_503_when_the_queue_is_full(self):
         from fastapi import HTTPException
 
@@ -190,6 +286,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             await release.wait()
 
         self.queue._size = 1
+        self.queue._workers = 1
         self.queue.submit(blocking)
         await asyncio.sleep(0.05)
         self.queue.submit(blocking)
@@ -472,6 +569,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         mock_request.headers = {}
 
         self.mock_config.mongodb.placementFacts = ["provider"]
+        self.mock_config.app.main.facts = ConfigAppFacts()
         self.mock_nodes.get_placement = AsyncMock(return_value={"provider": "aws"})
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])

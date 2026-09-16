@@ -14,6 +14,7 @@
 
 import asyncio
 import logging
+import time
 from typing import Awaitable
 from typing import Callable
 from typing import Optional
@@ -40,6 +41,8 @@ class IngestQueue:
         self._dropped = 0
         self._accepted = 0
         self._failed = 0
+        self._waited = 0
+        self._room: Optional[asyncio.Event] = None
 
     @property
     def log(self):
@@ -70,12 +73,14 @@ class IngestQueue:
             "accepted": self._accepted,
             "dropped": self._dropped,
             "failed": self._failed,
+            "waited": self._waited,
         }
 
     def start(self) -> None:
         if self._queue is not None:
             return
         self._queue = asyncio.Queue(maxsize=self._size)
+        self._room = asyncio.Event()
         for number in range(self._workers):
             self._tasks.append(
                 asyncio.create_task(self._worker(number), name=f"ingest-{number}")
@@ -127,6 +132,46 @@ class IngestQueue:
         self._accepted += len(jobs)
         return True
 
+    async def enqueue(
+        self,
+        jobs: Sequence[Callable[[], Awaitable[None]]],
+        wait_timeout: float = 0.0,
+    ) -> bool:
+        if not jobs:
+            return True
+        if wait_timeout <= 0:
+            return self.submit_all(jobs)
+        if self._stopping:
+            self._reject(count=len(jobs), reason="stopping")
+            return False
+        self.start()
+        deadline = time.monotonic() + wait_timeout
+        waited = False
+        while True:
+            if self._stopping:
+                self._reject(count=len(jobs), reason="stopping")
+                return False
+            self._room.clear()
+            if self._queue.qsize() + len(jobs) <= self._queue.maxsize:
+                for job in jobs:
+                    self._queue.put_nowait(job)
+                self._accepted += len(jobs)
+                if waited:
+                    self._waited += 1
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._reject(
+                    count=len(jobs),
+                    reason=f"full for {wait_timeout:g}s (size={self._size})",
+                )
+                return False
+            waited = True
+            try:
+                await asyncio.wait_for(self._room.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                continue
+
     def _reject(self, count: int, reason: str) -> None:
         previous = self._dropped
         self._dropped += count
@@ -140,6 +185,8 @@ class IngestQueue:
         while True:
             queue = self._queue
             job = await queue.get()
+            if self._room is not None:
+                self._room.set()
             try:
                 await job()
             except asyncio.CancelledError:

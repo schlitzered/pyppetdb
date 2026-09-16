@@ -245,12 +245,12 @@ class NodePutInternal(BaseModel):
     disabled: Optional[bool] = False
     environment: Optional[str] = None
     facts: Optional[Dict] = None
+    facts_index: Optional[List[Dict[str, Any]]] = None
     facts_hash: Optional[str] = None
     package_inventory: Optional[List[List[str]]] = None
     producer: Optional[str] = None
     producer_timestamp: Optional[datetime] = None
     catalog_inputs: Optional[NodeGetCatalogInputs] = None
-    resource_params: Optional[List[Dict[str, Any]]] = None
     facts_inject: Optional[Dict[str, str]] = None
     report: Optional[NodeGetReport] = None
     node_groups: Optional[List[str]] = None

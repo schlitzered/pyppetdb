@@ -32,6 +32,9 @@ from tests.benchmark.runner import run_query  # noqa: E402
 from tests.benchmark.runner import send_command  # noqa: E402
 from tests.benchmark.runner import wait_for  # noqa: E402
 
+SEED_RETRY_ATTEMPTS = 20
+SEED_RETRY_MAX_SLEEP = 5.0
+
 
 def make_target(name: str, url: str, args) -> Target:
     return Target(
@@ -47,12 +50,21 @@ def make_target(name: str, url: str, args) -> Target:
 async def seed(target: Target, nodes: int, seed_value: int, concurrency: int) -> dict:
     semaphore = asyncio.Semaphore(concurrency)
     failures = []
+    retries = []
 
     async def one(index: int, command: str, version: int, builder):
         async with semaphore:
             name = workload.certname(index)
             payload = builder(index, seed_value)
-            response = await send_command(target, name, command, version, payload)
+            for _attempt in range(SEED_RETRY_ATTEMPTS):
+                response = await send_command(
+                    target, name, command, version, payload
+                )
+                if response.status_code != 503:
+                    break
+                retries.append(name)
+                retry_after = response.headers.get("retry-after") or "1"
+                await asyncio.sleep(min(float(retry_after), SEED_RETRY_MAX_SLEEP))
             if response.status_code not in (200, 201):
                 failures.append(
                     (name, command, response.status_code, response.text[:200])
@@ -65,7 +77,7 @@ async def seed(target: Target, nodes: int, seed_value: int, concurrency: int) ->
         )
         await wait_for_ingest(target, nodes)
     elapsed = time.perf_counter() - started
-    return {"seconds": elapsed, "failures": failures}
+    return {"seconds": elapsed, "failures": failures, "retries": len(retries)}
 
 
 COUNT_ENTITIES = ("nodes", "facts", "resources", "reports", "events")
@@ -328,6 +340,8 @@ async def command_seed(args) -> int:
             print(f"  FAILED {failure}")
         if result["failures"]:
             print(f"  {len(result['failures'])} node(s) failed")
+        if result.get("retries"):
+            print(f"  {result['retries']} command(s) retried after 503")
         print("waiting until ingest has settled ...")
         started = time.perf_counter()
         counts = await wait_for_ingest(target, args.nodes)
@@ -438,6 +452,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--key")
     parser.add_argument("--nodes", type=int, default=200)
     parser.add_argument("--resources-per-node", type=int, default=None)
+    parser.add_argument("--facts-file", default=None)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--iterations", type=int, default=30)
@@ -485,6 +500,8 @@ def main() -> int:
     args = build_parser().parse_args()
     if getattr(args, "resources_per_node", None):
         workload.RESOURCE_COUNT = args.resources_per_node
+    if args.facts_file:
+        workload.load_real_facts(args.facts_file)
     return asyncio.run(args.func(args))
 
 

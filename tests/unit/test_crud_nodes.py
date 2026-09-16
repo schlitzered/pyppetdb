@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 from datetime import datetime
 import logging
+from pyppetdb.config import ConfigAppFacts
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes import NodePutInternal
 
@@ -26,7 +27,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll = MagicMock()
         self.mock_config = MagicMock()
         # Setup basic config structure if needed
-        self.mock_config.app.main.facts.index = []
+        self.mock_config.app.main.facts = ConfigAppFacts()
         self.crud = CrudNodes(self.log, self.mock_config, self.mock_coll)
 
     async def test_delete(self):
@@ -66,7 +67,15 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         )
         state = await self.crud.get_ingest_state(_id="node1")
         self.assertEqual(
-            state, {"has_facts": True, "has_catalog": True, "content_hash": "abc"}
+            state,
+            {
+                "has_facts": True,
+                "has_catalog": True,
+                "content_hash": "abc",
+                "disabled": False,
+                "environment": None,
+                "placement": None,
+            },
         )
         pipeline = self.mock_coll.aggregate.call_args.args[0]
         self.assertEqual(pipeline[0], {"$match": {"id": "node1"}})
@@ -80,7 +89,15 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self._aggregate_returning([{"has_facts": True, "has_catalog": False}])
         state = await self.crud.get_ingest_state(_id="node1")
         self.assertEqual(
-            state, {"has_facts": True, "has_catalog": False, "content_hash": None}
+            state,
+            {
+                "has_facts": True,
+                "has_catalog": False,
+                "content_hash": None,
+                "disabled": False,
+                "environment": None,
+                "placement": None,
+            },
         )
 
     async def test_get_ingest_state_for_unknown_node_is_none(self):
@@ -282,6 +299,77 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.crud._update.assert_called_once()
 
+    async def test_facts_write_carries_a_facts_index(self):
+        self.crud._update = AsyncMock(return_value={"id": "node1"})
+        await self.crud.update(
+            _id="node1",
+            payload=NodePutInternal(facts={"osfamily": "Debian", "os": {"a": 1}}),
+            fields=[],
+            return_none=True,
+        )
+        payload = self.crud._update.call_args.kwargs["payload"]
+        self.assertEqual(
+            payload["facts_index"],
+            [
+                {"p": "osfamily", "v": "Debian"},
+                {"p": "os"},
+                {"p": "os.a", "v": 1},
+            ],
+        )
+
+    async def test_facts_index_honours_the_configured_limits(self):
+        self.crud._config.app.main.facts = ConfigAppFacts(
+            indexDepth=2, indexMaxValueLen=3, indexDeny=["secret"]
+        )
+        self.crud._update = AsyncMock(return_value={"id": "node1"})
+        await self.crud.update(
+            _id="node1",
+            payload=NodePutInternal(
+                facts={"os": {"a": "long value"}, "secret": "s", "x": "ab"}
+            ),
+            fields=[],
+            return_none=True,
+        )
+        payload = self.crud._update.call_args.kwargs["payload"]
+        self.assertEqual(
+            [entry for entry in payload["facts_index"] if "v" in entry],
+            [{"p": "x", "v": "ab"}],
+        )
+
+    async def test_a_write_without_facts_has_no_facts_index(self):
+        self.crud._update = AsyncMock(return_value={"id": "node1"})
+        await self.crud.update(
+            _id="node1",
+            payload=NodePutInternal(disabled=True),
+            fields=[],
+            return_none=True,
+        )
+        payload = self.crud._update.call_args.kwargs["payload"]
+        self.assertIsNone(payload["facts_index"])
+
+    async def test_create_builds_the_facts_index(self):
+        self.crud._create = AsyncMock(return_value={"id": "node1"})
+        await self.crud.create(
+            _id="node1",
+            payload=NodePutInternal(facts={"osfamily": "Debian"}),
+            fields=[],
+        )
+        payload = self.crud._create.call_args.kwargs["payload"]
+        self.assertIn({"p": "osfamily", "v": "Debian"}, payload["facts_index"])
+
+    def test_facts_index_is_indexed(self):
+        names = {index.document["name"] for index in self.crud._indices}
+        self.assertIn("idx_facts_index", names)
+        model = next(
+            index
+            for index in self.crud._indices
+            if index.document["name"] == "idx_facts_index"
+        )
+        self.assertEqual(
+            list(model.document["key"].items()),
+            [("facts_index.p", 1), ("facts_index.v", 1)],
+        )
+
     async def test_update_nodegroup(self):
         self.mock_coll.update_many = AsyncMock()
         await self.crud.update_nodegroup(node_group_id="g1", nodes=["node1", "node2"])
@@ -311,25 +399,32 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.meta.result_size, 0)
 
     async def test_exported_resources(self):
-        mock_cursor = MagicMock()
-        mock_cursor.to_list = AsyncMock(
-            return_value=[
-                {
-                    "results": [
-                        {
-                            "type": "File",
-                            "title": "/tmp/test",
-                            "tags": [],
-                            "exported": True,
-                            "parameters": {},
-                        }
-                    ]
-                }
-            ]
-        )
-        self.mock_coll.aggregate.return_value = mock_cursor
+        docs = [
+            {
+                "type": "File",
+                "title": "/tmp/test",
+                "tags": [],
+                "exported": True,
+                "parameters": {},
+            }
+        ]
+
+        class _Cursor:
+            def __aiter__(self):
+                async def gen():
+                    for doc in docs:
+                        yield doc
+
+                return gen()
+
+        resources_coll = MagicMock()
+        resources_coll.find = MagicMock(return_value=_Cursor())
+        self.mock_coll.database = {"nodes_resources": resources_coll}
 
         result = await self.crud.exported_resources(resource_type="File")
 
         self.assertEqual(len(result.result), 1)
         self.assertEqual(result.result[0].type, "File")
+        query = resources_coll.find.call_args.kwargs["filter"]
+        self.assertEqual(query["exported"], True)
+        self.assertEqual(query["type"], "File")

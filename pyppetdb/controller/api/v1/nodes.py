@@ -229,6 +229,9 @@ class ControllerApiV1Nodes:
             node_id=node_id,
             placement=placement,
         )
+        node_db = self.crud_nodes.coll.database
+        await node_db["nodes_resources"].delete_many({"node_id": node_id})
+        await node_db["nodes_edges"].delete_many({"node_id": node_id})
         await self.crud_jobs.remove_node_from_jobs(node_id=node_id)
         await self.crud_node_jobs.delete_by_node(node_id=node_id)
 
@@ -384,10 +387,17 @@ class ControllerApiV1Nodes:
             _id=node_id, payload=data, fields=list(fields)
         )
         if data.disabled is not None:
+            disabled = bool(data.disabled)
             await self.crud_nodes_reports.set_node_disabled(
                 node_id=node_id,
-                disabled=bool(data.disabled),
+                disabled=disabled,
             )
+            node_db = self.crud_nodes.coll.database
+            for name in ("nodes_resources", "nodes_edges"):
+                await node_db[name].update_many(
+                    {"node_id": node_id, "disabled": {"$ne": disabled}},
+                    {"$set": {"disabled": disabled}},
+                )
         return result
 
     async def catalog_cache_wipe(

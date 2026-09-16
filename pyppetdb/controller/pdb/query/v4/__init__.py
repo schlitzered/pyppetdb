@@ -31,6 +31,7 @@ from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.pdbquery import event_counts
 from pyppetdb.pdbquery.engine import QueryEngine
 from pyppetdb.pdbquery.engine import _sort_key
@@ -157,13 +158,19 @@ class ControllerPdbQueryV4:
             collections={
                 "nodes": crud_nodes.coll,
                 "nodes_reports": crud_nodes_reports.coll,
+                "nodes_resources": crud_nodes.coll.database["nodes_resources"],
+                "nodes_edges": crud_nodes.coll.database["nodes_edges"],
             },
-            aggregate_cache_ttl=config.app.puppetdb.aggregateCacheTtl,
             max_query_depth=config.app.puppetdb.maxQueryDepth,
             max_subquery_depth=config.app.puppetdb.maxSubqueryDepth,
             query_timeout=config.app.puppetdb.queryTimeout,
             query_timeout_max=config.app.puppetdb.queryTimeoutMax,
             max_page_size=config.app.puppetdb.maxPageSize,
+            facts_index=FactsIndexSpec(
+                max_value_len=config.app.main.facts.indexMaxValueLen,
+                depth=config.app.main.facts.indexDepth,
+                deny=config.app.main.facts.indexDeny,
+            ),
         )
         self._router = APIRouter(tags=["pdb_query_v4"])
 
