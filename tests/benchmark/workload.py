@@ -41,7 +41,20 @@ def _rng(index: int, seed: int) -> random.Random:
     return random.Random(f"{seed}:{index}")
 
 
+BASE_TIME = None
+
+
+def set_base_time(value: str) -> None:
+    global BASE_TIME
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    BASE_TIME = parsed
+
+
 def _base_time() -> datetime:
+    if BASE_TIME is not None:
+        return BASE_TIME
     now = datetime.now(UTC)
     return now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
 

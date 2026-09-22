@@ -42,7 +42,14 @@ HASH_FIELDS = {
     "resource_events.href",
 }
 SET_FIELDS = {"tags"}
-UNORDERED_CHILD_FIELDS = {"edges", "resources", "resources_exported", "inputs", "facts"}
+UNORDERED_CHILD_FIELDS = {
+    "edges",
+    "resources",
+    "resources_exported",
+    "resource_events",
+    "inputs",
+    "facts",
+}
 PE_ONLY_FIELDS = {"corrective_change", "latest_report_corrective_change"}
 INGEST_FIELDS = {
     "receive_time",
@@ -54,6 +61,75 @@ INGEST_FIELDS = {
 }
 
 IGNORED_FIELDS = HASH_FIELDS | INGEST_FIELDS | PE_ONLY_FIELDS
+
+
+ORDER_KEYS = {
+    "nodes": ["certname"],
+    "factsets": ["certname"],
+    "inventory": ["certname"],
+    "catalogs": ["certname"],
+    "facts": ["certname", "name"],
+    "fact-contents": ["certname", "name", "path"],
+    "fact-paths": ["name", "path"],
+    "resources": ["certname", "type", "title"],
+    "edges": [
+        "certname",
+        "source_type",
+        "source_title",
+        "target_type",
+        "target_title",
+        "relationship",
+    ],
+    "reports": ["certname", "transaction_uuid"],
+    "events": [
+        "certname",
+        "timestamp",
+        "resource_type",
+        "resource_title",
+        "property",
+        "name",
+    ],
+}
+LIST_SUBROUTES = {"facts", "resources"}
+UNPAGEABLE_TOKENS = ("extract", "function", "group_by", "limit", "offset", "order_by")
+TOTAL_ROWS = "<total rows>"
+
+
+def _entity_of(path: str, query):
+    if isinstance(query, list) and len(query) > 1 and query[0] == "from":
+        return query[1] if isinstance(query[1], str) else None
+    tail = path.split("/pdb/query/v4", 1)[1] if "/pdb/query/v4" in path else ""
+    parts = [part for part in tail.split("/") if part]
+    if not parts:
+        return None
+    if parts[-1] in ORDER_KEYS:
+        return parts[-1]
+    if parts[0] in LIST_SUBROUTES:
+        return parts[0]
+    return None
+
+
+def _shaped_at_top_level(query) -> bool:
+    if not isinstance(query, list) or not query:
+        return False
+    if query[0] == "from":
+        return any(
+            isinstance(clause, list) and clause and clause[0] in UNPAGEABLE_TOKENS
+            for clause in query[2:]
+        )
+    return query[0] in UNPAGEABLE_TOKENS
+
+
+def _pageable(path: str, query, params: dict):
+    if any(
+        key in params
+        for key in ("limit", "offset", "order_by", "summarize_by", "count_by")
+    ):
+        return None
+    if _shaped_at_top_level(query):
+        return None
+    entity = _entity_of(path, query)
+    return entity if entity in ORDER_KEYS else None
 
 
 def _ignored(field: str) -> bool:
@@ -142,6 +218,21 @@ class Report:
         self.headers = {}
         self.status_a = None
         self.status_b = None
+        self.total_a = None
+        self.total_b = None
+
+    def record_totals(self, total_a, total_b) -> None:
+        self.total_a, self.total_b = total_a, total_b
+        if total_a is not None and total_b is not None and total_a != total_b:
+            self.value_diffs[TOTAL_ROWS] += 1
+            self.samples[TOTAL_ROWS] = f"pyppetdb={total_a} openvoxdb={total_b}"
+
+    @property
+    def truncated(self) -> bool:
+        return any(
+            total is not None and total > rows
+            for rows, total in ((self.rows_a, self.total_a), (self.rows_b, self.total_b))
+        )
 
     @property
     def clean(self) -> bool:
@@ -163,6 +254,40 @@ async def fetch(client, base, path, query, params):
     if response.status_code >= 400:
         return None, response.headers, response.status_code
     return response.json(), response.headers, response.status_code
+
+
+async def fetch_all(
+    client, base, path, query, params, entity, page_size, max_rows, totals
+):
+    if entity is None:
+        rows, headers, status = await fetch(client, base, path, query, params)
+        return rows, headers, status, None
+    order_by = json.dumps(
+        [{"field": field, "order": "asc"} for field in ORDER_KEYS[entity]]
+    )
+    rows, total, headers, status, offset = [], None, None, None, 0
+    while True:
+        call = dict(params, limit=str(page_size), offset=str(offset), order_by=order_by)
+        if offset == 0 and totals:
+            call["include_total"] = "true"
+        page, page_headers, status = await fetch(client, base, path, query, call)
+        if offset == 0:
+            headers = page_headers
+            if status >= 400:
+                return page, headers, status, None
+            records = page_headers.get("x-records")
+            total = int(records) if records is not None else None
+        if not isinstance(page, list):
+            return page, headers, status, total
+        rows.extend(page)
+        if (
+            len(page) < page_size
+            or len(rows) >= max_rows
+            or (total is not None and len(rows) >= total)
+        ):
+            break
+        offset += page_size
+    return rows, headers, status, total
 
 
 def compare(name, a, b, headers_a, headers_b) -> Report:
@@ -261,6 +386,12 @@ async def main() -> int:
     )
     parser.add_argument("--only", help="regex on the case name")
     parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument("--page-size", type=int, default=5000)
+    parser.add_argument("--max-rows", type=int, default=50000)
+    parser.add_argument(
+        "--totals", action="store_true",
+        help="also compare X-Records totals (a count(*) per paged case on both targets; minutes on 10M-row cases)",
+    )
     args = parser.parse_args()
 
     context = ssl.create_default_context(cafile=args.ca)
@@ -306,12 +437,15 @@ async def main() -> int:
                 key: _substitute(value, substitutions)
                 for key, value in case.params.items()
             }
+            entity = _pageable(resolved_path, resolved_query, params)
             try:
-                a, headers_a, status_a = await fetch(
-                    client, args.a, resolved_path, resolved_query, params
+                a, headers_a, status_a, total_a = await fetch_all(
+                    client, args.a, resolved_path, resolved_query, params,
+                    entity, args.page_size, args.max_rows, args.totals,
                 )
-                b, headers_b, status_b = await fetch(
-                    client, args.b, resolved_path, resolved_query, params
+                b, headers_b, status_b, total_b = await fetch_all(
+                    client, args.b, resolved_path, resolved_query, params,
+                    entity, args.page_size, args.max_rows, args.totals,
                 )
             except Exception as err:
                 report = Report(case.name)
@@ -335,6 +469,7 @@ async def main() -> int:
                 continue
             report = compare(case.name, a, b, headers_a, headers_b)
             report.status_a, report.status_b = status_a, status_b
+            report.record_totals(total_a, total_b)
             reports.append(report)
 
     width = max(len(report.name) for report in reports)
@@ -345,6 +480,8 @@ async def main() -> int:
             print(f"{report.name:{width}}  {'-':>12}  ERROR {report.error}")
             continue
         counts = f"{report.rows_a}/{report.rows_b}"
+        if report.truncated:
+            counts += f" von {report.total_a}/{report.total_b}"
         if report.clean:
             if report.status_a is not None and report.status_a >= 400:
                 print(f"{report.name:{width}}  {'-':>12}  "
@@ -384,6 +521,8 @@ async def main() -> int:
                         "case": report.name,
                         "rows_a": report.rows_a,
                         "rows_b": report.rows_b,
+                        "total_a": report.total_a,
+                        "total_b": report.total_b,
                         "only_a": sorted(report.only_a),
                         "only_b": sorted(report.only_b),
                         "value_diffs": dict(report.value_diffs),

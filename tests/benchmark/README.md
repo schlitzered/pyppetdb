@@ -102,8 +102,11 @@ point lookups, fact and resource scans, dotted parameter and fact access, a cros
 subquery, aggregation with `group_by`/`count`, event counts, and a paged query with
 `include_total`.
 
-Timestamps are anchored to the current hour, so both targets get identical data as long
-as they are seeded within the same hour. This matters: PuppetDB partitions
+Timestamps are anchored to `--base-time` (ISO 8601, e.g. `2026-09-19T10:00:00Z`) when
+given, otherwise to the current hour minus one. Seeding two targets takes long enough to
+straddle an hour boundary, so always pass the same `--base-time` to both `seed` runs —
+otherwise every `producer_timestamp` differs by an hour and the differential comparison
+flags them. This matters: PuppetDB partitions
 `resource_events` by time and silently drops events whose timestamp falls outside the
 retained window, so a fixed historical date yields zero events upstream.
 

@@ -373,7 +373,18 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         self.assertEqual(len(rows[0]["metrics"]["data"]), 1)
         self.assertEqual(rows[0]["type"], "agent")
         self.assertTrue(rows[0]["hash"])
-        self.assertIsNone(rows[0]["resource_events"]["data"])
+        events = rows[0]["resource_events"]["data"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["resource_title"], "/tmp/one")
+        self.assertEqual(
+            set(events[0]),
+            {
+                "status", "timestamp", "resource_type", "resource_title",
+                "property", "name", "new_value", "old_value", "message",
+                "file", "line", "containment_path", "containing_class",
+                "corrective_change",
+            },
+        )
         self.assertEqual(
             rows[0]["resource_events"]["href"],
             f"/pdb/query/v4/reports/{rows[0]['hash']}/events",

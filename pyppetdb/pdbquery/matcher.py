@@ -86,7 +86,9 @@ def _match_operator(value, operator, operand) -> bool:
     if operator == "$regex":
         return _regex(value, operand)
     if operator == "__regex_array__":
-        return _regex_array(value, operand)
+        return _regex_array(value, operand, full=False)
+    if operator == "__regex_array_full__":
+        return _regex_array(value, operand, full=True)
     if operator in ("$gt", "$lt", "$gte", "$lte"):
         return _compare(value, operator, operand)
     if operator == "$exists":
@@ -112,7 +114,7 @@ def _regex(value, pattern) -> bool:
     return re.search(pattern, value) is not None
 
 
-def _regex_array(value, patterns) -> bool:
+def _regex_array(value, patterns, full: bool) -> bool:
     if not isinstance(value, list) or not isinstance(patterns, list):
         return False
     if len(value) != len(patterns):
@@ -120,8 +122,9 @@ def _regex_array(value, patterns) -> bool:
     for item, pattern in zip(value, patterns):
         if not _path_element_type_matches(item, pattern):
             return False
+        matcher = re.fullmatch if full else re.search
         try:
-            if re.search(str(pattern), str(item)) is None:
+            if matcher(str(pattern), str(item)) is None:
                 return False
         except re.error:
             return False

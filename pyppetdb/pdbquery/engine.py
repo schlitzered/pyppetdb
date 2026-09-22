@@ -128,15 +128,16 @@ class QueryEngine:
         paging=None,
         implicit: Optional[list] = None,
         timeout: Optional[int] = None,
+        page_cap: bool = True,
     ):
         check_depth(ast, self._max_query_depth, self._max_subquery_depth)
         seconds = self.effective_timeout(timeout)
         token = _query_timeout.set(seconds)
         try:
             if not seconds:
-                return await self._run(entity_name, ast, paging, implicit)
+                return await self._run(entity_name, ast, paging, implicit, page_cap)
             async with asyncio.timeout(seconds):
-                return await self._run(entity_name, ast, paging, implicit)
+                return await self._run(entity_name, ast, paging, implicit, page_cap)
         except (TimeoutError, pymongo.errors.ExecutionTimeout):
             raise PuppetDBQueryError(
                 f"query exceeded the {seconds}s timeout", status_code=500
@@ -164,6 +165,7 @@ class QueryEngine:
         ast,
         paging=None,
         implicit: Optional[list] = None,
+        page_cap: bool = True,
     ):
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -174,7 +176,8 @@ class QueryEngine:
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
-        self._apply_page_cap(query)
+        if page_cap:
+            self._apply_page_cap(query)
 
         if _is_distinct_query(target, query):
             return await self._run_distinct(target, query)
@@ -190,6 +193,8 @@ class QueryEngine:
                 target, query, match, include_total=include_total
             )
 
+        if query.functions and not query.group_by and not rows:
+            rows, total = [_empty_aggregate_row(query)], 1
         rows = convert_timestamps(target, query, rows)
         if target.scalar_result and not query.columns and not query.functions:
             rows = [row.get(target.scalar_result) for row in rows]
@@ -253,8 +258,6 @@ class QueryEngine:
             count_filter = _exact_count_filter(entity, prefilter)
         if count_filter is not None and _count_only(query):
             total = await self._count(collection, count_filter)
-            if not total:
-                return [], 0
             return [{query.functions[0].alias: total}], 1
 
         selected, filter_only = projection_plan(entity, query, match)
@@ -976,6 +979,13 @@ def _element_operator(field: str, is_array: bool, operator: str, operand):
 
 
 NEVER_MATCH = {"$expr": {"$eq": [1, 0]}}
+
+
+def _empty_aggregate_row(query: Query) -> dict:
+    return {
+        function.alias: 0 if function.name == "count" else None
+        for function in query.functions
+    }
 
 
 def _count_only(query: Query) -> bool:

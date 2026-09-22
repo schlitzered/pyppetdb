@@ -349,6 +349,13 @@ class TestFilterCompiler(unittest.IsolatedAsyncioTestCase):
             ["~>", "path", ["my_structured_fact", "c", 1]]
         )
         self.assertEqual(
+            result,
+            {"path": {"__regex_array_full__": ["my_structured_fact", "c", 1]}},
+        )
+        result = await self.compiler("fact-contents").compile(
+            ["~>", "path", ["my_structured_fact", "c", 1]]
+        )
+        self.assertEqual(
             result, {"path": {"__regex_array__": ["my_structured_fact", "c", 1]}}
         )
 

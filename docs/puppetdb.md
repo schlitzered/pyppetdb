@@ -107,7 +107,11 @@ A fact whose value is structured, denied or too long to index keeps a bare `{p: 
 entry instead, so the name stays visible without the value ever churning. A value is
 indexable when its path is no deeper than `app_main_facts_indexDepth`, is not matched by
 `app_main_facts_indexDeny`, and the value is a bool, a number, or a string no longer than
-`app_main_facts_indexMaxValueLen` characters. Lists do not consume a depth level; their
+`app_main_facts_indexMaxValueLen` characters. Any key is a valid path segment — including
+`mountpoints` keys such as `/boot` — except an empty one, one containing a NUL byte or
+starting with `$` (not addressable as a MongoDB field), and a purely numeric one: under a
+dotted path MongoDB reads `roles.0` as an array index as well as a key, so indexing it
+would let the pre-filter drop rows. Lists do not consume a depth level; their
 scalar elements are indexed under the path of the list itself, mirroring MongoDB's implicit
 array traversal, so `{"facts.roles": "web"}` and the index agree on a list-valued fact.
 

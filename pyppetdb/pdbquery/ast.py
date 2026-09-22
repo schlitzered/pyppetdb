@@ -328,7 +328,12 @@ class FilterCompiler:
                 raise PuppetDBQueryError(
                     f"Query operator ~> is not allowed on field {label}"
                 )
-            return {path: {"__regex_array__": _regex_array_operand(label, node[2])}}
+            operator_key = (
+                "__regex_array_full__"
+                if self._entity.name == "fact-paths"
+                else "__regex_array__"
+            )
+            return {path: {operator_key: _regex_array_operand(label, node[2])}}
         value = self._coerce(
             column, _check_operand(column, label, operator, node[2]), operator
         )

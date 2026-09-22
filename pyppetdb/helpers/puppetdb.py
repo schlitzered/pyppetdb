@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import fnmatch
 import hashlib
 import json
 import re
@@ -153,9 +154,29 @@ FACTS_INDEX_FIELD = "facts_index"
 FACTS_INDEX_MAX_VALUE_LEN = 256
 FACTS_INDEX_DEPTH = 3
 
-SAFE_FACT_PATH = re.compile(
-    r"^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_-]*)*$"
-)
+POSITIONAL_SEGMENT = re.compile(r"^[0-9]+$")
+
+
+def indexable_segment(segment: str) -> bool:
+    if not segment or "\0" in segment or segment.startswith("$"):
+        return False
+    return POSITIONAL_SEGMENT.match(segment) is None
+
+
+def indexable_fact_path(path: str) -> bool:
+    return all(indexable_segment(segment) for segment in path.split("."))
+
+
+GLOB_CHARS = ("*", "?", "[")
+
+
+def _is_glob(entry: str) -> bool:
+    return any(char in entry for char in GLOB_CHARS)
+
+
+def _path_and_ancestors(path: str) -> list:
+    segments = path.split(".")
+    return [".".join(segments[:count]) for count in range(len(segments), 0, -1)]
 
 
 class FactsIndexSpec:
@@ -168,6 +189,10 @@ class FactsIndexSpec:
         self._max_value_len = max_value_len
         self._depth = max(1, depth or 1)
         self._deny = tuple(deny or ())
+        self._deny_patterns = tuple(
+            re.compile(fnmatch.translate(entry)) if _is_glob(entry) else None
+            for entry in self._deny
+        )
 
     @property
     def max_value_len(self) -> int:
@@ -182,8 +207,12 @@ class FactsIndexSpec:
         return self._deny
 
     def denied(self, path: str) -> bool:
-        for entry in self._deny:
-            if path == entry or path.startswith(f"{entry}."):
+        candidates = _path_and_ancestors(path)
+        for entry, pattern in zip(self._deny, self._deny_patterns):
+            if pattern is None:
+                if entry in candidates:
+                    return True
+            elif any(pattern.match(candidate) for candidate in candidates):
                 return True
         return False
 
@@ -199,7 +228,7 @@ class FactsIndexSpec:
             return False
         if path.count(".") + 1 > self._depth:
             return False
-        if not SAFE_FACT_PATH.match(path):
+        if not indexable_fact_path(path):
             return False
         return not self.denied(path)
 
@@ -388,7 +417,7 @@ def with_skipped_events(resources) -> list:
                     "property": None,
                     "new_value": None,
                     "old_value": None,
-                    "corrective_change": None,
+                    "corrective_change": False,
                     "message": None,
                 }
             ]

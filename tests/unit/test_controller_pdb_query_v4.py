@@ -288,6 +288,16 @@ class TestEventCountsEndpoints(unittest.TestCase):
         self.assertEqual(body[0]["subject"], {"title": "a"})
         self.assertEqual(body[0]["failures"], 1)
 
+    def test_event_counts_fetch_every_event_without_the_page_cap(self):
+        for path in ("/pdb/query/v4/event-counts", "/pdb/query/v4/aggregate-event-counts"):
+            self.controller.engine.run.reset_mock()
+            response = self.client.get(path, params={"summarize_by": "certname"})
+            self.assertEqual(response.status_code, 200)
+            self.controller.engine.run.assert_awaited_once()
+            kwargs = self.controller.engine.run.await_args.kwargs
+            self.assertIs(kwargs["page_cap"], False)
+            self.assertIsNone(kwargs["paging"])
+
     def test_aggregate_event_counts(self):
         response = self.client.get(
             "/pdb/query/v4/aggregate-event-counts",

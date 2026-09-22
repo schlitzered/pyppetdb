@@ -579,8 +579,58 @@ PACKAGES = Entity(
     ],
 )
 
+
+def _nullable(expr):
+    return {"$ifNull": [expr, None]}
+
+
+RESOURCE_EVENTS_DATA = {
+    "$reduce": {
+        "input": {"$ifNull": ["$report.resources", []]},
+        "initialValue": [],
+        "in": {
+            "$let": {
+                "vars": {"res": "$$this"},
+                "in": {
+                    "$concatArrays": [
+                        "$$value",
+                        {
+                            "$map": {
+                                "input": {"$ifNull": ["$$res.events", []]},
+                                "as": "event",
+                                "in": {
+                                    "status": _nullable("$$event.status"),
+                                    "timestamp": _nullable("$$event.timestamp"),
+                                    "resource_type": _nullable("$$res.resource_type"),
+                                    "resource_title": _nullable("$$res.resource_title"),
+                                    "property": _nullable("$$event.property"),
+                                    "name": _nullable("$$event.name"),
+                                    "new_value": _nullable("$$event.new_value"),
+                                    "old_value": _nullable("$$event.old_value"),
+                                    "message": _nullable("$$event.message"),
+                                    "file": _nullable("$$res.file"),
+                                    "line": _nullable("$$res.line"),
+                                    "containment_path": {
+                                        "$ifNull": ["$$res.containment_path", []]
+                                    },
+                                    "containing_class": _containing_class(
+                                        "$$res.containment_path"
+                                    ),
+                                    "corrective_change": _nullable(
+                                        "$$event.corrective_change"
+                                    ),
+                                },
+                            }
+                        },
+                    ]
+                },
+            }
+        },
+    }
+}
+
 RESOURCE_EVENTS_EXPR = {
-    "data": {"$literal": None},
+    "data": RESOURCE_EVENTS_DATA,
     "href": {
         "$concat": [
             "/pdb/query/v4/reports/",

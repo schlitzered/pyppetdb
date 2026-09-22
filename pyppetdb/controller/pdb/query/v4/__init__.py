@@ -303,6 +303,7 @@ class ControllerPdbQueryV4:
             paging=None,
             implicit=None,
             timeout=parse_timeout(params.get("timeout")),
+            page_cap=False,
         )
 
         results = []

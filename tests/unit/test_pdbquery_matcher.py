@@ -84,6 +84,24 @@ class TestRegexArray(unittest.TestCase):
         self.assertFalse(self.match("tags", ["tags"]))
         self.assertFalse(self.match(["tags"], "tags"))
 
+    def test_fact_contents_form_searches_each_element_like_upstream(self):
+        self.assertTrue(self.match(["kernelmajversion"], ["kernel"]))
+        self.assertTrue(self.match(["kernelmajversion"], ["ernel"]))
+        self.assertTrue(self.match(["networking", "ip6"], ["net", "ip"]))
+        self.assertFalse(self.match(["kernel"], ["kernel", ".*"]))
+
+    def test_fact_paths_form_matches_each_element_in_full(self):
+        def full(path, patterns):
+            return matcher.matches(
+                {"path": path}, {"path": {"__regex_array_full__": patterns}}
+            )
+
+        self.assertTrue(full(["kernel"], ["kernel"]))
+        self.assertFalse(full(["kernelmajversion"], ["kernel"]))
+        self.assertFalse(full(["networking", "ip6"], ["networking", "ip"]))
+        self.assertTrue(full(["networking", "ip6"], ["networking", "ip.*"]))
+        self.assertTrue(full(["networking", "ip6"], ["net.*", ".*"]))
+
 
 class TestEquals(unittest.TestCase):
     def test_integer_path_equality(self):

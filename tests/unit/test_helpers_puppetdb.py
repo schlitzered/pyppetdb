@@ -25,6 +25,7 @@ from pyppetdb.model.nodes import NodeGetCatalog
 from pyppetdb.helpers.puppetdb import normalise_package_inventory
 from pyppetdb.helpers.puppetdb import normalise_resources
 from pyppetdb.helpers.puppetdb import parse_wire_timestamp
+from pyppetdb.helpers.puppetdb import with_skipped_events
 from pyppetdb.helpers.puppetdb import report_payload
 from pyppetdb.helpers.puppetdb import resource_hash
 from pyppetdb.helpers.puppetdb import stable_hash
@@ -125,6 +126,36 @@ class TestResourceParams(unittest.TestCase):
         self.assertNotIn("list", names)
         self.assertIn("count", names)
         self.assertIn("flag", names)
+
+
+class TestSkippedEvents(unittest.TestCase):
+    def test_a_skipped_resource_without_events_gets_one_like_upstream(self):
+        prepared = with_skipped_events(
+            [{"resource_type": "File", "skipped": True, "timestamp": "t1"}]
+        )
+        self.assertEqual(
+            prepared[0]["events"],
+            [
+                {
+                    "status": "skipped",
+                    "timestamp": "t1",
+                    "name": None,
+                    "property": None,
+                    "new_value": None,
+                    "old_value": None,
+                    "corrective_change": False,
+                    "message": None,
+                }
+            ],
+        )
+
+    def test_resources_with_events_or_not_skipped_are_left_alone(self):
+        events = [{"status": "success"}]
+        prepared = with_skipped_events(
+            [{"skipped": True, "events": events}, {"skipped": False}]
+        )
+        self.assertEqual(prepared[0]["events"], events)
+        self.assertEqual(prepared[1]["events"], [])
 
 
 class TestFactsIndex(unittest.TestCase):
@@ -234,9 +265,36 @@ class TestFactsIndex(unittest.TestCase):
         )
 
     def test_positional_and_unsafe_paths_are_not_value_indexed(self):
-        entries = build_facts_index({"0day": "yes", "we ird": "x"})
-        self.assertEqual(sorted(set(self.paths(entries))), ["0day", "we ird"])
+        entries = build_facts_index(
+            {"$set": "x", "nul\0l": "x", "0": "x", "list": {"0": "x"}}, depth=2
+        )
+        self.assertEqual(
+            sorted(set(self.paths(entries))), ["$set", "0", "list", "nul\0l"]
+        )
         self.assertEqual(self.values(entries), set())
+
+    def test_unusual_but_safe_keys_are_value_indexed(self):
+        entries = build_facts_index(
+            {
+                "0day": "yes",
+                "we ird": "x",
+                "mountpoints": {
+                    "/": {"available": "1.0 GiB", "filesystem": "xfs"},
+                    "/dev/hugepages": {"filesystem": "hugetlbfs"},
+                },
+            },
+            depth=3,
+        )
+        self.assertEqual(
+            self.values(entries),
+            {
+                ("0day", "yes"),
+                ("we ird", "x"),
+                ("mountpoints./.available", "1.0 GiB"),
+                ("mountpoints./.filesystem", "xfs"),
+                ("mountpoints./dev/hugepages.filesystem", "hugetlbfs"),
+            },
+        )
 
     def test_scalar_list_elements_are_indexed(self):
         entries = build_facts_index({"roles": ["web", "db", "web"]})
@@ -254,6 +312,34 @@ class TestFactsIndex(unittest.TestCase):
         entries = build_facts_index(
             {"os": {"family": "Debian"}}, depth=2, deny=["os.family"]
         )
+        self.assertEqual(self.values(entries), set())
+
+    def test_deny_globs_match_the_path_and_its_ancestors(self):
+        facts = {
+            "mountpoints": {
+                "/": {"available": "1 GiB", "used": "2 GiB", "filesystem": "xfs"},
+                "/boot": {"available": "3 GiB", "filesystem": "ext4"},
+            },
+            "available": "top",
+            "disks": {"vda": {"size": "32 GiB"}},
+        }
+        entries = build_facts_index(
+            facts, depth=3, deny=["*.available", "*.used", "disk?"]
+        )
+        self.assertEqual(
+            self.values(entries),
+            {
+                ("mountpoints./.filesystem", "xfs"),
+                ("mountpoints./boot.filesystem", "ext4"),
+                ("available", "top"),
+            },
+        )
+        self.assertIn({"p": "disks"}, entries)
+
+    def test_a_literal_glob_character_is_escaped_with_brackets(self):
+        entries = build_facts_index({"a*b": "x", "axb": "y"}, deny=["a[*]b"])
+        self.assertEqual(self.values(entries), {("axb", "y")})
+        entries = build_facts_index({"a*b": "x", "axb": "y"}, deny=["a*b"])
         self.assertEqual(self.values(entries), set())
 
     def test_non_dict_facts_yield_nothing(self):

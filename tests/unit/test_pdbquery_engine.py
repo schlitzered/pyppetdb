@@ -376,6 +376,21 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(nodes.pipelines, [])
         self.assertEqual(nodes.counts_calls, [({}, {"hint": "_id_"})])
 
+    async def test_page_cap_can_be_bypassed_for_internal_queries(self):
+        res = FakeCollection()
+        engine = QueryEngine(
+            log=logging.getLogger("test"),
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": res, "nodes_edges": FakeCollection()},
+            max_page_size=5000,
+        )
+        await engine.run("resources", ["=", "type", "File"], page_cap=False)
+        self.assertEqual([s for s in res.pipelines[-1] if "$limit" in s], [])
+        res.pipelines.clear()
+        await engine.run("resources", ["=", "type", "File"])
+        self.assertEqual(
+            [s["$limit"] for s in res.pipelines[-1] if "$limit" in s], [5000]
+        )
+
     async def test_no_page_cap_when_disabled(self):
         res = FakeCollection()
         engine = engine_with(resources=res)  # max_page_size default 0
@@ -830,11 +845,34 @@ class TestCountShortcut(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(nodes.counts_calls, [({"disabled": {"$ne": True}}, {})])
         self.assertEqual(nodes.pipelines, [])
 
-    async def test_zero_count_keeps_the_empty_shape(self):
+    async def test_zero_count_yields_a_zero_row(self):
         nodes = FakeCollection(counts=0)
         engine = engine_with(nodes)
         rows, total = await engine.run("nodes", self.COUNT)
-        self.assertEqual((rows, total), ([], 0))
+        self.assertEqual((rows, total), ([{"count": 0}], 1))
+
+    async def test_empty_aggregates_yield_one_row_like_upstream(self):
+        res = FakeCollection()
+        engine = engine_with(resources=res)
+        rows, total = await engine.run(
+            "resources",
+            [
+                "extract",
+                [["function", "count"], ["function", "max", "line"], ["function", "avg", "line"]],
+                ["not", ["=", "type", "File"]],
+            ],
+        )
+        self.assertEqual((rows, total), ([{"count": 0, "max": None, "avg": None}], 1))
+        rows, _total = await engine.run(
+            "resources",
+            [
+                "extract",
+                [["function", "count"], "type"],
+                ["not", ["=", "type", "File"]],
+                ["group_by", "type"],
+            ],
+        )
+        self.assertEqual(rows, [])
 
     async def test_include_total_uses_count_documents_and_pages_normally(self):
         nodes = FakeCollection(docs=[{"certname": "a"}], counts=10000)
@@ -1305,6 +1343,21 @@ class TestFactValuePrefilter(unittest.IsolatedAsyncioTestCase):
         match = await FilterCompiler(entity, engine=engine_with()).compile(ast)
         return build_prefilter(entity, match, spec or self.spec)
 
+    async def test_glob_denied_paths_fall_back_to_the_direct_predicate(self):
+        spec = FactsIndexSpec(depth=3, deny=["*.available"])
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["=", "facts.mountpoints./boot.available", "3 GiB"], spec
+            ),
+            {"facts.mountpoints./boot.available": "3 GiB"},
+        )
+        self.assertIn(
+            "$and",
+            await self.prefilter(
+                "nodes", ["=", "facts.mountpoints./boot.filesystem", "ext4"], spec
+            ),
+        )
+
     async def test_equality_emits_both_forms(self):
         self.assertEqual(
             await self.prefilter("nodes", ["=", ["fact", "osfamily"], "Debian"]),
@@ -1504,6 +1557,27 @@ class TestFactValuePrefilter(unittest.IsolatedAsyncioTestCase):
                 "nodes", ["=", "facts.a.b.c.d", "deep"], FactsIndexSpec()
             ),
             {"facts.a.b.c.d": "deep"},
+        )
+
+    async def test_slash_keys_are_indexable_but_positional_ones_are_not(self):
+        self.assertEqual(
+            await self.prefilter(
+                "nodes", ["=", "facts.mountpoints./boot.filesystem", "xfs"], FactsIndexSpec()
+            ),
+            {
+                "$and": [
+                    {
+                        "facts_index": {
+                            "$elemMatch": {"p": "mountpoints./boot.filesystem", "v": "xfs"}
+                        }
+                    },
+                    {"facts.mountpoints./boot.filesystem": "xfs"},
+                ]
+            },
+        )
+        self.assertEqual(
+            await self.prefilter("nodes", ["=", "facts.roles.0", "web"], FactsIndexSpec()),
+            {"facts.roles.0": "web"},
         )
 
 
