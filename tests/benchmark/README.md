@@ -30,6 +30,10 @@ unset app_puppetdb_serverurl
 venv/bin/pyppetdb
 ```
 
+The OpenVoxDB image is pinned on purpose: recreating the container from `:latest` once
+upgraded a seeded 8.10 database to 8.15, ran 62 migrations and left the resources
+unreachable through the API. Bump the tag deliberately and reseed afterwards.
+
 `app_puppetdb_serverurl` must stay unset so pyppetdb answers from its own store and does
 not forward anything upstream — otherwise the benchmark measures both systems at once.
 
@@ -51,9 +55,13 @@ venv/bin/python tests/benchmark/benchmark.py $CERTS --nodes 300 \
           --b https://localhost:18081 --name-b openvoxdb
 ```
 
-Seed OpenVoxDB with `--concurrency 1`. Concurrent catalog ingest makes PuppetDB collide
-on the shared `resource_params_cache` primary key; it schedules retries with a long
-backoff and the affected catalogs stay missing for the rest of the run.
+Seed OpenVoxDB with `--concurrency 1`, and note that `seed` sends the first catalog on
+its own and waits until its resources are queryable before submitting the rest: PuppetDB
+processes its queue with several threads regardless of the client concurrency, and the
+first catalogs of a cold `resource_params_cache` collide on its primary key — the
+affected catalogs are retried with a long backoff and can stay missing for hours. Once
+one catalog has populated the cache, the remaining ones insert nothing new and no
+longer collide.
 
 `compare` prints a dataset cross-check before the timings. Only trust the latencies when
 the row counts agree — otherwise the two targets are not doing the same work.
@@ -116,7 +124,8 @@ behaves under load.
 
 ## Known differences
 
-- OpenVoxDB reports 4 more events per node than pyppetdb: it synthesises a `skipped`
-  event for every skipped resource, pyppetdb only stores events the agent actually sent.
+- Both systems synthesise one `skipped` event per skipped resource that carries no events
+  of its own (`with_skipped_events` mirrors PuppetDB's `resource->skipped-resource-events`),
+  so event counts agree.
 - pyppetdb accepts report events without `corrective_change`; OpenVoxDB rejects the whole
   command.

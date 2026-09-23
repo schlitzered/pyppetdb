@@ -19,6 +19,8 @@ import os
 import re
 import ssl
 import sys
+import time
+from html import escape
 from collections import Counter
 
 import httpx
@@ -220,6 +222,15 @@ class Report:
         self.status_b = None
         self.total_a = None
         self.total_b = None
+        self.path = None
+        self.query = None
+        self.params = {}
+        self.group = None
+        self.origin = None
+        self.ms_a = None
+        self.ms_b = None
+        self.body_a = None
+        self.body_b = None
 
     def record_totals(self, total_a, total_b) -> None:
         self.total_a, self.total_b = total_a, total_b
@@ -252,7 +263,7 @@ async def fetch(client, base, path, query, params):
         call["query"] = json.dumps(query)
     response = await client.get(f"{base}{path}", params=call)
     if response.status_code >= 400:
-        return None, response.headers, response.status_code
+        return response.text[:2000], response.headers, response.status_code
     return response.json(), response.headers, response.status_code
 
 
@@ -364,6 +375,190 @@ def compare(name, a, b, headers_a, headers_b) -> Report:
     return report
 
 
+def _annotate(report, case, group_of, path, query, params, ms_a, ms_b, a, b):
+    report.path = path
+    report.query = query
+    report.params = params
+    report.group = group_of.get(case.name)
+    report.origin = case.origin
+    report.ms_a, report.ms_b = ms_a, ms_b
+    report.body_a, report.body_b = a, b
+
+
+HTML_ROWS = 25
+HTML_CHARS = 12000
+
+
+def _body_text(body):
+    if body is None:
+        return "(keine Antwort)", ""
+    if isinstance(body, str):
+        return body, ""
+    note = ""
+    shown = body
+    if isinstance(body, list) and len(body) > HTML_ROWS:
+        shown = body[:HTML_ROWS]
+        note = f"… {len(body) - HTML_ROWS} weitere Zeilen"
+    text = json.dumps(shown, indent=1, ensure_ascii=False, default=str)
+    if len(text) > HTML_CHARS:
+        text = text[:HTML_CHARS] + "\n…"
+        note = note or "… gekürzt"
+    return text, note
+
+
+def _ms(value):
+    return "–" if value is None else f"{value:,.0f} ms".replace(",", "\u202f")
+
+
+def _verdict(report):
+    if report.error:
+        return "error", report.error
+    if report.clean:
+        if report.status_a is not None and report.status_a >= 400:
+            return "ok", f"beide abgelehnt ({report.status_a}/{report.status_b})"
+        return "ok", "identisch" + (" (leer)" if report.rows_a == 0 else "")
+    issues = []
+    if report.rows_a != report.rows_b:
+        issues.append("Zeilenzahl")
+    if report.only_a:
+        issues.append("nur pyppetdb: " + ", ".join(sorted(report.only_a)))
+    if report.only_b:
+        issues.append("nur OpenVoxDB: " + ", ".join(sorted(report.only_b)))
+    if report.value_diffs:
+        issues.append("Werte: " + ", ".join(sorted(report.value_diffs)))
+    return "diff", "; ".join(issues)
+
+
+def render_html(reports, args) -> str:
+    counts = {"ok": 0, "diff": 0, "error": 0}
+    for report in reports:
+        counts[_verdict(report)[0]] += 1
+    sum_a = sum(r.ms_a or 0 for r in reports)
+    sum_b = sum(r.ms_b or 0 for r in reports)
+    faster = sum(1 for r in reports if r.ms_a is not None and r.ms_b is not None and r.ms_a < r.ms_b)
+    timed = sum(1 for r in reports if r.ms_a is not None and r.ms_b is not None)
+    stamp = time.strftime("%Y-%m-%d %H:%M")
+    parts = [HTML_HEAD]
+    parts.append(
+        '<header class="top"><p class="eyebrow">Differential · PuppetDB API v4</p>'
+        '<h1>pyppetdb gegen OpenVoxDB</h1>'
+        f'<p class="lede">{len(reports)} Fälle, gleiche Daten, gleiche Queries — '
+        f'<span class="a">A = pyppetdb</span> {escape(args.a)} · '
+        f'<span class="b">B = OpenVoxDB</span> {escape(args.b)} · Node <code>{escape(args.node)}</code> · {stamp}</p>'
+        '<div class="tiles">'
+        f'<div class="tile ok"><b>{counts["ok"]}</b><span>identisch</span></div>'
+        f'<div class="tile diff"><b>{counts["diff"]}</b><span>abweichend</span></div>'
+        f'<div class="tile error"><b>{counts["error"]}</b><span>Fehler</span></div>'
+        f'<div class="tile"><b>{_ms(sum_a)}</b><span>Summe A</span></div>'
+        f'<div class="tile"><b>{_ms(sum_b)}</b><span>Summe B</span></div>'
+        f'<div class="tile"><b>{faster}/{timed}</b><span>A schneller</span></div>'
+        '</div></header>'
+    )
+    parts.append('<nav class="index"><div class="scroll"><table><thead><tr><th>Fall</th><th>Gruppe</th><th>Ergebnis</th>'
+                 '<th class="num">Zeilen A/B</th><th class="num">A</th><th class="num">B</th></tr></thead><tbody>')
+    for index, report in enumerate(reports):
+        kind, text = _verdict(report)
+        rows = f"{report.rows_a}/{report.rows_b}" if report.status_a is not None and report.status_a < 400 and not report.error else "–"
+        parts.append(
+            f'<tr class="{kind}"><td><a href="#case-{index}">{escape(report.name)}</a></td>'
+            f'<td class="muted">{escape(report.group or "")}</td>'
+            f'<td><span class="pill {kind}">{escape(text[:60])}</span></td>'
+            f'<td class="num">{rows}</td><td class="num">{_ms(report.ms_a)}</td><td class="num">{_ms(report.ms_b)}</td></tr>'
+        )
+    parts.append('</tbody></table></div></nav><main>')
+    for index, report in enumerate(reports):
+        kind, text = _verdict(report)
+        call = dict(report.params or {})
+        params = " ".join(f"{k}={v}" for k, v in call.items()) if call else "keine"
+        query = json.dumps(report.query, ensure_ascii=False) if report.query is not None else "(ohne query)"
+        text_a, note_a = _body_text(report.body_a)
+        text_b, note_b = _body_text(report.body_b)
+        open_attr = "" if kind == "ok" else " open"
+        detail = ""
+        if report.value_diffs:
+            items = "".join(
+                f"<li><code>{escape(key)}</code> · {count} Zeilen"
+                + (f"<br><small>{escape(str(report.samples.get(key, '')))}</small>" if report.samples.get(key) else "")
+                + "</li>"
+                for key, count in report.value_diffs.most_common()
+            )
+            detail = f'<div class="delta"><p class="label">Abweichungen</p><ul>{items}</ul></div>'
+        parts.append(
+            f'<section class="case {kind}" id="case-{index}">'
+            f'<div class="head"><p class="eyebrow">{escape(report.group or "")} · {escape(report.origin or "")}</p>'
+            f'<h2>{escape(report.name)}</h2><span class="pill {kind}">{escape(text)}</span></div>'
+            f'<div class="query"><p class="label">GET {escape(report.path or "")}</p><pre>{escape(query)}</pre>'
+            f'<p class="muted small">Parameter: {escape(params)}</p></div>'
+            f'<details class="responses"{open_attr}><summary>Antworten '
+            f'<span class="a">A {report.status_a or "–"} · {report.rows_a} Zeilen · {_ms(report.ms_a)}</span>'
+            f'<span class="b">B {report.status_b or "–"} · {report.rows_b} Zeilen · {_ms(report.ms_b)}</span></summary>'
+            f'<div class="side"><div class="col a"><p class="label">pyppetdb</p><pre>{escape(text_a)}</pre><p class="muted small">{escape(note_a)}</p></div>'
+            f'<div class="col b"><p class="label">OpenVoxDB</p><pre>{escape(text_b)}</pre><p class="muted small">{escape(note_b)}</p></div></div></details>'
+            f'{detail}</section>'
+        )
+    parts.append('</main>')
+    return "".join(parts)
+
+
+HTML_HEAD = """<title>pyppetdb vs OpenVoxDB</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#f5f7f7;--panel:#ffffff;--ink:#1b2426;--muted:#5d6b6f;--line:#d6dedf;--a:#176d7b;--b:#6b5b95;
+--ok:#2c7a4b;--ok-bg:#e6f3ea;--diff:#a8641a;--diff-bg:#fbf0dd;--err:#b23a30;--err-bg:#fbe5e2;--code:#eef2f3;--sans:"IBM Plex Sans",system-ui,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131a1c;--panel:#1b2427;--ink:#e3eaeb;--muted:#96a5a9;--line:#2c393d;--a:#5fc3d2;--b:#b3a5e6;
+--ok:#7fd39c;--ok-bg:#183424;--diff:#e6ad5c;--diff-bg:#3a2a12;--err:#f0837a;--err-bg:#3d1c19;--code:#0f1517}}
+:root[data-theme="dark"]{--bg:#131a1c;--panel:#1b2427;--ink:#e3eaeb;--muted:#96a5a9;--line:#2c393d;--a:#5fc3d2;--b:#b3a5e6;
+--ok:#7fd39c;--ok-bg:#183424;--diff:#e6ad5c;--diff-bg:#3a2a12;--err:#f0837a;--err-bg:#3d1c19;--code:#0f1517}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding:0 20px 64px}
+.top{max-width:1180px;margin:0 auto;padding-block:36px 20px}
+.eyebrow{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{margin:4px 0 8px;font-size:30px;font-weight:600;text-wrap:balance}
+h2{margin:2px 0 0;font-size:19px;font-weight:600}
+.lede{margin:0 0 20px;color:var(--muted);max-width:70ch}
+.lede code{font-family:var(--mono);font-size:13px}
+.a{color:var(--a);font-weight:500}.b{color:var(--b);font-weight:500}
+.tiles{display:flex;flex-wrap:wrap;gap:12px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 16px;min-width:120px}
+.tile b{display:block;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tile.ok b{color:var(--ok)}.tile.diff b{color:var(--diff)}.tile.error b{color:var(--err)}
+.index{max-width:1180px;margin:0 auto 32px}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+a{color:inherit}
+.muted{color:var(--muted)}.small{font-size:12.5px;margin:6px 0 0}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.diff{background:var(--diff-bg);color:var(--diff)}.pill.error{background:var(--err-bg);color:var(--err)}
+main{max-width:1180px;margin:0 auto;display:grid;gap:22px}
+.case{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:6px;padding:16px 20px 18px;scroll-margin-top:16px}
+.case.diff{border-left-color:var(--diff)}.case.error{border-left-color:var(--err)}.case.ok{border-left-color:var(--ok)}
+.head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:12px}
+.head .eyebrow{flex-basis:100%}
+.head .pill{margin-left:auto}
+.label{margin:0 0 4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.query pre,.side pre{margin:0;background:var(--code);border-radius:4px;padding:10px 12px;font-family:var(--mono);font-size:12.5px;line-height:1.45;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.responses{margin-top:14px}
+.responses summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;font-weight:500}
+.responses summary span{font-size:13px;font-variant-numeric:tabular-nums}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+.side .col{min-width:0}
+.side pre{max-height:520px;overflow:auto}
+.col.a .label{color:var(--a)}.col.b .label{color:var(--b)}
+.delta{margin-top:14px;background:var(--diff-bg);border-radius:4px;padding:10px 14px}
+.delta ul{margin:4px 0 0;padding-left:18px}
+.delta li{margin:2px 0}
+.delta code,.lede code{font-family:var(--mono);font-size:12.5px}
+summary:focus-visible,a:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+@media (max-width:760px){.side{grid-template-columns:1fr}h1{font-size:24px}body{padding:0 16px 48px}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+"""
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(
         description="Compare every pyppetdb /pdb endpoint against OpenVoxDB"
@@ -379,6 +574,7 @@ async def main() -> int:
     parser.add_argument("--cert")
     parser.add_argument("--key")
     parser.add_argument("--json")
+    parser.add_argument("--html")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
         "--group", action="append",
@@ -419,6 +615,11 @@ async def main() -> int:
         print("keine Faelle ausgewaehlt")
         return 2
 
+    group_of = {
+        case.name: group_name
+        for group_name, members in GROUPS.items()
+        for case in members
+    }
     reports = []
     async with httpx.AsyncClient(verify=context, timeout=args.timeout) as client:
         substitutions = {
@@ -438,18 +639,25 @@ async def main() -> int:
                 for key, value in case.params.items()
             }
             entity = _pageable(resolved_path, resolved_query, params)
+            a = b = None
+            ms_a = ms_b = None
             try:
+                started = time.perf_counter()
                 a, headers_a, status_a, total_a = await fetch_all(
                     client, args.a, resolved_path, resolved_query, params,
                     entity, args.page_size, args.max_rows, args.totals,
                 )
+                ms_a = (time.perf_counter() - started) * 1000
+                started = time.perf_counter()
                 b, headers_b, status_b, total_b = await fetch_all(
                     client, args.b, resolved_path, resolved_query, params,
                     entity, args.page_size, args.max_rows, args.totals,
                 )
+                ms_b = (time.perf_counter() - started) * 1000
             except Exception as err:
                 report = Report(case.name)
                 report.error = f"{type(err).__name__}: {err}"[:120]
+                _annotate(report, case, group_of, resolved_path, resolved_query, params, ms_a, ms_b, a, b)
                 reports.append(report)
                 continue
             if case.expect_error:
@@ -459,17 +667,20 @@ async def main() -> int:
                     report.error = f"pyppetdb accepted it ({status_a})"
                 elif status_b < 400:
                     report.error = f"OpenVoxDB accepted it ({status_b})"
+                _annotate(report, case, group_of, resolved_path, resolved_query, params, ms_a, ms_b, a, b)
                 reports.append(report)
                 continue
             if status_a >= 400 or status_b >= 400:
                 report = Report(case.name)
                 report.status_a, report.status_b = status_a, status_b
                 report.error = f"HTTP {status_a} vs {status_b}"
+                _annotate(report, case, group_of, resolved_path, resolved_query, params, ms_a, ms_b, a, b)
                 reports.append(report)
                 continue
             report = compare(case.name, a, b, headers_a, headers_b)
             report.status_a, report.status_b = status_a, status_b
             report.record_totals(total_a, total_b)
+            _annotate(report, case, group_of, resolved_path, resolved_query, params, ms_a, ms_b, a, b)
             reports.append(report)
 
     width = max(len(report.name) for report in reports)
@@ -513,6 +724,9 @@ async def main() -> int:
                 and (report.status_a or 200) < 400)
     print(f"\n{clean}/{len(reports)} Faelle identisch"
           f" ({empty} davon ohne Daten, also ohne Aussagekraft)")
+    if args.html:
+        with open(args.html, "w") as handle:
+            handle.write(render_html(reports, args))
     if args.json:
         with open(args.json, "w") as handle:
             json.dump(
@@ -523,6 +737,8 @@ async def main() -> int:
                         "rows_b": report.rows_b,
                         "total_a": report.total_a,
                         "total_b": report.total_b,
+                        "ms_a": report.ms_a,
+                        "ms_b": report.ms_b,
                         "only_a": sorted(report.only_a),
                         "only_b": sorted(report.only_b),
                         "value_diffs": dict(report.value_diffs),

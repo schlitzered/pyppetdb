@@ -397,3 +397,58 @@ class TestFilterCompiler(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOperandTypeRules(unittest.IsolatedAsyncioTestCase):
+    def compiler(self, entity_name):
+        from pyppetdb.pdbquery.entities import get_entity
+        from tests.unit.test_pdbquery_engine import engine_with
+
+        return FilterCompiler(get_entity(entity_name), engine=engine_with())
+
+    async def rejects(self, entity_name, ast, fragment):
+        with self.assertRaises(PuppetDBQueryError) as ctx:
+            await self.compiler(entity_name).compile(ast)
+        self.assertIn(fragment, str(ctx.exception))
+
+    async def test_comparisons_are_refused_on_string_and_boolean_columns(self):
+        await self.rejects("nodes", ["<", "certname", "host1"], "not allowed on field certname")
+        await self.rejects("resources", [">", "title", "a"], "not allowed on field title")
+        await self.rejects("nodes", [">", "latest_report_noop", False], "not allowed on field latest_report_noop")
+        await self.rejects("environments", ["<=", "name", "foo"], "not allowed on field name")
+
+    async def test_numeric_columns_need_numeric_operands(self):
+        await self.rejects("resources", ["=", "line", "22"], 'Argument "22" is incompatible with numeric field "line"')
+        await self.rejects("resources", [">", "line", "22"], 'Argument "22" and operator ">" have incompatible types')
+        self.assertEqual(
+            await self.compiler("resources").compile(["<", "line", 22]),
+            {"line": {"$lt": 22}},
+        )
+
+    async def test_fact_values_compare_only_against_numbers(self):
+        await self.rejects("facts", ["<", "value", "100"], 'Argument "100" and operator "<"')
+        await self.rejects("nodes", ["<", ["fact", "uptime_seconds"], "12000"], "incompatible types")
+        self.assertEqual(
+            await self.compiler("facts").compile(["<", "value", 10000]),
+            {"value": {"$lt": 10000}},
+        )
+        self.assertEqual(
+            await self.compiler("resources").compile(["<", "parameters.line", "5"]),
+            {"parameters.line": {"$lt": "5"}},
+        )
+
+    async def test_timestamp_strings_must_parse(self):
+        await self.rejects("nodes", ["<", "catalog_timestamp", "gestern"], "'gestern' is not a valid timestamp value")
+        await self.rejects("nodes", ["=", "catalog_timestamp", "'2018-08-15 21:11:21 UTC'"], "is not a valid timestamp value")
+        compiled = await self.compiler("nodes").compile(["<", "catalog_timestamp", "2026-01-01T00:00:00Z"])
+        self.assertIn("$lt", compiled["catalog_timestamp"])
+
+    async def test_node_active_alias_on_facts(self):
+        self.assertEqual(
+            await self.compiler("facts").compile(["=", ["node", "active"], True]),
+            {"node_state": "active"},
+        )
+        self.assertEqual(
+            await self.compiler("fact-contents").compile(["=", ["node", "active"], False]),
+            {"node_state": "inactive"},
+        )

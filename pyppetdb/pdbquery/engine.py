@@ -17,6 +17,7 @@ import contextvars
 import json
 import logging
 import re
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -33,6 +34,7 @@ from pyppetdb.pdbquery.ast import parse_query
 from pyppetdb.pdbquery.entities import ENTITIES
 from pyppetdb.pdbquery.entities import get_entity
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdbquery.errors import subquery_too_large
 from pyppetdb.pdbquery.errors import unknown_entity
 from pyppetdb.pdbquery.errors import unknown_field
 from pyppetdb.pdbquery.entities import _UNSET
@@ -142,6 +144,8 @@ class QueryEngine:
             raise PuppetDBQueryError(
                 f"query exceeded the {seconds}s timeout", status_code=500
             )
+        except pymongo.errors.DocumentTooLarge:
+            raise subquery_too_large()
         finally:
             _query_timeout.reset(token)
 
@@ -187,7 +191,9 @@ class QueryEngine:
 
         include_total = paging is not None and paging.include_total
         if target.python_expand:
-            rows, total = await self._run_python(target, query, match)
+            rows, total = await self._run_python(
+                target, query, match, include_total=include_total
+            )
         else:
             rows, total = await self._run_mongo(
                 target, query, match, include_total=include_total
@@ -339,7 +345,9 @@ class QueryEngine:
             rows = [row.get(entity.scalar_result) for row in rows]
         return rows, total
 
-    async def _run_python(self, entity, query: Query, match: dict):
+    async def _run_python(
+        self, entity, query: Query, match: dict, include_total: bool = False
+    ):
         if _is_never(match):
             return [], 0
         collection = self.collection(entity.collection)
@@ -347,21 +355,79 @@ class QueryEngine:
             build_prefilter(entity, match, self._facts_index) if match else {}
         )
         cursor = collection.find(
-            prefilter, projection=PYTHON_PROJECTIONS[entity.python_expand]
+            prefilter, projection=_python_projection(entity, match)
         )
         timeout = _query_timeout.get()
+        deadline = time.monotonic() + timeout if timeout else None
         if timeout:
             cursor = cursor.max_time_ms(timeout * 1000)
-        documents = await cursor.to_list(length=None)
         expander = PYTHON_EXPANDERS[entity.python_expand]
-        rows = [row for document in documents for row in expander(document)]
-        if entity.distinct_rows:
-            rows = _distinct(rows)
-        rows = [row for row in rows if matcher.matches(row, match)]
+        wanted = None
+        if not (
+            include_total
+            or query.order_by
+            or query.functions
+            or entity.distinct_rows
+        ):
+            wanted = (query.offset or 0) + query.limit if query.limit else None
+        seen = set() if entity.distinct_rows else None
+        rows = []
+        batch = []
+        async for document in cursor:
+            batch.append(document)
+            if len(batch) < PYTHON_BATCH_SIZE:
+                continue
+            rows.extend(
+                await asyncio.to_thread(
+                    _expand_batch, expander, batch, match, seen, deadline
+                )
+            )
+            batch = []
+            if wanted is not None and len(rows) >= wanted:
+                break
+        if batch:
+            rows.extend(
+                await asyncio.to_thread(
+                    _expand_batch, expander, batch, match, seen, deadline
+                )
+            )
         total = len(rows)
         rows = _python_shape(rows, query, entity)
         rows = _python_paging(rows, query)
         return rows, total
+
+
+PYTHON_BATCH_SIZE = 200
+
+
+def _expand_batch(expander, documents: list, match: dict, seen, deadline) -> list:
+    rows = []
+    for document in documents:
+        if deadline is not None and time.monotonic() > deadline:
+            raise PuppetDBQueryError("query exceeded its timeout", status_code=500)
+        for row in expander(document):
+            if match and not matcher.matches(row, match):
+                continue
+            if seen is not None:
+                key = json.dumps(row, sort_keys=True, default=str)
+                if key in seen:
+                    continue
+                seen.add(key)
+            rows.append(row)
+    return rows
+
+
+def _python_projection(entity, match: dict) -> dict:
+    projection = dict(PYTHON_PROJECTIONS[entity.python_expand])
+    keys = _pinned_node(match, "name") if match else None
+    if not keys or len(keys) > MAX_PINNED_KEYS:
+        return projection
+    if any(not SAFE_KEY.match(key) for key in keys):
+        return projection
+    projection.pop("facts")
+    for key in sorted(keys):
+        projection[f"facts.{key}"] = 1
+    return projection
 
 
 def _fill_missing(rows: list, names: set) -> None:
@@ -1035,15 +1101,16 @@ def _shape_stages(query: Query) -> list:
         return []
     if query.functions:
         group_id = None
-        if query.group_by:
-            group_id = {column: f"${column}" for column in query.group_by}
+        keys = {column: _group_key(column) for column in query.group_by or []}
+        if keys:
+            group_id = {key: f"${column}" for column, key in keys.items()}
         group = {"_id": group_id}
         for function in query.functions:
             group[function.alias] = _accumulator(function)
         stages = [{"$group": group}]
         projection = {"_id": 0}
-        for column in query.group_by or []:
-            projection[column] = f"$_id.{column}"
+        for column, key in keys.items():
+            projection[column] = f"$_id.{key}"
         for function in query.functions:
             projection[function.alias] = 1
         for column in query.columns or []:
@@ -1054,6 +1121,10 @@ def _shape_stages(query: Query) -> list:
     for column in query.columns:
         projection[column] = 1
     return [{"$project": projection}]
+
+
+def _group_key(column: str) -> str:
+    return column if "." not in column else column.replace(".", "__")
 
 
 def _accumulator(function):

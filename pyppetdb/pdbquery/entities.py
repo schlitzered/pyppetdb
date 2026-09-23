@@ -297,6 +297,7 @@ FACTS = Entity(
     name="facts",
     collection="nodes",
     element_filter=FACT_ELEMENT_FILTER,
+    field_aliases={"node active": "node_state"},
     fact_pair={"name": "name", "value": "value", "path": "facts"},
     columns=[
         Column("certname", "string", "$id"),
@@ -365,13 +366,14 @@ FACT_CONTENTS = Entity(
     name="fact-contents",
     collection="nodes",
     python_expand="fact_contents",
+    field_aliases={"node active": "node_state"},
     columns=[
         Column("certname", "string", None),
         Column("environment", "string", None),
         Column("name", "string", None),
         Column("path", "path", None),
         Column("value", "json", None),
-        Column("node_state", "string", None, projected=False),
+        Column("node_state", "state", None, projected=False),
     ],
 )
 

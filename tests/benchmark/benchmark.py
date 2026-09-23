@@ -72,12 +72,25 @@ async def seed(target: Target, nodes: int, seed_value: int, concurrency: int) ->
 
     started = time.perf_counter()
     for command, version, builder in workload.COMMANDS:
+        first = 0
+        if command == "replace_catalog" and nodes > 1:
+            await one(0, command, version, builder)
+            await wait_for_resources(target, workload.certname(0))
+            first = 1
         await asyncio.gather(
-            *(one(index, command, version, builder) for index in range(nodes))
+            *(one(index, command, version, builder) for index in range(first, nodes))
         )
         await wait_for_ingest(target, nodes)
     elapsed = time.perf_counter() - started
     return {"seconds": elapsed, "failures": failures, "retries": len(retries)}
+
+
+async def wait_for_resources(target: Target, certname: str, timeout: float = 300.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if await count_matching(target, "resources", ["=", "certname", certname]) > 0:
+            return
+        await asyncio.sleep(1.0)
 
 
 COUNT_ENTITIES = ("nodes", "facts", "resources", "reports", "events")

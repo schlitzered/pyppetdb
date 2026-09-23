@@ -14,6 +14,8 @@
 
 import logging
 import unittest
+
+import pymongo.errors
 from datetime import UTC
 from datetime import datetime
 
@@ -40,6 +42,16 @@ from pyppetdb.pdbquery.ast import Query
 class FakeCursor:
     def __init__(self, docs):
         self._docs = docs
+
+    def max_time_ms(self, _value):
+        return self
+
+    def __aiter__(self):
+        async def generate():
+            for doc in self._docs:
+                yield doc
+
+        return generate()
 
     async def to_list(self, length=None):
         return list(self._docs)
@@ -2199,6 +2211,25 @@ class TestPythonEntityFetch(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(query, {"disabled": True})
 
+    async def test_pinned_names_narrow_the_projection(self):
+        _query, projection = await self.run_query(
+            "fact-contents", ["in", "name", ["array", ["osfamily", "uptime"]]]
+        )
+        self.assertEqual(
+            projection,
+            {"_id": 0, "id": 1, "environment": 1, "disabled": 1,
+             "facts.osfamily": 1, "facts.uptime": 1},
+        )
+        _query, projection = await self.run_query(
+            "fact-paths", ["=", "name", "osfamily"]
+        )
+        self.assertEqual(projection, {"_id": 0, "facts.osfamily": 1})
+        _query, projection = await self.run_query(
+            "fact-contents", ["~", "name", "^os"]
+        )
+        self.assertIn("facts", projection)
+
+
     async def test_value_alone_is_not_derivable(self):
         query, _projection = await self.run_query(
             "fact-contents", ["=", "value", "Debian"]
@@ -2284,5 +2315,83 @@ class TestTimestampConversion(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(rows[0]["catalog_timestamp"])
 
 
+class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
+    def docs(self, count):
+        return [{"id": f"h{index}", "facts": {"a": 1, "b": 2}} for index in range(count)]
+
+    async def test_stops_reading_once_the_page_is_full(self):
+        from pyppetdb.pdbquery import engine as module
+
+        nodes = FakeCollection(docs=self.docs(10))
+        engine = engine_with(nodes)
+        original = module.PYTHON_BATCH_SIZE
+        module.PYTHON_BATCH_SIZE = 1
+        try:
+            rows, total = await engine.run(
+                "fact-contents", None, paging=Paging(limit=3)
+            )
+        finally:
+            module.PYTHON_BATCH_SIZE = original
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(total, 4)
+
+    async def test_include_total_reads_everything(self):
+        nodes = FakeCollection(docs=self.docs(10))
+        engine = engine_with(nodes)
+        rows, total = await engine.run(
+            "fact-contents", None, paging=Paging(limit=3, include_total=True)
+        )
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(total, 20)
+
+    async def test_fact_paths_stay_distinct_across_batches(self):
+        from pyppetdb.pdbquery import engine as module
+
+        nodes = FakeCollection(docs=self.docs(5))
+        engine = engine_with(nodes)
+        original = module.PYTHON_BATCH_SIZE
+        module.PYTHON_BATCH_SIZE = 2
+        try:
+            rows, total = await engine.run("fact-paths", None)
+        finally:
+            module.PYTHON_BATCH_SIZE = original
+        self.assertEqual(total, 2)
+        self.assertEqual(sorted(row["name"] for row in rows), ["a", "b"])
+
+    def test_an_expired_deadline_aborts_the_expansion(self):
+        from pyppetdb.pdbquery.engine import _expand_batch
+        from pyppetdb.pdbquery.engine import expand_fact_contents
+
+        with self.assertRaises(PuppetDBQueryError) as ctx:
+            _expand_batch(expand_fact_contents, self.docs(1), {}, None, 0.0)
+        self.assertEqual(ctx.exception.status_code, 500)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGroupKeysAndSubqueryLimits(unittest.IsolatedAsyncioTestCase):
+    async def test_dotted_group_by_uses_a_safe_group_key(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run(
+            "inventory",
+            ["extract", [["function", "count"], "facts.os.family"], ["group_by", "facts.os.family"]],
+        )
+        pipeline = nodes.pipelines[0]
+        group = [stage for stage in pipeline if "$group" in stage][-1]["$group"]
+        self.assertEqual(group["_id"], {"facts__os__family": "$facts.os.family"})
+        shaped = [stage for stage in pipeline if "$project" in stage][-1]["$project"]
+        self.assertEqual(shaped["facts.os.family"], "$_id.facts__os__family")
+
+    async def test_an_oversized_subquery_answers_400(self):
+        class Exploding(FakeCollection):
+            def aggregate(self, pipeline, **options):
+                raise pymongo.errors.DocumentTooLarge("too large")
+
+        engine = engine_with(Exploding())
+        with self.assertRaises(PuppetDBQueryError) as ctx:
+            await engine.run("nodes", ["=", "certname", "a"])
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("too large", str(ctx.exception))

@@ -65,3 +65,31 @@ def bad_operator_arity(operator: str, supplied: int) -> PuppetDBQueryError:
     return PuppetDBQueryError(
         f"'{operator}' takes at least one argument, but none were supplied"
     )
+
+
+def comparison_not_allowed(field: str) -> PuppetDBQueryError:
+    return PuppetDBQueryError(
+        f"Query operators >,>=,<,<= are not allowed on field {field}"
+    )
+
+
+def incompatible_numeric(value, field: str) -> PuppetDBQueryError:
+    return PuppetDBQueryError(
+        f'Argument "{value}" is incompatible with numeric field "{field}".'
+    )
+
+
+def incompatible_types(value, operator: str) -> PuppetDBQueryError:
+    return PuppetDBQueryError(
+        f'Argument "{value}" and operator "{operator}" have incompatible types.'
+    )
+
+
+def bad_timestamp(value) -> PuppetDBQueryError:
+    return PuppetDBQueryError(f"'{value}' is not a valid timestamp value")
+
+
+def subquery_too_large() -> PuppetDBQueryError:
+    return PuppetDBQueryError(
+        "the subquery result is too large to be evaluated; narrow the subquery"
+    )

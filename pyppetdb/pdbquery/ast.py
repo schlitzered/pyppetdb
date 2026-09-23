@@ -24,6 +24,10 @@ from pydantic import Field
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
 from pyppetdb.pdbquery.errors import bad_arity
 from pyppetdb.pdbquery.errors import bad_operand
+from pyppetdb.pdbquery.errors import bad_timestamp
+from pyppetdb.pdbquery.errors import comparison_not_allowed
+from pyppetdb.pdbquery.errors import incompatible_numeric
+from pyppetdb.pdbquery.errors import incompatible_types
 from pyppetdb.pdbquery.errors import bad_operator_arity
 from pyppetdb.pdbquery.errors import bad_regex
 from pyppetdb.pdbquery.errors import unknown_field
@@ -334,9 +338,9 @@ class FilterCompiler:
                 else "__regex_array__"
             )
             return {path: {operator_key: _regex_array_operand(label, node[2])}}
-        value = self._coerce(
-            column, _check_operand(column, label, operator, node[2]), operator
-        )
+        operand = _check_operand(column, label, operator, node[2])
+        _check_operand_type(column, label, operator, operand)
+        value = self._coerce(column, operand, operator)
         if operator == "=":
             return {path: value}
         return {path: {COMPARISON_OPS[operator]: value}}
@@ -457,6 +461,30 @@ class FilterCompiler:
             except ValueError:
                 return value
         return value
+
+
+COMPARABLE_TYPES = ("integer", "timestamp", "json")
+FACT_VALUE_COLUMNS = ("value", "facts")
+
+
+def _is_number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _check_operand_type(column, label: str, operator: str, value) -> None:
+    if column.type == "timestamp" and isinstance(value, str):
+        if not looks_like_timestamp(value):
+            raise bad_timestamp(value)
+    if operator in COMPARISON_OPS:
+        if column.type not in COMPARABLE_TYPES:
+            raise comparison_not_allowed(label)
+        if column.type == "integer" and not _is_number(value):
+            raise incompatible_types(value, operator)
+        if column.type == "json" and column.name in FACT_VALUE_COLUMNS and not _is_number(value):
+            raise incompatible_types(value, operator)
+        return
+    if operator == "=" and column.type == "integer" and isinstance(value, str):
+        raise incompatible_numeric(value, label)
 
 
 def _check_operand(column, label: str, operator: str, value):

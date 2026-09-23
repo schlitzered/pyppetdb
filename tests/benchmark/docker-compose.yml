@@ -18,7 +18,7 @@ services:
       retries: 20
 
   openvoxdb:
-    image: ghcr.io/openvoxproject/openvoxdb:latest
+    image: ghcr.io/openvoxproject/openvoxdb:8.15.0
     depends_on:
       postgres:
         condition: service_healthy
