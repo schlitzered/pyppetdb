@@ -14,11 +14,11 @@
 
 import asyncio
 from typing import Any
-from uvicorn.protocols.http.h11_impl import H11Protocol
+from uvicorn.protocols.http.httptools_impl import HttpToolsProtocol
 from uvicorn.protocols.websockets.websockets_impl import WebSocketProtocol
 
 
-class ClientCertProtocol(H11Protocol):
+class ClientCertProtocol(HttpToolsProtocol):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._peer_cert_dict = None
@@ -28,14 +28,10 @@ class ClientCertProtocol(H11Protocol):
         ssl_object = transport.get_extra_info("ssl_object")
         self._peer_cert_dict = ssl_object.getpeercert() if ssl_object else None
 
-    def handle_events(self) -> None:
-        if self.scope and isinstance(self.scope, dict):
-            if self._peer_cert_dict and "client_cert_dict" not in self.scope:
-                self.scope["client_cert_dict"] = self._peer_cert_dict
-        super().handle_events()
-        if self.scope and isinstance(self.scope, dict):
-            if self._peer_cert_dict and "client_cert_dict" not in self.scope:
-                self.scope["client_cert_dict"] = self._peer_cert_dict
+    def on_headers_complete(self) -> None:
+        if self._peer_cert_dict and isinstance(self.scope, dict):
+            self.scope["client_cert_dict"] = self._peer_cert_dict
+        super().on_headers_complete()
 
 
 class ClientCertWebSocketsProtocol(WebSocketProtocol):

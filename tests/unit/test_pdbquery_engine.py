@@ -26,8 +26,6 @@ from pyppetdb.pdbquery.engine import build_prefilter_plan
 from pyppetdb.pdbquery.paging import parse_paging
 from pyppetdb.pdbquery.engine import expand_fact_contents
 from pyppetdb.pdbquery.engine import expand_fact_paths
-from pyppetdb.pdbquery.engine import convert_timestamps
-from pyppetdb.pdbquery.engine import output_timestamp_fields
 from pyppetdb.pdbquery import matcher
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import build_facts_index
@@ -127,11 +125,6 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         self.assertIn("latest_report_status", projection)
 
     async def test_missing_columns_are_emitted_as_null(self):
-        nodes = FakeCollection(docs=[{"certname": "a"}])
-        engine = engine_with(nodes)
-        rows, _total = await engine.run("nodes", ["=", "certname", "a"])
-        self.assertIsNone(rows[0]["catalog_timestamp"])
-        self.assertIn("latest_report_status", rows[0])
         engine = engine_with(FakeCollection(docs=[{"certname": "a"}]))
         rows, _total = await engine.run(
             "nodes", ["extract", ["certname"], ["=", "certname", "a"]]
@@ -446,7 +439,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         engine = engine_with(nodes)
         await engine.run("nodes", ["extract", ["certname"], ["=", "certname", "a"]])
         self.assertEqual(
-            nodes.pipelines[0][-1], {"$project": {"_id": 0, "certname": 1}}
+            [s for s in nodes.pipelines[0] if "$project" in s][-1], {"$project": {"_id": 0, "certname": 1}}
         )
 
     async def test_group_by_with_count(self):
@@ -486,7 +479,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             ["=", "title", "t"],
             implicit=[["=", "type", "File"]],
         )
-        match = res.pipelines[0][-1]["$match"]
+        match = [s for s in res.pipelines[0] if "$match" in s][-1]["$match"]
         self.assertEqual(match, {"$and": [{"type": "File"}, {"title": "t"}]})
 
     async def test_fact_names_returns_scalars(self):
@@ -2273,46 +2266,40 @@ class TestPythonEntityFetch(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class TestTimestampConversion(unittest.IsolatedAsyncioTestCase):
-    def test_projected_timestamp_columns_become_iso_z(self):
-        entity = get_entity("nodes")
-        rows = [{"certname": "a", "catalog_timestamp": datetime(2026, 3, 1, 12, 0)}]
-        convert_timestamps(entity, Query(entity="nodes"), rows)
-        self.assertEqual(rows[0]["catalog_timestamp"], "2026-03-01T12:00:00Z")
-        self.assertEqual(rows[0]["certname"], "a")
+class TestRowShape(unittest.IsolatedAsyncioTestCase):
+    async def test_timestamps_stay_datetimes_for_the_serializer(self):
+        stamp = datetime(2026, 3, 1, 12, 0)
+        nodes = FakeCollection(docs=[{"certname": "a", "catalog_timestamp": stamp}])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run("nodes", ["=", "certname", "a"])
+        self.assertIs(rows[0]["catalog_timestamp"], stamp)
 
-    def test_aware_datetimes_keep_a_single_zulu_marker(self):
-        entity = get_entity("nodes")
-        rows = [{"catalog_timestamp": datetime(2026, 3, 1, 12, 0, tzinfo=UTC)}]
-        convert_timestamps(entity, Query(entity="nodes"), rows)
-        self.assertEqual(rows[0]["catalog_timestamp"], "2026-03-01T12:00:00Z")
+    async def test_missing_columns_are_filled_by_the_pipeline(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}])
+        engine = engine_with(nodes)
+        await engine.run("nodes", ["=", "certname", "a"])
+        pipeline = nodes.pipelines[0]
+        fill = pipeline[-1]["$set"]
+        self.assertEqual(fill["catalog_timestamp"], {"$ifNull": ["$catalog_timestamp", None]})
+        self.assertIn("latest_report_status", fill)
+        self.assertNotIn("node_state", fill)
 
-    def test_extract_limits_the_conversion(self):
-        entity = get_entity("nodes")
-        fields = output_timestamp_fields(
-            entity, Query(entity="nodes", columns=["certname", "report_timestamp"])
+    async def test_null_fill_runs_after_match_and_paging(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}])
+        engine = engine_with(nodes)
+        await engine.run(
+            "nodes", ["=", "certname", "a"], paging=Paging(limit=5, offset=2)
         )
-        self.assertEqual(fields, ["report_timestamp"])
+        kinds = [next(iter(stage)) for stage in nodes.pipelines[0]]
+        self.assertEqual(kinds[-1], "$set")
+        self.assertLess(kinds.index("$match", kinds.index("$project")), kinds.index("$set"))
+        self.assertLess(kinds.index("$limit"), kinds.index("$set"))
 
-    def test_entity_without_timestamps_needs_no_work(self):
-        entity = get_entity("resources")
-        self.assertEqual(output_timestamp_fields(entity, Query(entity="resources")), [])
-
-    def test_min_max_alias_is_converted(self):
-        from pyppetdb.pdbquery.ast import Function
-
-        entity = get_entity("reports")
-        query = Query(
-            entity="reports",
-            functions=[Function(name="max", column="end_time", alias="max")],
-        )
-        self.assertEqual(output_timestamp_fields(entity, query), ["max"])
-
-    def test_non_timestamp_values_are_untouched(self):
-        entity = get_entity("nodes")
-        rows = [{"catalog_timestamp": None, "certname": "a"}]
-        convert_timestamps(entity, Query(entity="nodes"), rows)
-        self.assertIsNone(rows[0]["catalog_timestamp"])
+    async def test_aggregates_are_not_null_filled(self):
+        nodes = FakeCollection(docs=[{"count": 1}])
+        engine = engine_with(nodes)
+        await engine.run("nodes", ["extract", [["function", "count"]], ["not", ["=", "certname", "b"]]])
+        self.assertFalse(any("$set" in s for s in nodes.pipelines[0]))
 
 
 class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):

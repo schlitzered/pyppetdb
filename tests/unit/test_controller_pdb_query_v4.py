@@ -419,3 +419,19 @@ class TestApplyLocalPaging(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestJsonRendering(unittest.TestCase):
+    def test_datetimes_render_as_zulu_and_object_ids_as_strings(self):
+        from datetime import UTC, datetime
+        from bson import ObjectId
+        from pyppetdb.controller.pdb.query.v4 import PdbJSONResponse
+
+        oid = ObjectId()
+        body = PdbJSONResponse(
+            content=[{"t": datetime(2026, 3, 1, 12, 0, 0, 123000), "u": datetime(2026, 3, 1, tzinfo=UTC), "o": oid, "ü": "ä"}]
+        ).body
+        self.assertEqual(
+            body,
+            ('[{"t":"2026-03-01T12:00:00.123000Z","u":"2026-03-01T00:00:00Z","o":"%s","ü":"ä"}]' % oid).encode(),
+        )

@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import json
+
+import orjson
 import logging
 import ssl
 from datetime import datetime
@@ -52,15 +54,12 @@ def _encode(value):
     raise TypeError(f"{type(value).__name__} is not JSON serialisable")
 
 
+JSON_OPTIONS = orjson.OPT_UTC_Z | orjson.OPT_NAIVE_UTC
+
+
 class PdbJSONResponse(JSONResponse):
     def render(self, content) -> bytes:
-        return json.dumps(
-            content,
-            ensure_ascii=False,
-            allow_nan=False,
-            default=_encode,
-            separators=(",", ":"),
-        ).encode("utf-8")
+        return orjson.dumps(content, default=_encode, option=JSON_OPTIONS)
 
 
 HOP_HEADERS = (

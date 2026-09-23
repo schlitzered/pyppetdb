@@ -627,6 +627,7 @@ async def main_run(reload: bool = False):
         ssl_cert_reqs=ssl.CERT_OPTIONAL if ssl_enabled else ssl.CERT_NONE,
         http=ClientCertProtocol if ssl_enabled else "auto",
         ws=ClientCertWebSocketsProtocol if ssl_enabled else "auto",
+        loop="uvloop",
     )
 
     if reload:

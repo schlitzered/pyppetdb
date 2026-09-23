@@ -201,7 +201,6 @@ class QueryEngine:
 
         if query.functions and not query.group_by and not rows:
             rows, total = [_empty_aggregate_row(query)], 1
-        rows = convert_timestamps(target, query, rows)
         if target.scalar_result and not query.columns and not query.functions:
             rows = [row.get(target.scalar_result) for row in rows]
         return rows, total
@@ -294,13 +293,13 @@ class QueryEngine:
         pipeline.extend(tail)
         if not early_paging:
             pipeline.extend(_paging_stages(query, sorted_early=bool(early_sort)))
+        if not query.functions:
+            pipeline.extend(_null_fill_stages(selected - filter_only))
         if filter_only:
             pipeline.append({"$unset": sorted(filter_only)})
         rows = await collection.aggregate(
             pipeline, **self.aggregate_options
         ).to_list(length=None)
-        if not query.functions:
-            _fill_missing(rows, selected - filter_only)
         if total is None:
             total = len(rows)
         return rows, total
@@ -430,10 +429,10 @@ def _python_projection(entity, match: dict) -> dict:
     return projection
 
 
-def _fill_missing(rows: list, names: set) -> None:
-    for row in rows:
-        for name in names:
-            row.setdefault(name, None)
+def _null_fill_stages(names: set) -> list:
+    if not names:
+        return []
+    return [{"$set": {name: {"$ifNull": [f"${name}", None]} for name in sorted(names)}}]
 
 
 def _groupable(columns) -> bool:
@@ -1327,44 +1326,3 @@ PYTHON_PROJECTIONS = {
     },
     "fact_paths": {"_id": 0, "facts": 1},
 }
-
-
-def convert_timestamps(entity, query: Query, rows: list) -> list:
-    fields = output_timestamp_fields(entity, query)
-    if not fields:
-        return rows
-    for row in rows:
-        for field in fields:
-            value = row.get(field)
-            if isinstance(value, datetime):
-                row[field] = _iso(value)
-    return rows
-
-
-def output_timestamp_fields(entity, query: Query) -> list:
-    def is_timestamp(name):
-        column = entity.by_name.get(name)
-        return column is not None and column.type == "timestamp"
-
-    if query.functions:
-        names = [name for name in query.group_by or [] if is_timestamp(name)]
-        for function in query.functions:
-            if function.name in ("min", "max") and is_timestamp(function.column):
-                names.append(function.alias)
-        return names
-    if query.columns:
-        return [name for name in query.columns if is_timestamp(name)]
-    return [
-        column.name
-        for column in entity.columns
-        if column.projected and not column.virtual and column.type == "timestamp"
-    ]
-
-
-def _iso(value: datetime) -> str:
-    text = value.isoformat()
-    if text.endswith("+00:00"):
-        return text[:-6] + "Z"
-    if value.tzinfo is None:
-        return text + "Z"
-    return text
