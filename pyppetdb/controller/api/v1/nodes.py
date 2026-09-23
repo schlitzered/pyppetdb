@@ -232,6 +232,7 @@ class ControllerApiV1Nodes:
         node_db = self.crud_nodes.coll.database
         await node_db["nodes_resources"].delete_many({"node_id": node_id})
         await node_db["nodes_edges"].delete_many({"node_id": node_id})
+        await node_db["nodes_events"].delete_many({"node_id": node_id})
         await self.crud_jobs.remove_node_from_jobs(node_id=node_id)
         await self.crud_node_jobs.delete_by_node(node_id=node_id)
 
@@ -393,7 +394,7 @@ class ControllerApiV1Nodes:
                 disabled=disabled,
             )
             node_db = self.crud_nodes.coll.database
-            for name in ("nodes_resources", "nodes_edges"):
+            for name in ("nodes_resources", "nodes_edges", "nodes_events"):
                 await node_db[name].update_many(
                     {"node_id": node_id, "disabled": {"$ne": disabled}},
                     {"$set": {"disabled": disabled}},

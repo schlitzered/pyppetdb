@@ -183,6 +183,28 @@ The AST dialect is supported:
 Unknown fields, unknown operators and malformed paging parameters are answered with
 HTTP 400 and an explanatory message rather than an empty result.
 
+Subqueries are materialised: the inner query runs first, its distinct values (at most
+100,000) become an `$in` on the outer query, and MongoDB serves that from the index.
+A single-column subquery such as `["extract", "certname", ["select_resources", ...]]`
+is answered by a distinct scan when the inner filter is indexable (`type`, `type` plus
+`title`, or `certname` on resources), so it costs one index seek per distinct value
+rather than one per matching resource. A multi-column `in` checks the tuples with a
+computed key and a set lookup, so its cost grows with the page, not with the number of
+tuples. When the inner result exceeds MongoDB's 16 MB command limit the query is
+rejected with HTTP 400 (`subquery result too large`).
+
+Events are stored twice: embedded in the report document, which is what the `reports`
+entity serves, and once per event in the `nodes_events` collection, which serves
+`/events`, `/event-counts` and `/aggregate-event-counts`. The collection is indexed on
+`certname`, `report`, `status`, `latest_report?` and `resource`, each combined with
+`timestamp`, so the usual dashboard queries (events of the latest reports ordered by
+time, failed events, events of one node or report) are index range scans. The counts
+endpoints are aggregated in MongoDB; a query that pins `latest_report? = true` or a
+report hash is answered from a covering index without touching the documents, anything
+else de-duplicates event identities per bucket first. Storing a report therefore costs one extra insert per event plus index
+maintenance; a run with 40 changed resources measured about 20 % lower report
+throughput than the embedded-only model.
+
 **PQL is not supported.** A `query` parameter that is not a JSON array is rejected with
 a 400 explaining that an AST query is required.
 

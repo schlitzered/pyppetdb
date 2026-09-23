@@ -35,6 +35,29 @@ def ingest_state(content_hash=None, has_facts=True, has_catalog=True):
     }
 
 
+STORED_REPORT = {
+    "report": {
+        "hash": "abc",
+        "start_time": None,
+        "end_time": None,
+        "environment": "prod",
+        "configuration_version": "1",
+        "resources": [
+            {
+                "resource_type": "File",
+                "resource_title": "/tmp/x",
+                "file": None,
+                "line": None,
+                "containment_path": ["Stage[main]", "Profile::Base", "File[/tmp/x]"],
+                "events": [
+                    {"status": "success", "timestamp": None, "property": "ensure"}
+                ],
+            }
+        ],
+    }
+}
+
+
 class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -64,7 +87,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_cache.update_placement = AsyncMock()
         self.mock_catalogs.update_placement = AsyncMock()
         self.mock_reports.update_placement = AsyncMock()
-        self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_resources = MagicMock()
         self.mock_resources.replace_for_node = AsyncMock()
         self.mock_resources.set_node_disabled = AsyncMock(return_value=0)
@@ -73,6 +96,11 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_edges.replace_for_node = AsyncMock()
         self.mock_edges.set_node_disabled = AsyncMock(return_value=0)
         self.mock_edges.update_placement = AsyncMock()
+        self.mock_events = MagicMock()
+        self.mock_events.insert_for_report = AsyncMock()
+        self.mock_events.set_latest = AsyncMock()
+        self.mock_events.set_node_disabled = AsyncMock()
+        self.mock_events.update_placement = AsyncMock()
 
         self.queue = IngestQueue(log=self.log, size=100, workers=4)
         self.controller = ControllerPdbCmdV1(
@@ -85,6 +113,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
             crud_nodes_reports=self.mock_reports,
             crud_nodes_resources=self.mock_resources,
             crud_nodes_edges=self.mock_edges,
+            crud_nodes_events=self.mock_events,
             authorize_client_cert=self.mock_auth_cert,
             ingest_queue=self.queue,
         )
@@ -470,7 +499,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
 
     async def test_store_report(self):
         self.mock_nodes.update = AsyncMock()
-        self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
 
         await self._post_report()
@@ -479,9 +508,36 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_reports.create_latest.assert_called_once()
         self.mock_catalogs.drop_created_no_report_ttl.assert_called_once()
 
+    async def test_store_report_writes_the_events_collection(self):
+        self.mock_nodes.update = AsyncMock()
+        self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
+
+        await self._post_report()
+
+        self.mock_events.set_latest.assert_awaited_once_with(
+            node_id="node1", latest=False
+        )
+        docs = self.mock_events.insert_for_report.await_args.args[0]
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["node_id"], "node1")
+        self.assertEqual(docs[0]["report_hash"], "abc")
+        self.assertEqual(docs[0]["containing_class"], "Profile::Base")
+        self.assertTrue(docs[0]["latest"])
+
+    async def test_store_report_that_is_not_latest_keeps_the_latest_flags(self):
+        self.mock_reports.create_latest = AsyncMock(return_value=(False, STORED_REPORT))
+        self.mock_nodes.update = AsyncMock()
+        self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
+
+        await self._post_report()
+
+        self.mock_events.set_latest.assert_not_awaited()
+        docs = self.mock_events.insert_for_report.await_args.args[0]
+        self.assertFalse(docs[0]["latest"])
+
     async def test_store_report_is_discarded_without_a_catalog(self):
         self.mock_nodes.update = AsyncMock()
-        self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(
             return_value=ingest_state(has_catalog=False)
@@ -495,7 +551,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
 
     async def test_store_report_is_discarded_for_an_unknown_node(self):
         self.mock_nodes.update = AsyncMock()
-        self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=None)
 
         await self._post_report()
@@ -575,7 +631,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_groups.reevaluate_node_membership = AsyncMock(return_value=["g1"])
         self.mock_nodes.update = AsyncMock()
         self.mock_reports.update_placement = AsyncMock()
-        self.mock_reports.create_latest = AsyncMock(return_value=True)
+        self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_catalogs.update_placement = AsyncMock()
         self.mock_cache.update_placement = AsyncMock()
 

@@ -16,6 +16,8 @@ import unittest
 from datetime import datetime
 
 from pyppetdb.helpers.puppetdb import catalog_metadata
+from pyppetdb.helpers.puppetdb import build_event_documents
+from pyppetdb.helpers.puppetdb import containing_class
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
 from pyppetdb.helpers.puppetdb import build_facts_index
@@ -477,3 +479,69 @@ class TestCatalogMetadata(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEventDocuments(unittest.TestCase):
+    def test_one_document_per_event_with_report_and_resource_context(self):
+        received = datetime(2026, 1, 1)
+        report = {
+            "hash": "h1",
+            "start_time": received,
+            "end_time": received,
+            "environment": "prod",
+            "configuration_version": "42",
+            "resources": [
+                {
+                    "resource_type": "File",
+                    "resource_title": "/tmp/a",
+                    "file": "site.pp",
+                    "line": 3,
+                    "containment_path": ["Stage[main]", "Profile::Base", "File[/tmp/a]"],
+                    "events": [
+                        {"status": "success", "property": "ensure", "message": "ok"},
+                        {"status": "failure", "property": "mode"},
+                    ],
+                },
+                {"resource_type": "Service", "resource_title": "sshd", "events": []},
+            ],
+        }
+        docs = build_event_documents("node1", {"dc": "a"}, False, received, report, True)
+        self.assertEqual(len(docs), 2)
+        first = docs[0]
+        self.assertEqual(first["node_id"], "node1")
+        self.assertEqual(first["placement"], {"dc": "a"})
+        self.assertEqual(first["report_id"], received)
+        self.assertEqual(first["created"], received)
+        self.assertEqual(first["report_hash"], "h1")
+        self.assertTrue(first["latest"])
+        self.assertEqual(first["resource_type"], "File")
+        self.assertEqual(first["resource_title"], "/tmp/a")
+        self.assertEqual(first["status"], "success")
+        self.assertEqual(first["property"], "ensure")
+        self.assertEqual(first["containing_class"], "Profile::Base")
+        self.assertEqual(first["line"], 3)
+        self.assertEqual(docs[1]["status"], "failure")
+        self.assertIsNone(docs[1]["message"])
+
+    def test_first_flags_mark_the_first_event_per_status(self):
+        received = datetime(2026, 1, 1)
+        resource = {
+            "resource_type": "File",
+            "resource_title": "/tmp/a",
+            "containment_path": ["Stage[main]", "Foo", "File[/tmp/a]"],
+            "events": [
+                {"status": "success", "property": "ensure"},
+                {"status": "success", "property": "mode"},
+                {"status": "failure", "property": "owner"},
+            ],
+        }
+        other = dict(resource, resource_title="/tmp/b", containment_path=["Stage[main]", "Foo", "File[/tmp/b]"])
+        docs = build_event_documents("n", None, False, received, {"resources": [resource, other]}, True)
+        self.assertEqual([d["first_for_resource"] for d in docs], [True, False, True, True, False, True])
+        self.assertEqual([d["first_for_class"] for d in docs], [True, False, True, False, False, False])
+        self.assertEqual([d["first_for_certname"] for d in docs], [True, False, True, False, False, False])
+
+    def test_containing_class_skips_resources_and_empty_steps(self):
+        self.assertEqual(containing_class(["Stage[main]", "Foo", "", "File[x]"]), "Foo")
+        self.assertIsNone(containing_class(["Stage[main]"]))
+        self.assertIsNone(containing_class(None))

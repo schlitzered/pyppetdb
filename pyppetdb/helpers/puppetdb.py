@@ -359,6 +359,75 @@ def build_edge_documents(
     return docs
 
 
+def containing_class(containment_path) -> Optional[str]:
+    classes = [
+        step
+        for step in (containment_path or [])
+        if isinstance(step, str) and step != "" and "[" not in step
+    ]
+    return classes[-1] if classes else None
+
+
+def build_event_documents(
+    node_id: str,
+    placement: Optional[dict],
+    disabled: bool,
+    received: datetime,
+    report: dict,
+    latest: bool,
+) -> list:
+    docs = []
+    seen = set()
+    for resource in report.get("resources") or []:
+        if not isinstance(resource, dict):
+            continue
+        containment = resource.get("containment_path") or []
+        resource_key = (resource.get("resource_type"), resource.get("resource_title"))
+        class_key = containing_class(containment)
+        for event in resource.get("events") or []:
+            status = event.get("status")
+            docs.append(
+                {
+                    "node_id": node_id,
+                    "placement": placement,
+                    "disabled": disabled,
+                    "created": received,
+                    "report_id": received,
+                    "report_hash": report.get("hash"),
+                    "latest": latest,
+                    "first_for_resource": _first(seen, ("resource", resource_key, status)),
+                    "first_for_class": _first(seen, ("class", class_key, status)),
+                    "first_for_certname": _first(seen, ("certname", status)),
+                    "run_start_time": report.get("start_time"),
+                    "run_end_time": report.get("end_time"),
+                    "environment": report.get("environment"),
+                    "configuration_version": report.get("configuration_version"),
+                    "status": event.get("status"),
+                    "timestamp": event.get("timestamp"),
+                    "resource_type": resource.get("resource_type"),
+                    "resource_title": resource.get("resource_title"),
+                    "property": event.get("property"),
+                    "name": event.get("name"),
+                    "new_value": event.get("new_value"),
+                    "old_value": event.get("old_value"),
+                    "message": event.get("message"),
+                    "file": resource.get("file"),
+                    "line": resource.get("line"),
+                    "containment_path": containment,
+                    "containing_class": containing_class(containment),
+                    "corrective_change": event.get("corrective_change"),
+                }
+            )
+    return docs
+
+
+def _first(seen: set, key) -> bool:
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
+
+
 def catalog_payload(data: dict) -> dict:
     resources = normalise_resources(data.get("resources"))
     exported = [resource for resource in resources if resource.get("exported")]

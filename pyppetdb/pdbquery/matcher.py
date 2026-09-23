@@ -59,6 +59,9 @@ def matches(row: dict, query: dict) -> bool:
                 return False
         elif key == "__never__":
             return False
+        elif key == "__tuple_in__":
+            if not _tuple_in(row, condition):
+                return False
         else:
             if not _match_field(get_path(row, key), condition):
                 return False
@@ -94,6 +97,14 @@ def _match_operator(value, operator, operand) -> bool:
     if operator == "$exists":
         return (value is not _MISSING) == bool(operand)
     return False
+
+
+def _tuple_in(row: dict, spec: dict) -> bool:
+    actual = [get_path(row, key) for key in spec["keys"]]
+    return any(
+        all(_equals(value, expected) for value, expected in zip(actual, candidate))
+        for candidate in spec["values"]
+    )
 
 
 def _equals(value, expected) -> bool:

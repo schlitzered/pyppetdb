@@ -32,6 +32,23 @@ class TestNeverMatch(unittest.TestCase):
         )
 
 
+class TestTupleIn(unittest.TestCase):
+    def test_matches_whole_rows_only(self):
+        query = {
+            "__tuple_in__": {
+                "keys": ["certname", "name"],
+                "values": [["a", "os"], ["b", "kernel"]],
+            }
+        }
+        self.assertTrue(matcher.matches({"certname": "a", "name": "os"}, query))
+        self.assertFalse(matcher.matches({"certname": "a", "name": "kernel"}, query))
+
+    def test_missing_columns_match_null(self):
+        query = {"__tuple_in__": {"keys": ["certname", "name"], "values": [["a", None]]}}
+        self.assertTrue(matcher.matches({"certname": "a"}, query))
+        self.assertFalse(matcher.matches({"certname": "a", "name": "os"}, query))
+
+
 class TestRegex(unittest.TestCase):
     def test_non_string_values_do_not_match(self):
         self.assertFalse(matcher.matches({"value": False}, {"value": {"$regex": "^Red"}}))

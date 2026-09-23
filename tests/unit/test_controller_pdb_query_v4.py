@@ -258,20 +258,17 @@ class TestQuerySourceSwitch(unittest.TestCase):
 class TestEventCountsEndpoints(unittest.TestCase):
     def setUp(self):
         self.controller, self.client, _ = build()
-        self.controller.engine.run = AsyncMock(
-            return_value=(
-                [
-                    {
-                        "certname": "a",
-                        "status": "failure",
-                        "resource_type": "File",
-                        "resource_title": "/tmp/x",
-                        "containing_class": "Foo",
-                        "corrective_change": False,
-                    }
-                ],
-                1,
-            )
+        self.controller.engine.group = AsyncMock(
+            return_value=[
+                {
+                    "subject_type": "certname",
+                    "subject": {"title": "a"},
+                    "failures": 1,
+                    "successes": 0,
+                    "noops": 0,
+                    "skips": 0,
+                }
+            ]
         )
 
     def test_summarize_by_is_required(self):
@@ -288,15 +285,39 @@ class TestEventCountsEndpoints(unittest.TestCase):
         self.assertEqual(body[0]["subject"], {"title": "a"})
         self.assertEqual(body[0]["failures"], 1)
 
-    def test_event_counts_fetch_every_event_without_the_page_cap(self):
+    def test_event_counts_are_grouped_in_the_database(self):
         for path in ("/pdb/query/v4/event-counts", "/pdb/query/v4/aggregate-event-counts"):
-            self.controller.engine.run.reset_mock()
-            response = self.client.get(path, params={"summarize_by": "certname"})
+            self.controller.engine.group.reset_mock()
+            response = self.client.get(
+                path, params={"summarize_by": "certname", "count_by": "certname"}
+            )
             self.assertEqual(response.status_code, 200)
-            self.controller.engine.run.assert_awaited_once()
-            kwargs = self.controller.engine.run.await_args.kwargs
-            self.assertIs(kwargs["page_cap"], False)
-            self.assertIsNone(kwargs["paging"])
+            self.controller.engine.group.assert_awaited_once()
+            kwargs = self.controller.engine.group.await_args.kwargs
+            self.assertEqual(kwargs["entity_name"], "events")
+            self.assertEqual(
+                kwargs["stages"], event_counts.summary_stages("certname", "certname")
+            )
+
+    def test_latest_report_queries_use_the_first_flags(self):
+        self.client.get(
+            "/pdb/query/v4/event-counts",
+            params={
+                "summarize_by": "resource",
+                "query": '["=", "latest_report?", true]',
+            },
+        )
+        kwargs = self.controller.engine.group.await_args.kwargs
+        self.assertEqual(kwargs["extra"], {"first_for_resource": "$first_for_resource"})
+        self.assertEqual(kwargs["ast"], ["extract", list(event_counts.SUMMARIZE_COLUMNS), ["=", "latest_report?", True]])
+        self.assertEqual(len(kwargs["stages"]), 3)
+
+    def test_every_summarize_by_is_grouped_separately(self):
+        self.client.get(
+            "/pdb/query/v4/event-counts",
+            params={"summarize_by": "certname,resource"},
+        )
+        self.assertEqual(self.controller.engine.group.await_count, 2)
 
     def test_aggregate_event_counts(self):
         response = self.client.get(
@@ -342,7 +363,7 @@ class TestEventCountsEndpoints(unittest.TestCase):
             },
         )
         self.assertEqual(
-            self.controller.engine.run.await_args.kwargs["ast"],
+            self.controller.engine.group.await_args.kwargs["ast"],
             [
                 "extract",
                 list(event_counts.SUMMARIZE_COLUMNS),
@@ -356,7 +377,7 @@ class TestEventCountsEndpoints(unittest.TestCase):
             params={"summarize_by": "resource"},
         )
         self.assertEqual(
-            self.controller.engine.run.await_args.kwargs["ast"],
+            self.controller.engine.group.await_args.kwargs["ast"],
             ["extract", list(event_counts.SUMMARIZE_COLUMNS)],
         )
 

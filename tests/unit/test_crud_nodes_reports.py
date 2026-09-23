@@ -168,7 +168,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         session = FakeSession()
         self.mock_coll.database.client.start_session = AsyncMock(return_value=session)
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(
@@ -200,7 +200,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         session = FakeSession()
         self.mock_coll.database.client.start_session = AsyncMock(return_value=session)
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(
@@ -221,7 +221,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
             return_value=FakeSession()
         )
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(
@@ -237,7 +237,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
             return_value=FakeSession()
         )
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(
@@ -255,7 +255,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_coll.database.client.start_session = AsyncMock(return_value=session)
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(
@@ -303,7 +303,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
             side_effect=sessions
         )
 
-        latest = await self.crud.create_latest(
+        latest, _stored = await self.crud.create_latest(
             _id=now,
             node_id="node1",
             payload=NodeReportPostInternal(

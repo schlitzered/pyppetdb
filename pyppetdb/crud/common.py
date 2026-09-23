@@ -224,32 +224,23 @@ class CrudMongo(
         try:
             await self.coll.create_indexes([index])
         except pymongo.errors.OperationFailure as e:
-            if e.code == 85:  # IndexOptionsConflict
-                existing_indices = await self.coll.list_indexes().to_list(length=None)
-
-                target_key = index.document.get("key")
-                target_name = index.document.get("name")
-
-                for existing in existing_indices:
-                    ext_key = existing.get("key")
-                    ext_name = existing["name"]
-
-                    if ext_key == target_key and ext_name != target_name:
-                        self.log.info(
-                            f"Dropping index {ext_name} because it has same keys as {target_name} but different name"
-                        )
-                        await self.coll.drop_index(ext_name)
-                        await self.coll.create_indexes([index])
-                        return
-
-                    if ext_name == target_name and ext_key != target_key:
-                        self.log.info(f"Dropping index {ext_name} because keys changed")
-                        await self.coll.drop_index(ext_name)
-                        await self.coll.create_indexes([index])
-                        return
+            if e.code not in (85, 86):
                 raise
-            else:
-                raise
+            existing_indices = await self.coll.list_indexes().to_list(length=None)
+            target_key = list(index.document.get("key").items())
+            target_name = index.document.get("name")
+            for existing in existing_indices:
+                ext_key = list(existing.get("key").items())
+                ext_name = existing["name"]
+                if ext_key == target_key and ext_name != target_name:
+                    self.log.info(
+                        f"Dropping index {ext_name} because it has same keys as {target_name} but different name"
+                    )
+                    await self.coll.drop_index(ext_name)
+                elif ext_name == target_name and ext_key != target_key:
+                    self.log.info(f"Dropping index {ext_name} because keys changed")
+                    await self.coll.drop_index(ext_name)
+            await self.coll.create_indexes([index])
         except Exception as e:
             self.log.error(f"Failed to sync index for {self.resource_type}: {e}")
 

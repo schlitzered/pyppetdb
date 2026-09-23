@@ -133,8 +133,6 @@ class Entity(BaseModel):
         spec = self.element_filter
         if not spec:
             return list(self.stages)
-        if spec.get("nested"):
-            return self._nested_stages(spec, element_cond)
         field = spec["field"]
         source = spec.get("input") or f"${spec['array']}"
         if pinned_keys and spec.get("key_path"):
@@ -174,40 +172,6 @@ class Entity(BaseModel):
                 },
             }
         }
-
-    @staticmethod
-    def _nested_stages(spec, element_cond) -> list:
-        array = spec["array"]
-        nested = spec["nested"]
-        stages = [{"$match": {array: {"$type": "array"}}}]
-        if element_cond:
-            outer = element_cond.get("outer")
-            inner = element_cond.get("inner")
-            kept = {"$ifNull": [f"${array}", []]}
-            if outer is not None:
-                kept = {"$filter": {"input": kept, "as": "item", "cond": outer}}
-            if inner is None:
-                replacement = kept
-            else:
-                filtered = {
-                    "$filter": {
-                        "input": {"$ifNull": [f"$$item.{nested}", []]},
-                        "as": "nested",
-                        "cond": inner,
-                    }
-                }
-                replacement = {
-                    "$map": {
-                        "input": kept,
-                        "as": "item",
-                        "in": {"$mergeObjects": ["$$item", {nested: filtered}]},
-                    }
-                }
-            stages.append({"$addFields": {array: replacement}})
-        stages.append({"$unwind": f"${array}"})
-        stages.append({"$match": {f"{array}.{nested}": {"$type": "array"}}})
-        stages.append({"$unwind": f"${array}.{nested}"})
-        return stages
 
 
 def _child(data, href_parts):
@@ -704,52 +668,30 @@ REPORTS = Entity(
 
 EVENTS = Entity(
     name="events",
-    collection="nodes_reports",
-    element_filter={
-        "array": "report.resources",
-        "nested": "events",
-        "prefix": "report.resources.",
-        "nested_prefix": "report.resources.events.",
-    },
+    collection="nodes_events",
     columns=[
         Column("certname", "string", "$node_id"),
-        Column("report", "string", "$report.hash"),
-        Column("run_start_time", "timestamp", "$report.start_time"),
-        Column("run_end_time", "timestamp", "$report.end_time"),
-        Column("report_receive_time", "timestamp", "$id"),
-        Column("environment", "string", "$report.environment"),
-        Column("status", "string", "$report.resources.events.status"),
-        Column("timestamp", "timestamp", "$report.resources.events.timestamp"),
-        Column("resource_type", "string", "$report.resources.resource_type"),
-        Column("resource_title", "string", "$report.resources.resource_title"),
-        Column("property", "string", "$report.resources.events.property"),
-        Column("name", "string", "$report.resources.events.name"),
-        Column("new_value", "json", "$report.resources.events.new_value"),
-        Column("old_value", "json", "$report.resources.events.old_value"),
-        Column("message", "string", "$report.resources.events.message"),
-        Column("file", "string", "$report.resources.file"),
-        Column("line", "integer", "$report.resources.line"),
-        Column(
-            "containment_path",
-            "array",
-            {"$ifNull": ["$report.resources.containment_path", []]},
-        ),
-        Column(
-            "containing_class",
-            "string",
-            _containing_class("$report.resources.containment_path"),
-        ),
-        Column(
-            "configuration_version",
-            "string",
-            "$report.configuration_version",
-        ),
-        Column(
-            "corrective_change",
-            "boolean",
-            "$report.resources.events.corrective_change",
-        ),
-        Column("latest_report?", "boolean", "$report.latest", projected=False),
+        Column("report", "string", "$report_hash"),
+        Column("run_start_time", "timestamp", "$run_start_time"),
+        Column("run_end_time", "timestamp", "$run_end_time"),
+        Column("report_receive_time", "timestamp", "$report_id"),
+        Column("environment", "string", "$environment"),
+        Column("status", "string", "$status"),
+        Column("timestamp", "timestamp", "$timestamp"),
+        Column("resource_type", "string", "$resource_type"),
+        Column("resource_title", "string", "$resource_title"),
+        Column("property", "string", "$property"),
+        Column("name", "string", "$name"),
+        Column("new_value", "json", "$new_value"),
+        Column("old_value", "json", "$old_value"),
+        Column("message", "string", "$message"),
+        Column("file", "string", "$file"),
+        Column("line", "integer", "$line"),
+        Column("containment_path", "array", "$containment_path"),
+        Column("containing_class", "string", "$containing_class"),
+        Column("configuration_version", "string", "$configuration_version"),
+        Column("corrective_change", "boolean", "$corrective_change"),
+        Column("latest_report?", "boolean", "$latest", projected=False),
         Column("node_state", "state", _node_state(), projected=False),
     ],
 )
@@ -974,23 +916,27 @@ PREFILTERS = {
     "events": {
         "node_state": ("disabled", "node_state"),
         "certname": "node_id",
-        "report": "report.hash",
-        "environment": "report.environment",
-        "run_start_time": "report.start_time",
-        "run_end_time": "report.end_time",
-        "report_receive_time": "id",
-        "status": "report.resources.events.status",
-        "timestamp": "report.resources.events.timestamp",
-        "property": "report.resources.events.property",
-        "name": "report.resources.events.name",
-        "new_value": "report.resources.events.new_value",
-        "old_value": "report.resources.events.old_value",
-        "message": "report.resources.events.message",
-        "resource_type": "report.resources.resource_type",
-        "resource_title": "report.resources.resource_title",
-        "file": "report.resources.file",
-        "line": "report.resources.line",
-        "latest_report?": "report.latest",
+        "report": "report_hash",
+        "environment": "environment",
+        "run_start_time": "run_start_time",
+        "run_end_time": "run_end_time",
+        "report_receive_time": "report_id",
+        "status": "status",
+        "timestamp": "timestamp",
+        "property": "property",
+        "name": "name",
+        "new_value": "new_value",
+        "old_value": "old_value",
+        "message": "message",
+        "resource_type": "resource_type",
+        "resource_title": "resource_title",
+        "file": "file",
+        "line": "line",
+        "containment_path": ("containment_path", "path", []),
+        "containing_class": "containing_class",
+        "configuration_version": "configuration_version",
+        "corrective_change": "corrective_change",
+        "latest_report?": "latest",
     },
     "environments": {
         "name": "environment",

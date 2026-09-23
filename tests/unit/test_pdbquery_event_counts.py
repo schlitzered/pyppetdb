@@ -17,33 +17,6 @@ import unittest
 from pyppetdb.pdbquery import event_counts
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
 
-ROWS = [
-    {
-        "certname": "a",
-        "status": "success",
-        "resource_type": "File",
-        "resource_title": "/tmp/x",
-        "containing_class": "Foo",
-        "corrective_change": False,
-    },
-    {
-        "certname": "a",
-        "status": "failure",
-        "resource_type": "File",
-        "resource_title": "/tmp/y",
-        "containing_class": "Foo",
-        "corrective_change": True,
-    },
-    {
-        "certname": "b",
-        "status": "skipped",
-        "resource_type": "Exec",
-        "resource_title": "run",
-        "containing_class": "Bar",
-        "corrective_change": False,
-    },
-]
-
 
 class TestParams(unittest.TestCase):
     def test_summarize_by_required(self):
@@ -134,89 +107,185 @@ class TestExtractColumnsQuery(unittest.TestCase):
         ):
             self.assertEqual(event_counts.extract_columns_query(ast), ast)
 
-    def test_columns_cover_everything_summarize_reads(self):
-        rows = [
-            {field: row.get(field) for field in event_counts.SUMMARIZE_COLUMNS}
-            for row in ROWS
-        ]
+    def test_stages_only_read_projected_columns(self):
         for summarize_by in event_counts.SUMMARIZE_BY:
             for count_by in event_counts.COUNT_BY:
-                self.assertEqual(
-                    event_counts.summarize(rows, summarize_by, count_by),
-                    event_counts.summarize(ROWS, summarize_by, count_by),
+                stages = event_counts.summary_stages(summarize_by, count_by)
+                referenced = {
+                    value.lstrip("$") for value in stages[0]["$group"]["_id"].values()
+                }
+                self.assertTrue(
+                    referenced <= set(event_counts.SUMMARIZE_COLUMNS),
+                    msg=(summarize_by, count_by, referenced),
                 )
 
 
-class TestSummarize(unittest.TestCase):
-    def test_by_certname(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
-        by_subject = {row["subject"]["title"]: row for row in counts}
-        self.assertEqual(by_subject["a"]["successes"], 1)
-        self.assertEqual(by_subject["a"]["failures"], 1)
-        self.assertEqual(by_subject["b"]["skips"], 1)
+COUNTS = [
+    {
+        "subject_type": "certname",
+        "subject": {"title": "a"},
+        "failures": 1,
+        "successes": 1,
+        "noops": 0,
+        "skips": 0,
+    },
+    {
+        "subject_type": "certname",
+        "subject": {"title": "b"},
+        "failures": 0,
+        "successes": 0,
+        "noops": 0,
+        "skips": 1,
+    },
+]
 
-    def test_only_the_upstream_fields_are_emitted(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
-        row = next(item for item in counts if item["subject"]["title"] == "a")
+
+class TestSummaryStages(unittest.TestCase):
+    def test_distinct_identities_are_counted_per_bucket_and_status(self):
+        stages = event_counts.summary_stages("certname", "resource")
         self.assertEqual(
-            set(row), {"subject_type", "subject", "failures", "successes", "noops", "skips"}
+            stages[0]["$group"]["_id"],
+            {
+                "certname": "$certname",
+                "status": "$status",
+                "by_certname": "$certname",
+                "by_resource_type": "$resource_type",
+                "by_resource_title": "$resource_title",
+            },
+        )
+        second = stages[1]["$group"]
+        self.assertEqual(second["_id"], {"certname": "$_id.certname"})
+        self.assertEqual(
+            second["failures"],
+            {"$sum": {"$cond": [{"$eq": ["$_id.status", "failure"]}, 1, 0]}},
+        )
+        self.assertEqual(
+            set(second) - {"_id"}, {"failures", "successes", "noops", "skips"}
         )
 
-    def test_by_resource(self):
-        counts = event_counts.summarize(ROWS, "resource", "resource")
-        subjects = {(row["subject"]["type"], row["subject"]["title"]) for row in counts}
-        self.assertIn(("File", "/tmp/x"), subjects)
-        self.assertIn(("Exec", "run"), subjects)
+    def test_count_by_certname_ignores_the_resource(self):
+        stages = event_counts.summary_stages("certname", "certname")
+        self.assertEqual(
+            stages[0]["$group"]["_id"],
+            {"certname": "$certname", "status": "$status", "by_certname": "$certname"},
+        )
 
-    def test_count_by_certname_deduplicates(self):
-        rows = ROWS + [dict(ROWS[0], resource_title="/tmp/z")]
-        counts = event_counts.summarize(rows, "certname", "certname")
-        row = next(item for item in counts if item["subject"]["title"] == "a")
-        self.assertEqual(row["successes"], 1)
+    def test_only_the_upstream_fields_are_emitted(self):
+        project = event_counts.summary_stages("certname", "resource")[2]["$project"]
+        self.assertEqual(
+            set(project) - {"_id"},
+            {"subject_type", "subject", "failures", "successes", "noops", "skips"},
+        )
+        self.assertEqual(project["subject_type"], {"$literal": "certname"})
+        self.assertEqual(project["subject"], {"title": {"$ifNull": ["$_id.certname", None]}})
 
+    def test_by_resource_subject_has_type_and_title(self):
+        stages = event_counts.summary_stages("resource", "resource")
+        self.assertEqual(
+            stages[1]["$group"]["_id"],
+            {"resource_type": "$_id.resource_type", "resource_title": "$_id.resource_title"},
+        )
+        self.assertEqual(
+            stages[2]["$project"]["subject"],
+            {
+                "type": {"$ifNull": ["$_id.resource_type", None]},
+                "title": {"$ifNull": ["$_id.resource_title", None]},
+            },
+        )
+
+    def test_by_containing_class(self):
+        stages = event_counts.summary_stages("containing_class", "resource")
+        self.assertEqual(
+            stages[2]["$project"]["subject"],
+            {"title": {"$ifNull": ["$_id.containing_class", None]}},
+        )
+
+
+class TestSingleReportFastPath(unittest.TestCase):
+    def test_detects_latest_report_and_report_hash_conjuncts(self):
+        self.assertTrue(event_counts.single_report_per_node(["=", "latest_report?", True]))
+        self.assertTrue(event_counts.single_report_per_node(["=", "report", "abc"]))
+        self.assertTrue(
+            event_counts.single_report_per_node(
+                ["and", ["=", "status", "failure"], ["=", "latest_report?", True]]
+            )
+        )
+        self.assertFalse(event_counts.single_report_per_node(["=", "latest_report?", False]))
+        self.assertFalse(
+            event_counts.single_report_per_node(["or", ["=", "latest_report?", True], ["=", "status", "noop"]])
+        )
+        self.assertFalse(event_counts.single_report_per_node(["=", "certname", "a"]))
+        self.assertFalse(event_counts.single_report_per_node(None))
+
+    def test_single_group_counts_first_events_only(self):
+        stages = event_counts.summary_stages("containing_class", "resource", ["=", "latest_report?", True])
+        self.assertEqual(len(stages), 3)
+        first = stages[0]["$group"]
+        self.assertEqual(
+            first["_id"], {"containing_class": "$containing_class", "status": "$status"}
+        )
+        self.assertEqual(
+            first["n"], {"$sum": {"$cond": [{"$eq": ["$first_for_resource", True]}, 1, 0]}}
+        )
+        second = stages[1]["$group"]
+        self.assertEqual(second["_id"], {"containing_class": "$_id.containing_class"})
+        self.assertEqual(
+            second["failures"],
+            {"$sum": {"$cond": [{"$eq": ["$_id.status", "failure"]}, "$n", 0]}},
+        )
+
+    def test_flag_follows_count_by(self):
+        self.assertEqual(event_counts._first_flag("certname", "certname"), "first_for_certname")
+        self.assertEqual(event_counts._first_flag("containing_class", "certname"), "first_for_class")
+        self.assertEqual(event_counts._first_flag("resource", "certname"), "first_for_resource")
+        self.assertEqual(event_counts._first_flag("containing_class", "resource"), "first_for_resource")
+
+    def test_summary_projection_adds_the_flag_only_on_the_fast_path(self):
+        self.assertEqual(event_counts.summary_projection("certname", "resource", None), {})
+        self.assertEqual(
+            event_counts.summary_projection("containing_class", "certname", ["=", "latest_report?", True]),
+            {"first_for_class": "$first_for_class"},
+        )
+
+
+class TestCountsFilter(unittest.TestCase):
     def test_counts_filter(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
-        filtered = event_counts.apply_counts_filter(counts, [">", "failures", 0])
+        filtered = event_counts.apply_counts_filter(COUNTS, [">", "failures", 0])
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0]["subject"]["title"], "a")
 
     def test_counts_filter_unknown_field(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
         with self.assertRaises(PuppetDBQueryError):
-            event_counts.apply_counts_filter(counts, ["=", "bogus", 1])
+            event_counts.apply_counts_filter(COUNTS, ["=", "bogus", 1])
 
     def test_counts_filter_bad_shape_is_a_query_error(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
         for counts_filter in (
             ["not"],
             [">", "failures", "1"],
             ["nope", "failures", 1],
         ):
             with self.assertRaises(PuppetDBQueryError, msg=counts_filter):
-                event_counts.apply_counts_filter(counts, counts_filter)
+                event_counts.apply_counts_filter(COUNTS, counts_filter)
 
     def test_counts_filter_nested(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
         filtered = event_counts.apply_counts_filter(
-            counts,
+            COUNTS,
             ["and", ["not", [">", "failures", 0]], ["=", "skips", 1]],
         )
         self.assertEqual([row["subject"]["title"] for row in filtered], ["b"])
 
     def test_counts_filter_on_a_field_summarize_never_emits(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
         self.assertEqual(
-            event_counts.apply_counts_filter(counts, ["=", "corrective_noops", 0]),
-            counts,
+            event_counts.apply_counts_filter(COUNTS, ["=", "corrective_noops", 0]),
+            COUNTS,
         )
         self.assertEqual(
-            event_counts.apply_counts_filter(counts, [">", "corrective_noops", 0]),
+            event_counts.apply_counts_filter(COUNTS, [">", "corrective_noops", 0]),
             [],
         )
 
     def test_aggregate(self):
-        counts = event_counts.summarize(ROWS, "certname", "resource")
-        totals = event_counts.aggregate(counts)
+        totals = event_counts.aggregate(COUNTS)
         self.assertEqual(totals["total"], 2)
         self.assertEqual(totals["failures"], 1)
         self.assertEqual(totals["skips"], 1)

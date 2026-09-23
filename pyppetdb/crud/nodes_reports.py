@@ -312,7 +312,7 @@ class CrudNodesReports(CrudMongo):
         _id: datetime,
         node_id: str,
         payload: NodeReportPostInternal,
-    ) -> bool:
+    ) -> tuple:
         data = payload.model_dump()
         data = self._secret_manager.redact(data)
         data["id"] = _id
@@ -320,10 +320,11 @@ class CrudNodesReports(CrudMongo):
         data["disabled"] = False
         data["_version"] = 1
         try:
-            return await self._create_latest_transactional(
+            latest = await self._create_latest_transactional(
                 data=data,
                 node_id=node_id,
             )
+            return latest, data
         except pymongo.errors.DuplicateKeyError:
             raise DuplicateResource
         except pymongo.errors.ConnectionFailure as err:

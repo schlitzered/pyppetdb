@@ -138,6 +138,7 @@ async def lifespan(app: FastAPI):
         crud_nodes_reports=container.crud_nodes_reports,
         crud_nodes_resources=container.crud_nodes_resources,
         crud_nodes_edges=container.crud_nodes_edges,
+        crud_nodes_events=container.crud_nodes_events,
         crud_nodes_secrets_redactor=container.crud_nodes_secrets_redactor,
         crud_pyppetdb_nodes=container.crud_pyppetdb_nodes,
         crud_teams=container.crud_teams,

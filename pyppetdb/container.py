@@ -37,6 +37,7 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_resources import CrudNodesResources
 from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -207,6 +208,14 @@ class AppContainer:
                 config=config,
                 log=log,
                 coll=mongo_db["nodes_edges"],
+            )
+        )
+
+        self.crud_nodes_events = self.crud_manager.register(
+            crud=CrudNodesEvents(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_events"],
             )
         )
 

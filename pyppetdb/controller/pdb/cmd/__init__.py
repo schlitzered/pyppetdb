@@ -27,6 +27,7 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_resources import CrudNodesResources
 from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 
 
 class ControllerPdbCmd:
@@ -41,6 +42,7 @@ class ControllerPdbCmd:
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_resources: CrudNodesResources,
         crud_nodes_edges: CrudNodesEdges,
+        crud_nodes_events: CrudNodesEvents,
         authorize_client_cert: AuthorizeClientCert,
         ingest_queue: IngestQueue,
     ):
@@ -58,6 +60,7 @@ class ControllerPdbCmd:
                 crud_nodes_reports=crud_nodes_reports,
                 crud_nodes_resources=crud_nodes_resources,
                 crud_nodes_edges=crud_nodes_edges,
+                crud_nodes_events=crud_nodes_events,
                 authorize_client_cert=authorize_client_cert,
                 ingest_queue=ingest_queue,
             ).router

@@ -46,6 +46,7 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_resources import CrudNodesResources
 from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
@@ -83,6 +84,7 @@ class Controller:
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_resources: CrudNodesResources,
         crud_nodes_edges: CrudNodesEdges,
+        crud_nodes_events: CrudNodesEvents,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
         crud_pyppetdb_nodes: CrudPyppetDBNodes,
         crud_oauth: dict[str, CrudOAuth],
@@ -158,6 +160,7 @@ class Controller:
             crud_nodes_reports=crud_nodes_reports,
             crud_nodes_resources=crud_nodes_resources,
             crud_nodes_edges=crud_nodes_edges,
+            crud_nodes_events=crud_nodes_events,
             authorize_client_cert=authorize_client_cert_pdb,
             ingest_queue=ingest_queue,
         )

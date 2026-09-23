@@ -28,6 +28,7 @@ from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
 from pyppetdb.pdbquery import matcher
 from pyppetdb.pdbquery.ast import FilterCompiler
+from pyppetdb.pdbquery.ast import TUPLE_IN
 from pyppetdb.pdbquery.ast import check_depth
 from pyppetdb.pdbquery.ast import Query
 from pyppetdb.pdbquery.ast import parse_query
@@ -40,6 +41,8 @@ from pyppetdb.pdbquery.errors import unknown_field
 from pyppetdb.pdbquery.entities import _UNSET
 
 SUBQUERY_LIMIT = 100000
+DISTINCT_TYPES = ("string", "integer", "boolean", "timestamp")
+TUPLE_FIELD_PREFIX = "__tuple_"
 
 DEFAULT_FACTS_INDEX = FactsIndexSpec()
 
@@ -130,16 +133,32 @@ class QueryEngine:
         paging=None,
         implicit: Optional[list] = None,
         timeout: Optional[int] = None,
-        page_cap: bool = True,
     ):
+        return await self._guarded(
+            ast, timeout, lambda: self._run(entity_name, ast, paging, implicit)
+        )
+
+    async def group(
+        self,
+        entity_name: str,
+        ast,
+        stages: list,
+        extra: Optional[dict] = None,
+        timeout: Optional[int] = None,
+    ):
+        return await self._guarded(
+            ast, timeout, lambda: self._group(entity_name, ast, stages, extra)
+        )
+
+    async def _guarded(self, ast, timeout: Optional[int], work):
         check_depth(ast, self._max_query_depth, self._max_subquery_depth)
         seconds = self.effective_timeout(timeout)
         token = _query_timeout.set(seconds)
         try:
             if not seconds:
-                return await self._run(entity_name, ast, paging, implicit, page_cap)
+                return await work()
             async with asyncio.timeout(seconds):
-                return await self._run(entity_name, ast, paging, implicit, page_cap)
+                return await work()
         except (TimeoutError, pymongo.errors.ExecutionTimeout):
             raise PuppetDBQueryError(
                 f"query exceeded the {seconds}s timeout", status_code=500
@@ -169,7 +188,6 @@ class QueryEngine:
         ast,
         paging=None,
         implicit: Optional[list] = None,
-        page_cap: bool = True,
     ):
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -180,8 +198,7 @@ class QueryEngine:
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
-        if page_cap:
-            self._apply_page_cap(query)
+        self._apply_page_cap(query)
 
         if _is_distinct_query(target, query):
             return await self._run_distinct(target, query)
@@ -205,6 +222,62 @@ class QueryEngine:
             rows = [row.get(target.scalar_result) for row in rows]
         return rows, total
 
+    async def _group(
+        self, entity_name: str, ast, stages: list, extra: Optional[dict] = None
+    ) -> list:
+        entity = self.entity(entity_name)
+        query = parse_query(entity.name, ast, ENTITIES)
+        target = self.entity(query.entity)
+        if target.python_expand:
+            raise PuppetDBQueryError(
+                f"{target.name} cannot be grouped in the database", status_code=500
+            )
+        self._check_columns(target, query)
+        compiler = FilterCompiler(target, engine=self)
+        match = await compiler.compile(query.filter)
+        if _is_never(match):
+            return []
+        head, _prefilter, exact, element_cond, pinned = self._pipeline_head(
+            target, match
+        )
+        pipeline = list(head)
+        rows_exact = (
+            exact
+            and element_cond is None
+            and pinned is None
+            and _document_level(target, match)
+        )
+        rewritten = _rewrite_to_storage(target, stages) if rows_exact else None
+        if rewritten is not None:
+            pipeline.extend(rewritten)
+        else:
+            selected, _filter_only = projection_plan(target, query, match)
+            pipeline.append(
+                {"$project": {**build_projection(target, selected), **(extra or {})}}
+            )
+            if match:
+                tuple_fields = {}
+                condition = _mongo_safe(match, tuple_fields)
+                if tuple_fields:
+                    pipeline.append({"$addFields": tuple_fields})
+                pipeline.append({"$match": condition})
+            pipeline.extend(stages)
+        return await self.collection(target.collection).aggregate(
+            pipeline, **self.aggregate_options
+        ).to_list(length=None)
+
+    def _pipeline_head(self, entity, match: dict):
+        prefilter, exact = (
+            build_prefilter_plan(entity, match, self._facts_index)
+            if match
+            else ({}, True)
+        )
+        head = [{"$match": prefilter}] if prefilter else []
+        element_cond = build_element_filter(entity, match) if match else None
+        pinned = build_pinned_keys(entity, match) if match else None
+        head.extend(entity.build_stages(element_cond, pinned))
+        return head, prefilter, exact, element_cond, pinned
+
     async def select(self, entity_name: str, columns: list, ast) -> list:
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -220,9 +293,11 @@ class QueryEngine:
         if target.python_expand:
             rows, _total = await self._run_python(target, query, match)
         else:
-            rows, _total = await self._run_mongo(
-                target, query, match, distinct=True
-            )
+            rows = await self._select_distinct(target, query, match)
+            if rows is None:
+                rows, _total = await self._run_mongo(
+                    target, query, match, distinct=True
+                )
         if len(rows) >= query.limit:
             self.log.warning(
                 f"subquery on {target.name} hit the {query.limit} row limit, "
@@ -231,6 +306,41 @@ class QueryEngine:
         return _distinct_tuples(
             [tuple(row.get(column) for column in columns) for row in rows]
         )
+
+    async def _select_distinct(self, entity, query: Query, match: dict):
+        if not entity.document_rows or len(query.columns) != 1:
+            return None
+        name = query.columns[0]
+        column = entity.by_name.get(name)
+        path = _storage_path(entity, name)
+        if column is None or path is None or column.type not in DISTINCT_TYPES:
+            return None
+        prefilter, exact = (
+            build_prefilter_plan(entity, match, self._facts_index)
+            if match
+            else ({}, True)
+        )
+        if not exact:
+            return None
+        clauses = [stage["$match"] for stage in entity.stages]
+        if prefilter:
+            clauses.append(prefilter)
+        pipeline = []
+        if clauses:
+            pipeline.append(
+                {"$match": clauses[0] if len(clauses) == 1 else {"$and": clauses}}
+            )
+        pipeline.extend(
+            [
+                {"$group": {"_id": f"${path}"}},
+                {"$match": {"_id": {"$ne": None}}},
+                {"$limit": query.limit},
+            ]
+        )
+        rows = await self.collection(entity.collection).aggregate(
+            pipeline, **self.aggregate_options
+        ).to_list(length=None)
+        return [{name: row["_id"]} for row in rows]
 
     async def _run_mongo(
         self,
@@ -242,18 +352,18 @@ class QueryEngine:
     ):
         if _is_never(match):
             return [], 0
-        head = []
-        prefilter, exact = (
-            build_prefilter_plan(entity, match, self._facts_index)
-            if match
-            else ({}, True)
+        head, prefilter, exact, element_cond, pinned = self._pipeline_head(
+            entity, match
         )
-        if prefilter:
-            head.append({"$match": prefilter})
-        element_cond = build_element_filter(entity, match) if match else None
-        pinned = build_pinned_keys(entity, match) if match else None
-        head.extend(entity.build_stages(element_cond, pinned))
+        rows_exact = (
+            exact
+            and element_cond is None
+            and pinned is None
+            and _document_level(entity, match)
+        )
         early_sort = build_early_sort(entity, query)
+        if early_sort is None and rows_exact and not query.functions and not distinct:
+            early_sort = build_early_sort(entity, query, document_rows_only=False)
         if early_sort:
             head.append({"$sort": early_sort})
 
@@ -268,7 +378,12 @@ class QueryEngine:
         selected, filter_only = projection_plan(entity, query, match)
         tail = [{"$project": build_projection(entity, selected)}]
         if match:
-            tail.append({"$match": _mongo_safe(match)})
+            tuple_fields = {}
+            condition = _mongo_safe(match, tuple_fields)
+            if tuple_fields:
+                tail.append({"$addFields": tuple_fields})
+                filter_only = filter_only | set(tuple_fields)
+            tail.append({"$match": condition})
         tail.extend(_shape_stages(query))
         distinct = distinct and _groupable(query.columns)
         if distinct:
@@ -283,7 +398,7 @@ class QueryEngine:
 
         early_paging = (
             bool(early_sort)
-            and not match
+            and rows_exact
             and not query.functions
             and not distinct
         )
@@ -321,7 +436,11 @@ class QueryEngine:
         if needed:
             pipeline.append({"$project": build_projection(entity, needed)})
         if match:
-            pipeline.append({"$match": _mongo_safe(match)})
+            tuple_fields = {}
+            condition = _mongo_safe(match, tuple_fields)
+            if tuple_fields:
+                pipeline.append({"$addFields": tuple_fields})
+            pipeline.append({"$match": condition})
         pipeline.append({"$count": "count"})
         counted = await collection.aggregate(
             pipeline, **self.aggregate_options
@@ -512,8 +631,10 @@ def build_projection(entity, selected) -> dict:
     return projection
 
 
-def build_early_sort(entity, query: Query):
-    if not query.order_by or query.functions or not entity.document_rows:
+def build_early_sort(entity, query: Query, document_rows_only: bool = True):
+    if not query.order_by or query.functions:
+        return None
+    if document_rows_only and not entity.document_rows:
         return None
     keys = {}
     for column_name, order in query.order_by:
@@ -524,6 +645,55 @@ def build_early_sort(entity, query: Query):
     if len(keys) != len(query.order_by):
         return None
     return keys
+
+
+def _rewrite_to_storage(entity, stages: list):
+    paths = {}
+    for column in entity.columns:
+        path = _storage_path(entity, column.name)
+        if path is not None:
+            paths[column.name] = path
+    names = {column.name for column in entity.columns}
+
+    def rewrite(node):
+        if isinstance(node, dict):
+            return {key: rewrite(value) for key, value in node.items()}
+        if isinstance(node, list):
+            return [rewrite(item) for item in node]
+        if isinstance(node, str) and node.startswith("$") and not node.startswith("$$"):
+            head, _sep, rest = node[1:].partition(".")
+            if head in paths:
+                return "$" + paths[head] + (f".{rest}" if rest else "")
+            if head in names:
+                raise _NotRewritable()
+        return node
+
+    try:
+        return rewrite(stages)
+    except _NotRewritable:
+        return None
+
+
+class _NotRewritable(Exception):
+    pass
+
+
+def _document_level(entity, match: dict) -> bool:
+    if not match:
+        return True
+    spec = entity.element_filter or {}
+    prefixes = [
+        prefix
+        for prefix in (spec.get("prefix"), spec.get("field") and f"{spec['field']}.")
+        if prefix
+    ]
+    names = set()
+    _collect_match_columns(match, names)
+    for name in names:
+        path = _storage_path(entity, name.split(".", 1)[0])
+        if path is None or any(path.startswith(prefix) for prefix in prefixes):
+            return False
+    return True
 
 
 def _storage_path(entity, column_name: str) -> Optional[str]:
@@ -570,6 +740,8 @@ def _collect_match_columns(node, into: set) -> None:
         if key in ("$and", "$or", "$nor"):
             for child in value:
                 _collect_match_columns(child, into)
+        elif key == TUPLE_IN:
+            into.update(value["keys"])
         elif not key.startswith("$") and not key.startswith("__"):
             into.add(key)
 
@@ -627,7 +799,7 @@ def _prefilter_node(entity, node, facts_index) -> tuple:
                 exact = exact and branches_exact
             else:
                 exact = False
-        elif key in ("$nor", "__never__"):
+        elif key in ("$nor", "__never__", TUPLE_IN):
             exact = False
         else:
             leaf, leaf_exact = _prefilter_leaf(entity, key, value, facts_index)
@@ -861,7 +1033,7 @@ def _pinned_node(node, column_name: str):
                 union |= found
             if union:
                 pinned = union if pinned is None else pinned & union
-        elif key in ("$nor", "__never__"):
+        elif key in ("$nor", "__never__", TUPLE_IN):
             return None
         elif key == column_name:
             found = _pinned_leaf(value)
@@ -885,45 +1057,23 @@ def build_element_filter(entity, match: dict):
     spec = entity.element_filter
     if not spec:
         return None
-    if not spec.get("nested"):
-        return _element_node(entity, spec, match)
-    outer = _element_node(entity, spec, match, level="outer")
-    inner = _element_node(entity, spec, match, level="inner")
-    if outer is None and inner is None:
-        return None
-    if inner is not None:
-        present = {
-            "$gt": [
-                {
-                    "$size": {
-                        "$filter": {
-                            "input": {"$ifNull": ["$$item.events", []]},
-                            "as": "nested",
-                            "cond": inner,
-                        }
-                    }
-                },
-                0,
-            ]
-        }
-        outer = present if outer is None else {"$and": [outer, present]}
-    return {"outer": outer, "inner": inner}
+    return _element_node(entity, spec, match)
 
 
-def _element_node(entity, spec, node, level=None):
+def _element_node(entity, spec, node):
     if not isinstance(node, dict) or not node:
         return None
     parts = []
     for key, value in node.items():
         if key == "$and":
             for child in value:
-                derived = _element_node(entity, spec, child, level)
+                derived = _element_node(entity, spec, child)
                 if derived is not None:
                     parts.append(derived)
         elif key == "$or":
             branches = []
             for child in value:
-                derived = _element_node(entity, spec, child, level)
+                derived = _element_node(entity, spec, child)
                 if derived is None:
                     branches = []
                     break
@@ -932,10 +1082,10 @@ def _element_node(entity, spec, node, level=None):
                 parts.append(
                     branches[0] if len(branches) == 1 else {"$or": branches}
                 )
-        elif key in ("$nor", "__never__"):
+        elif key in ("$nor", "__never__", TUPLE_IN):
             continue
         else:
-            leaf = _element_leaf(entity, spec, key, value, level)
+            leaf = _element_leaf(entity, spec, key, value)
             if leaf is not None:
                 parts.append(leaf)
     if not parts:
@@ -943,7 +1093,7 @@ def _element_node(entity, spec, node, level=None):
     return parts[0] if len(parts) == 1 else {"$and": parts}
 
 
-def _element_leaf(entity, spec, key: str, condition, level=None):
+def _element_leaf(entity, spec, key: str, condition):
     column = entity.by_name.get(key)
     rest = ""
     if column is None and "." in key:
@@ -952,15 +1102,11 @@ def _element_leaf(entity, spec, key: str, condition, level=None):
         rest = "." + tail
     if column is None:
         return None
-    if level is None:
-        element = entity.element_path(column.name)
-        variable = "item"
-    else:
-        element, variable = _nested_element_path(spec, column, level)
+    element = entity.element_path(column.name)
     if element is None:
         return None
 
-    field = f"$${variable}.{element}{rest}"
+    field = f"$$item.{element}{rest}"
     is_array = not rest and column.name in ARRAY_COLUMNS
 
     if isinstance(condition, dict):
@@ -986,22 +1132,6 @@ def _element_leaf(entity, spec, key: str, condition, level=None):
     if is_array:
         return {"$in": [condition, {"$ifNull": [field, []]}]}
     return {"$eq": [field, condition]}
-
-
-def _nested_element_path(spec, column, level: str):
-    if not column.prefilter:
-        return None, None
-    nested_prefix = spec["nested_prefix"]
-    prefix = spec["prefix"]
-    if level == "inner":
-        if not column.prefilter.startswith(nested_prefix):
-            return None, None
-        return column.prefilter[len(nested_prefix):], "nested"
-    if not column.prefilter.startswith(prefix):
-        return None, None
-    if column.prefilter.startswith(nested_prefix):
-        return None, None
-    return column.prefilter[len(prefix):], "item"
 
 
 def _element_operator(field: str, is_array: bool, operator: str, operand):
@@ -1081,18 +1211,33 @@ def _is_never(match) -> bool:
     return isinstance(match, dict) and "__never__" in match
 
 
-def _mongo_safe(match: dict):
+def _mongo_safe(match: dict, tuple_fields: dict):
     if isinstance(match, dict):
         cleaned = {}
         for key, value in match.items():
             if key == "__never__":
                 cleaned.update(NEVER_MATCH)
+            elif key == TUPLE_IN:
+                cleaned.update(_tuple_condition(value, tuple_fields))
             elif key in ("$and", "$or", "$nor"):
-                cleaned[key] = [_mongo_safe(item) for item in value]
+                cleaned[key] = [_mongo_safe(item, tuple_fields) for item in value]
             else:
                 cleaned[key] = value
         return cleaned
     return match
+
+
+def _tuple_condition(spec: dict, tuple_fields: dict) -> dict:
+    name = f"{TUPLE_FIELD_PREFIX}{len(tuple_fields)}"
+    tuple_fields[name] = {
+        str(index): {"$ifNull": [f"${key}", None]}
+        for index, key in enumerate(spec["keys"])
+    }
+    values = [
+        {str(index): item for index, item in enumerate(row)}
+        for row in spec["values"]
+    ]
+    return {name: {"$in": values}}
 
 
 def _shape_stages(query: Query) -> list:

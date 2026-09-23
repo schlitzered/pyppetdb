@@ -38,6 +38,7 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_nodes.coll.database = {
             "nodes_resources": self.mock_sibling_coll,
             "nodes_edges": self.mock_sibling_coll,
+            "nodes_events": self.mock_sibling_coll,
         }
         self.mock_crud_catalog_cache = MagicMock()
         self.mock_crud_catalogs = MagicMock()

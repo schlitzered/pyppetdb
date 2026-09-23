@@ -38,6 +38,7 @@ COMPARISON_OPS = {">": "$gt", "<": "$lt", ">=": "$gte", "<=": "$lte"}
 STRUCTURED_TYPES = ("json", "path", "array")
 BOOLEAN_OPS = ("and", "or", "not")
 AGGREGATE_FUNCTIONS = ("count", "avg", "sum", "min", "max", "to_string")
+TUPLE_IN = "__tuple_in__"
 SELECT_PREFIX = "select_"
 TIMESTAMP_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$"
@@ -395,13 +396,15 @@ class FilterCompiler:
         if len(resolved) == 1:
             column, path = resolved[0]
             return {path: {"$in": [row[0] for row in rows]}}
-        clauses = []
-        for row in rows:
-            clause = {}
-            for (_column, path), item in zip(resolved, row):
-                clause[path] = item
-            clauses.append(clause)
-        return {"$or": clauses}
+        paths = [path for _column, path in resolved]
+        clauses = [
+            {path: {"$in": _unique(row[index] for row in rows)}}
+            for index, path in enumerate(paths)
+        ]
+        clauses.append(
+            {TUPLE_IN: {"keys": paths, "values": [list(row) for row in rows]}}
+        )
+        return {"$and": clauses}
 
     async def _run_subquery(self, node, arity: int):
         entity_name, column_spec, inner_ast = _subquery_parts(node)
@@ -530,6 +533,20 @@ def _regex_array_operand(label: str, value) -> list:
         _regex_operand(label, "~>", str(item))
         patterns.append(item)
     return patterns
+
+
+def _unique(values) -> list:
+    seen = set()
+    unique = []
+    for value in values:
+        try:
+            if value in seen:
+                continue
+            seen.add(value)
+        except TypeError:
+            pass
+        unique.append(value)
+    return unique
 
 
 def _subquery_parts(node):

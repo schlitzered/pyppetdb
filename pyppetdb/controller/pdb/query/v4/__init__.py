@@ -159,6 +159,7 @@ class ControllerPdbQueryV4:
                 "nodes_reports": crud_nodes_reports.coll,
                 "nodes_resources": crud_nodes.coll.database["nodes_resources"],
                 "nodes_edges": crud_nodes.coll.database["nodes_edges"],
+                "nodes_events": crud_nodes.coll.database["nodes_events"],
             },
             max_query_depth=config.app.puppetdb.maxQueryDepth,
             max_subquery_depth=config.app.puppetdb.maxSubqueryDepth,
@@ -296,18 +297,16 @@ class ControllerPdbQueryV4:
         counts_filter = event_counts.parse_counts_filter(params.get("counts_filter"))
         paging = parse_paging(params)
 
-        rows, _total = await self.engine.run(
-            entity_name="events",
-            ast=event_counts.extract_columns_query(params["query"]),
-            paging=None,
-            implicit=None,
-            timeout=parse_timeout(params.get("timeout")),
-            page_cap=False,
-        )
-
+        query = params["query"]
         results = []
         for field in summarize_by:
-            counts = event_counts.summarize(rows, field, count_by)
+            counts = await self.engine.group(
+                entity_name="events",
+                ast=event_counts.extract_columns_query(query),
+                stages=event_counts.summary_stages(field, count_by, query),
+                extra=event_counts.summary_projection(field, count_by, query),
+                timeout=parse_timeout(params.get("timeout")),
+            )
             counts = event_counts.apply_counts_filter(counts, counts_filter)
             if aggregate:
                 summary = event_counts.aggregate(counts)

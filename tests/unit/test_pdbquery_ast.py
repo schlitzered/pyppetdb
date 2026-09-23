@@ -258,8 +258,31 @@ class TestFilterCompiler(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             result,
-            {"$or": [{"certname": "a", "name": "os"}, {"certname": "b", "name": "kernel"}]},
+            {
+                "$and": [
+                    {"certname": {"$in": ["a", "b"]}},
+                    {"name": {"$in": ["os", "kernel"]}},
+                    {
+                        "__tuple_in__": {
+                            "keys": ["certname", "name"],
+                            "values": [["a", "os"], ["b", "kernel"]],
+                        }
+                    },
+                ]
+            },
         )
+
+    async def test_in_with_multiple_columns_deduplicates_each_column(self):
+        engine = StubEngine(rows=[("a", "os"), ("a", "kernel"), ("b", ["x"])])
+        result = await self.compiler("facts", engine=engine).compile(
+            [
+                "in",
+                ["certname", "name"],
+                ["extract", ["certname", "name"], ["select_fact_contents", None]],
+            ]
+        )
+        self.assertEqual(result["$and"][0], {"certname": {"$in": ["a", "b"]}})
+        self.assertEqual(result["$and"][1], {"name": {"$in": ["os", "kernel", ["x"]]}})
 
     async def test_empty_subquery_matches_nothing(self):
         engine = StubEngine(rows=[])

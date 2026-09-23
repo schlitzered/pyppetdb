@@ -135,49 +135,95 @@ def extract_columns_query(ast):
     return ["extract", columns, ast]
 
 
-def summarize(rows, summarize_by: str, count_by: str) -> list:
-    key_fields = SUMMARIZE_BY[summarize_by]
-    buckets = {}
-    for row in rows:
-        key = tuple(row.get(field) for field in key_fields)
-        bucket = buckets.setdefault(
-            key,
-            {
-                "subject_type": summarize_by,
-                "subject": _subject(summarize_by, key_fields, key),
-                **{field: 0 for field in EMITTED_FIELDS},
-                "_seen": {},
-            },
-        )
-        status = STATUS_BUCKETS.get(row.get("status"))
-        if status is None:
-            continue
-        identity = _count_identity(row, count_by)
-        seen = bucket["_seen"].setdefault(status, set())
-        if identity in seen:
-            continue
-        seen.add(identity)
-        bucket[status] += 1
-
-    result = []
-    for bucket in buckets.values():
-        bucket.pop("_seen")
-        result.append(bucket)
-    return result
+FIRST_FLAGS = {
+    "certname": "first_for_certname",
+    "resource": "first_for_resource",
+    "containing_class": "first_for_class",
+}
 
 
-def _subject(summarize_by: str, key_fields, key) -> dict:
-    if summarize_by == "certname":
-        return {"title": key[0]}
-    if summarize_by == "containing_class":
-        return {"title": key[0]}
-    return {"type": key[0], "title": key[1]}
+def single_report_per_node(ast) -> bool:
+    if not isinstance(ast, list) or not ast:
+        return False
+    if ast[0] == "and":
+        return any(single_report_per_node(child) for child in ast[1:])
+    if ast[0] != "=" or len(ast) != 3:
+        return False
+    if ast[1] == "latest_report?":
+        return ast[2] is True
+    return ast[1] == "report" and isinstance(ast[2], str)
 
 
-def _count_identity(row, count_by: str):
+def summary_projection(summarize_by: str, count_by: str, ast) -> dict:
+    if not single_report_per_node(ast):
+        return {}
+    flag = _first_flag(summarize_by, count_by)
+    return {flag: f"${flag}"}
+
+
+def _first_flag(summarize_by: str, count_by: str) -> str:
     if count_by == "certname":
-        return row.get("certname")
-    return (row.get("certname"), row.get("resource_type"), row.get("resource_title"))
+        return FIRST_FLAGS[summarize_by]
+    return FIRST_FLAGS["resource"]
+
+
+def summary_stages(summarize_by: str, count_by: str, ast=None) -> list:
+    key_fields = SUMMARIZE_BY[summarize_by]
+    group_id = {field: f"$_id.{field}" for field in key_fields}
+    if single_report_per_node(ast):
+        flag = _first_flag(summarize_by, count_by)
+        status_id = {field: f"${field}" for field in key_fields}
+        status_id["status"] = "$status"
+        buckets = {
+            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, "$n", 0]}}
+            for status, bucket in STATUS_BUCKETS.items()
+        }
+        stages = [
+            {
+                "$group": {
+                    "_id": status_id,
+                    "n": {"$sum": {"$cond": [{"$eq": [f"${flag}", True]}, 1, 0]}},
+                }
+            },
+            {"$group": {"_id": group_id, **buckets}},
+        ]
+    else:
+        identity = (
+            ("certname",)
+            if count_by == "certname"
+            else ("certname", "resource_type", "resource_title")
+        )
+        distinct_id = {field: f"${field}" for field in key_fields}
+        distinct_id["status"] = "$status"
+        distinct_id.update({f"by_{field}": f"${field}" for field in identity})
+        buckets = {
+            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, 1, 0]}}
+            for status, bucket in STATUS_BUCKETS.items()
+        }
+        stages = [
+            {"$group": {"_id": distinct_id}},
+            {"$group": {"_id": group_id, **buckets}},
+        ]
+    stages.append(
+        {
+            "$project": {
+                "_id": 0,
+                "subject_type": {"$literal": summarize_by},
+                "subject": _subject(summarize_by, key_fields),
+                **{field: 1 for field in EMITTED_FIELDS},
+            }
+        }
+    )
+    return stages
+
+
+def _subject(summarize_by: str, key_fields) -> dict:
+    if summarize_by == "resource":
+        return {
+            "type": {"$ifNull": ["$_id.resource_type", None]},
+            "title": {"$ifNull": ["$_id.resource_title", None]},
+        }
+    return {"title": {"$ifNull": [f"$_id.{key_fields[0]}", None]}}
 
 
 def apply_counts_filter(rows, counts_filter) -> list:

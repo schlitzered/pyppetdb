@@ -39,10 +39,12 @@ from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.crud.nodes_resources import CrudNodesResources
 from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 
 from pyppetdb.helpers.placement import calculate_placement
 from pyppetdb.helpers.puppetdb import build_resource_documents
 from pyppetdb.helpers.puppetdb import build_edge_documents
+from pyppetdb.helpers.puppetdb import build_event_documents
 from pyppetdb.helpers.puppetdb import catalog_metadata
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
@@ -104,6 +106,7 @@ class ControllerPdbCmdV1:
         crud_nodes_reports: CrudNodesReports,
         crud_nodes_resources: CrudNodesResources,
         crud_nodes_edges: CrudNodesEdges,
+        crud_nodes_events: CrudNodesEvents,
         authorize_client_cert: AuthorizeClientCert,
         ingest_queue: IngestQueue,
     ):
@@ -118,6 +121,7 @@ class ControllerPdbCmdV1:
         self._crud_nodes_reports = crud_nodes_reports
         self._crud_nodes_resources = crud_nodes_resources
         self._crud_nodes_edges = crud_nodes_edges
+        self._crud_nodes_events = crud_nodes_events
         self._authorize_client_cert = authorize_client_cert
         self._router = APIRouter(
             prefix="/v1",
@@ -160,6 +164,10 @@ class ControllerPdbCmdV1:
     @property
     def crud_nodes_edges(self):
         return self._crud_nodes_edges
+
+    @property
+    def crud_nodes_events(self):
+        return self._crud_nodes_events
 
     @property
     def crud_nodes_catalog_cache(self):
@@ -337,6 +345,10 @@ class ControllerPdbCmdV1:
             node_id=node_id,
             disabled=disabled,
         )
+        await self.crud_nodes_events.set_node_disabled(
+            node_id=node_id,
+            disabled=disabled,
+        )
 
     async def _job_replace_facts(
         self,
@@ -429,12 +441,25 @@ class ControllerPdbCmdV1:
             return
         await self._job_update_node(node_id=node_id, base=base)
         placement = await self.crud_nodes.get_placement(_id=node_id)
-        latest = await self.crud_nodes_reports.create_latest(
+        latest, stored = await self.crud_nodes_reports.create_latest(
             _id=received,
             node_id=node_id,
             payload=NodeReportPostInternal(
                 **{"placement": placement, "report": base["report"]},
             ),
+        )
+        if latest:
+            await self.crud_nodes_events.set_latest(node_id=node_id, latest=False)
+        await self.crud_nodes_events.insert_for_report(
+            await asyncio.to_thread(
+                build_event_documents,
+                node_id,
+                placement,
+                False,
+                received,
+                stored["report"],
+                latest,
+            )
         )
         if not latest:
             self.log.info(
@@ -527,6 +552,10 @@ class ControllerPdbCmdV1:
             )
             if old_placement != new_placement:
                 await self.crud_nodes_reports.update_placement(
+                    node_id=node_id,
+                    placement=new_placement,
+                )
+                await self.crud_nodes_events.update_placement(
                     node_id=node_id,
                     placement=new_placement,
                 )

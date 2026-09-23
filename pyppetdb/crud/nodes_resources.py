@@ -34,16 +34,26 @@ class CrudNodesResources(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
-                    [("node_id", pymongo.ASCENDING)], name="idx_node_id"
+                    [
+                        ("node_id", pymongo.ASCENDING),
+                        ("type", pymongo.ASCENDING),
+                        ("title", pymongo.ASCENDING),
+                    ],
+                    name="idx_node_id",
                 ),
                 pymongo.IndexModel(
-                    [("type", pymongo.ASCENDING)], name="idx_type"
+                    [("type", pymongo.ASCENDING), ("node_id", pymongo.ASCENDING)],
+                    name="idx_type",
                 ),
                 pymongo.IndexModel(
                     [("title", pymongo.ASCENDING)], name="idx_title"
                 ),
                 pymongo.IndexModel(
-                    [("type", pymongo.ASCENDING), ("title", pymongo.ASCENDING)],
+                    [
+                        ("type", pymongo.ASCENDING),
+                        ("title", pymongo.ASCENDING),
+                        ("node_id", pymongo.ASCENDING),
+                    ],
                     name="idx_type_title",
                 ),
                 pymongo.IndexModel(
