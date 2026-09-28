@@ -1205,7 +1205,7 @@ requires-dist = [
     { name = "authlib", specifier = ">=1.7" },
     { name = "bonsai", specifier = ">=1.5" },
     { name = "cachetools", specifier = ">=7.1" },
-    { name = "cryptography", specifier = ">=49" },
+    { name = "cryptography", specifier = ">=50" },
     { name = "fastapi", specifier = ">=0.136" },
     { name = "httptools", specifier = ">=0.7" },
     { name = "httpx", specifier = ">=0.28" },

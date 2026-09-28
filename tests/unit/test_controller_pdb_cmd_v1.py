@@ -19,6 +19,7 @@ import logging
 import json
 import gzip
 from pyppetdb.config import ConfigAppFacts
+from pyppetdb.controller.pdb.cmd.v1 import COMMAND_FAILED
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.pdb.ingest.queue import IngestQueue
@@ -1130,13 +1131,16 @@ class TestControllerPdbCmdV1Validation(unittest.IsolatedAsyncioTestCase):
 
     async def test_wait_for_completion_reports_the_job_error(self):
         self.mock_nodes.update = AsyncMock(side_effect=RuntimeError("mongo is gone"))
-        with self.assertLogs("test", level="ERROR"):
+        with self.assertLogs("test", level="ERROR") as logs:
             result = await self.create(self.request(), seconds_to_wait="5")
         self.assertEqual(result.status_code, 503)
         content = json.loads(result.body)
         self.assertEqual(content["processed"], True)
         self.assertEqual(content["timed_out"], False)
-        self.assertEqual(content["error"], "mongo is gone")
+        self.assertEqual(content["error"], COMMAND_FAILED)
+        self.assertNotIn("mongo is gone", json.dumps(content))
+        self.assertTrue(any("mongo is gone" in line for line in logs.output))
+        self.assertTrue(any(content["uuid"] in line for line in logs.output))
         self.assertEqual(self.queue.stats["failed"], 1)
 
     async def test_wait_for_completion_covers_only_the_local_job(self):

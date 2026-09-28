@@ -90,6 +90,7 @@ MIN_SUPPORTED_COMMANDS = {
 VALID_COMMANDS_STR = ", ".join(sorted(MIN_SUPPORTED_COMMANDS))
 OLD_FORMAT_MSG = "Command was submitted without query parameters (old format)."
 BODY_NOT_A_MAP_MSG = "The request body must be a JSON map."
+COMMAND_FAILED = "Command processing failed, see the server log for details."
 
 
 REPORT_STATE_FIELDS = (
@@ -605,8 +606,8 @@ class ControllerPdbCmdV1:
         params = {k: v for k, v in params.items() if v is not None}
         return params, payload
 
-    @staticmethod
     async def _await_completion(
+        self,
         completion: asyncio.Future,
         command_uuid: str,
         timeout: float,
@@ -625,13 +626,14 @@ class ControllerPdbCmdV1:
         except asyncio.CancelledError:
             raise
         except Exception as err:
+            self.log.error(f"command {command_uuid} failed: {err}")
             return JSONResponse(
                 status_code=503,
                 content={
                     "uuid": command_uuid,
                     "processed": True,
                     "timed_out": False,
-                    "error": str(err),
+                    "error": COMMAND_FAILED,
                 },
             )
         return JSONResponse(
