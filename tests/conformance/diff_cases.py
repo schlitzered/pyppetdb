@@ -418,7 +418,8 @@ ROOT = [
     _c("root from facts", "unit", V4,
        ["from", "facts", ["=", "certname", "{node}"]]),
     _c("root from reports limit", "unit", V4,
-       ["from", "reports", ["=", "certname", "{node}"], ["limit", 1]]),
+       ["from", "reports", ["=", "certname", "{node}"],
+        ["order_by", [["receive_time", "desc"]]], ["limit", 1]]),
     _c("root from environments", "unit", V4, ["from", "environments"]),
 ]
 
@@ -454,6 +455,10 @@ ERRORS = [
 ]
 
 DIVERGENCES = [
+    _c("event-counts count_by certname per certname "
+       "(upstream: corrective_change is always null, so its distinct rows collapse)",
+       "divergence", V4 + "/event-counts", ["=", "certname", "{node}"],
+       {"summarize_by": "certname", "count_by": "certname"}),
     _c("environment report metrics "
        "(upstream: HTTP 400, PGobject error on the environment child route)",
        "divergence", V4 + "/environments/{environment}/reports/{hash}/metrics"),

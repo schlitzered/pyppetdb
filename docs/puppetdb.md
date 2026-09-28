@@ -285,9 +285,11 @@ entity serves, and once per event in the `nodes_events` collection, which serves
 `certname`, `report`, `status`, `latest_report?` and `resource`, each combined with
 `timestamp`, so the usual dashboard queries (events of the latest reports ordered by
 time, failed events, events of one node or report) are index range scans. The counts
-endpoints are aggregated in MongoDB; a query that pins `latest_report? = true` or a
-report hash is answered from a covering index without touching the documents, anything
-else de-duplicates event identities per bucket first. Storing a report therefore costs one extra insert per event plus index
+endpoints are aggregated in MongoDB with PuppetDB's semantics (`count_by=resource`
+counts events, `count_by=certname` collapses identical certname/status/corrective_change
+rows first); a query that pins `latest_report? = true` is answered from a covering index
+without touching the documents. A report whose hash is already stored is not stored
+again. Storing a report therefore costs one extra insert per event plus index
 maintenance; a run with 40 changed resources measured about 20 % lower report
 throughput than the embedded-only model.
 
@@ -371,7 +373,10 @@ and a real OpenVoxDB holding identical data and compares the responses field by 
   Anything embedding them (the `href` of a child collection) differs too.
 - **`corrective_change` is populated.** Upstream gates it behind a flag that is off in the
   open-source build and returns `null`; pyppetdb returns the value the agent sent, on
-  events and on `latest_report_corrective_change`.
+  events and on `latest_report_corrective_change`. `event-counts` with `count_by=certname`
+  inherit this: upstream's distinct step includes `corrective_change`, which is always
+  `null` there, so a certname with both corrective and intentional events of one status
+  counts once upstream and twice here.
 - **`/catalogs/<certname>/edges` is restricted to that certname.** Upstream forgets the
   restriction on this one child route (its `/resources` sibling has it) and answers with
   every edge of every node; pyppetdb answers with the edges the `href` refers to.

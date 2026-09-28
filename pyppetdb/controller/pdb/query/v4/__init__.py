@@ -549,12 +549,7 @@ class ControllerPdbQueryV4:
             counts = await self.engine.group(
                 entity_name="events",
                 ast=event_counts.extract_columns_query(query),
-                stages=event_counts.summary_stages(
-                    field, count_by, query, distinct=distinct is not None
-                ),
-                extra=event_counts.summary_projection(
-                    field, count_by, query, distinct=distinct is not None
-                ),
+                stages=event_counts.summary_stages(field, count_by),
                 timeout=timeout,
                 distinct_window=distinct,
             )

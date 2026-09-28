@@ -141,33 +141,46 @@ COUNTS = [
 
 
 class TestSummaryStages(unittest.TestCase):
-    def test_distinct_identities_are_counted_per_bucket_and_status(self):
+    def test_count_by_resource_counts_events_per_bucket_and_status(self):
         stages = event_counts.summary_stages("certname", "resource")
+        self.assertEqual(len(stages), 3)
         self.assertEqual(
-            stages[0]["$group"]["_id"],
-            {
-                "certname": "$certname",
-                "status": "$status",
-                "by_certname": "$certname",
-                "by_resource_type": "$resource_type",
-                "by_resource_title": "$resource_title",
-            },
+            stages[0]["$group"],
+            {"_id": {"certname": "$certname", "status": "$status"}, "n": {"$sum": 1}},
         )
         second = stages[1]["$group"]
         self.assertEqual(second["_id"], {"certname": "$_id.certname"})
         self.assertEqual(
             second["failures"],
-            {"$sum": {"$cond": [{"$eq": ["$_id.status", "failure"]}, 1, 0]}},
+            {"$sum": {"$cond": [{"$eq": ["$_id.status", "failure"]}, "$n", 0]}},
         )
         self.assertEqual(
             set(second) - {"_id"}, {"failures", "successes", "noops", "skips"}
         )
 
-    def test_count_by_certname_ignores_the_resource(self):
-        stages = event_counts.summary_stages("certname", "certname")
+    def test_count_by_certname_deduplicates_like_upstream(self):
+        stages = event_counts.summary_stages("resource", "certname")
+        self.assertEqual(len(stages), 4)
         self.assertEqual(
             stages[0]["$group"]["_id"],
-            {"certname": "$certname", "status": "$status", "by_certname": "$certname"},
+            {
+                "certname": "$certname",
+                "status": "$status",
+                "corrective_change": "$corrective_change",
+                "resource_type": "$resource_type",
+                "resource_title": "$resource_title",
+            },
+        )
+        self.assertEqual(
+            stages[1]["$group"],
+            {
+                "_id": {
+                    "resource_type": "$_id.resource_type",
+                    "resource_title": "$_id.resource_title",
+                    "status": "$_id.status",
+                },
+                "n": {"$sum": 1},
+            },
         )
 
     def test_only_the_upstream_fields_are_emitted(self):
@@ -198,70 +211,6 @@ class TestSummaryStages(unittest.TestCase):
         self.assertEqual(
             stages[2]["$project"]["subject"],
             {"title": {"$ifNull": ["$_id.containing_class", None]}},
-        )
-
-
-class TestSingleReportFastPath(unittest.TestCase):
-    def test_detects_latest_report_and_report_hash_conjuncts(self):
-        self.assertTrue(event_counts.single_report_per_node(["=", "latest_report?", True]))
-        self.assertTrue(event_counts.single_report_per_node(["=", "report", "abc"]))
-        self.assertTrue(
-            event_counts.single_report_per_node(
-                ["and", ["=", "status", "failure"], ["=", "latest_report?", True]]
-            )
-        )
-        self.assertFalse(event_counts.single_report_per_node(["=", "latest_report?", False]))
-        self.assertFalse(
-            event_counts.single_report_per_node(["or", ["=", "latest_report?", True], ["=", "status", "noop"]])
-        )
-        self.assertFalse(event_counts.single_report_per_node(["=", "certname", "a"]))
-        self.assertFalse(event_counts.single_report_per_node(None))
-
-    def test_single_group_counts_first_events_only(self):
-        stages = event_counts.summary_stages("containing_class", "resource", ["=", "latest_report?", True])
-        self.assertEqual(len(stages), 3)
-        first = stages[0]["$group"]
-        self.assertEqual(
-            first["_id"], {"containing_class": "$containing_class", "status": "$status"}
-        )
-        self.assertEqual(
-            first["n"], {"$sum": {"$cond": [{"$eq": ["$first_for_resource", True]}, 1, 0]}}
-        )
-        second = stages[1]["$group"]
-        self.assertEqual(second["_id"], {"containing_class": "$_id.containing_class"})
-        self.assertEqual(
-            second["failures"],
-            {"$sum": {"$cond": [{"$eq": ["$_id.status", "failure"]}, "$n", 0]}},
-        )
-
-    def test_flag_follows_count_by(self):
-        self.assertEqual(event_counts._first_flag("certname", "certname"), "first_for_certname")
-        self.assertEqual(event_counts._first_flag("containing_class", "certname"), "first_for_class")
-        self.assertEqual(event_counts._first_flag("resource", "certname"), "first_for_resource")
-        self.assertEqual(event_counts._first_flag("containing_class", "resource"), "first_for_resource")
-
-    def test_summary_projection_adds_the_flag_only_on_the_fast_path(self):
-        self.assertEqual(event_counts.summary_projection("certname", "resource", None), {})
-        self.assertEqual(
-            event_counts.summary_projection("containing_class", "certname", ["=", "latest_report?", True]),
-            {"first_for_class": "$first_for_class"},
-        )
-
-
-class TestDistinctWindowCounts(unittest.TestCase):
-    def test_distinct_windows_count_events_per_bucket_and_status(self):
-        stages = event_counts.summary_stages("resource", "resource", ["=", "certname", "a"], distinct=True)
-        self.assertEqual(len(stages), 3)
-        self.assertEqual(
-            stages[0]["$group"],
-            {
-                "_id": {"resource_type": "$resource_type", "resource_title": "$resource_title", "status": "$status"},
-                "n": {"$sum": 1},
-            },
-        )
-        self.assertEqual(
-            event_counts.summary_projection("resource", "resource", ["=", "latest_report?", True], distinct=True),
-            {},
         )
 
 

@@ -523,23 +523,6 @@ class TestEventDocuments(unittest.TestCase):
         self.assertEqual(docs[1]["status"], "failure")
         self.assertIsNone(docs[1]["message"])
 
-    def test_first_flags_mark_the_first_event_per_status(self):
-        received = datetime(2026, 1, 1)
-        resource = {
-            "resource_type": "File",
-            "resource_title": "/tmp/a",
-            "containment_path": ["Stage[main]", "Foo", "File[/tmp/a]"],
-            "events": [
-                {"status": "success", "property": "ensure"},
-                {"status": "success", "property": "mode"},
-                {"status": "failure", "property": "owner"},
-            ],
-        }
-        other = dict(resource, resource_title="/tmp/b", containment_path=["Stage[main]", "Foo", "File[/tmp/b]"])
-        docs = build_event_documents("n", None, False, received, {"resources": [resource, other]}, True)
-        self.assertEqual([d["first_for_resource"] for d in docs], [True, False, True, True, False, True])
-        self.assertEqual([d["first_for_class"] for d in docs], [True, False, True, False, False, False])
-        self.assertEqual([d["first_for_certname"] for d in docs], [True, False, True, False, False, False])
 
     def test_containing_class_skips_resources_and_empty_steps(self):
         self.assertEqual(containing_class(["Stage[main]", "Foo", "", "File[x]"]), "Foo")

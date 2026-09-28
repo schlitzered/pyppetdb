@@ -459,19 +459,6 @@ class TestEventCountsEndpoints(unittest.TestCase):
                 kwargs["stages"], event_counts.summary_stages("certname", "certname")
             )
 
-    def test_latest_report_queries_use_the_first_flags(self):
-        self.client.get(
-            "/pdb/query/v4/event-counts",
-            params={
-                "summarize_by": "resource",
-                "query": '["=", "latest_report?", true]',
-            },
-        )
-        kwargs = self.controller.engine.group.await_args.kwargs
-        self.assertEqual(kwargs["extra"], {"first_for_resource": "$first_for_resource"})
-        self.assertEqual(kwargs["ast"], ["extract", list(event_counts.SUMMARIZE_COLUMNS), ["=", "latest_report?", True]])
-        self.assertEqual(len(kwargs["stages"]), 3)
-
     def test_every_summarize_by_is_grouped_separately(self):
         self.client.get(
             "/pdb/query/v4/event-counts",

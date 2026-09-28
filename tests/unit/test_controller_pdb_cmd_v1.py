@@ -89,6 +89,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_cache.update_placement = AsyncMock()
         self.mock_catalogs.update_placement = AsyncMock()
         self.mock_reports.update_placement = AsyncMock()
+        self.mock_reports.hash_exists = AsyncMock(return_value=False)
         self.mock_reports.create_latest = AsyncMock(return_value=(True, STORED_REPORT))
         self.mock_resources = MagicMock()
         self.mock_resources.replace_for_node = AsyncMock()
@@ -532,6 +533,17 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_nodes.update.assert_called_once()
         self.mock_reports.create_latest.assert_called_once()
         self.mock_catalogs.drop_created_no_report_ttl.assert_called_once()
+
+    async def test_store_report_skips_an_already_stored_hash(self):
+        self.mock_nodes.update = AsyncMock()
+        self.mock_reports.hash_exists = AsyncMock(return_value=True)
+        self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
+
+        await self._post_report()
+
+        self.mock_reports.create_latest.assert_not_called()
+        self.mock_events.insert_for_report.assert_not_awaited()
+        self.mock_nodes.update.assert_not_called()
 
     async def test_store_report_writes_the_events_collection(self):
         self.mock_nodes.update = AsyncMock()

@@ -377,15 +377,11 @@ def build_event_documents(
     latest: bool,
 ) -> list:
     docs = []
-    seen = set()
     for resource in report.get("resources") or []:
         if not isinstance(resource, dict):
             continue
         containment = resource.get("containment_path") or []
-        resource_key = (resource.get("resource_type"), resource.get("resource_title"))
-        class_key = containing_class(containment)
         for event in resource.get("events") or []:
-            status = event.get("status")
             docs.append(
                 {
                     "node_id": node_id,
@@ -395,9 +391,6 @@ def build_event_documents(
                     "report_id": received,
                     "report_hash": report.get("hash"),
                     "latest": latest,
-                    "first_for_resource": _first(seen, ("resource", resource_key, status)),
-                    "first_for_class": _first(seen, ("class", class_key, status)),
-                    "first_for_certname": _first(seen, ("certname", status)),
                     "run_start_time": report.get("start_time"),
                     "run_end_time": report.get("end_time"),
                     "environment": report.get("environment"),
@@ -419,13 +412,6 @@ def build_event_documents(
                 }
             )
     return docs
-
-
-def _first(seen: set, key) -> bool:
-    if key in seen:
-        return False
-    seen.add(key)
-    return True
 
 
 def catalog_payload(data: dict) -> dict:

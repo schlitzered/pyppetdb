@@ -686,7 +686,7 @@ class TestGroup(unittest.IsolatedAsyncioTestCase):
             "events",
             ["extract", ["certname"], ["=", "latest_report?", True]],
             [{"$group": {"_id": {"certname": "$certname"}, "n": {"$sum": {"$cond": [{"$eq": ["$status", "failure"]}, 1, 0]}}}}],
-            extra={"first_for_resource": "$first_for_resource"},
+            extra={"corrective_change": "$corrective_change"},
         )
         self.assertEqual(
             events.pipelines[0],
@@ -714,10 +714,10 @@ class TestGroup(unittest.IsolatedAsyncioTestCase):
             "events",
             ["extract", ["certname"], ["not", ["=", "status", "noop"]]],
             [{"$group": {"_id": "$certname"}}],
-            extra={"first_for_resource": "$first_for_resource"},
+            extra={"corrective_change": "$corrective_change"},
         )
         project = events.pipelines[0][0]["$project"]
-        self.assertEqual(project["first_for_resource"], "$first_for_resource")
+        self.assertEqual(project["corrective_change"], "$corrective_change")
         self.assertEqual(project["certname"], "$node_id")
 
     async def test_group_skips_the_database_for_impossible_filters(self):

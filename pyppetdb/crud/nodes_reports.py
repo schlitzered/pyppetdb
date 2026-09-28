@@ -308,6 +308,16 @@ class CrudNodesReports(CrudMongo):
         result["result"] = [self._redactor.redact(item) for item in result["result"]]
         return NodeReportGetMulti(**result)
 
+    async def hash_exists(self, node_id: str, report_hash: str) -> bool:
+        try:
+            found = await self._coll.find_one(
+                {"node_id": node_id, "report.hash": report_hash}, projection={"_id": 1}
+            )
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        return found is not None
+
     async def create_latest(
         self,
         _id: datetime,

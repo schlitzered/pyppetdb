@@ -44,6 +44,7 @@ SUMMARIZE_COLUMNS = (
     "resource_title",
     "containing_class",
     "status",
+    "corrective_change",
 )
 
 
@@ -135,90 +136,41 @@ def extract_columns_query(ast):
     return ["extract", columns, ast]
 
 
-FIRST_FLAGS = {
-    "certname": "first_for_certname",
-    "resource": "first_for_resource",
-    "containing_class": "first_for_class",
-}
+DISTINCT_CERTNAME_FIELDS = ("certname", "status", "corrective_change")
 
 
-def single_report_per_node(ast) -> bool:
-    if not isinstance(ast, list) or not ast:
-        return False
-    if ast[0] == "and":
-        return any(single_report_per_node(child) for child in ast[1:])
-    if ast[0] != "=" or len(ast) != 3:
-        return False
-    if ast[1] == "latest_report?":
-        return ast[2] is True
-    return ast[1] == "report" and isinstance(ast[2], str)
-
-
-def summary_projection(
-    summarize_by: str, count_by: str, ast, distinct: bool = False
-) -> dict:
-    if distinct or not single_report_per_node(ast):
-        return {}
-    flag = _first_flag(summarize_by, count_by)
-    return {flag: f"${flag}"}
-
-
-def _first_flag(summarize_by: str, count_by: str) -> str:
-    if count_by == "certname":
-        return FIRST_FLAGS[summarize_by]
-    return FIRST_FLAGS["resource"]
-
-
-def summary_stages(
-    summarize_by: str, count_by: str, ast=None, distinct: bool = False
-) -> list:
+def summary_stages(summarize_by: str, count_by: str) -> list:
     key_fields = SUMMARIZE_BY[summarize_by]
-    group_id = {field: f"$_id.{field}" for field in key_fields}
-    if distinct:
-        status_id = {field: f"${field}" for field in key_fields}
-        status_id["status"] = "$status"
-        buckets = {
-            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, "$n", 0]}}
-            for status, bucket in STATUS_BUCKETS.items()
-        }
-        stages = [
-            {"$group": {"_id": status_id, "n": {"$sum": 1}}},
-            {"$group": {"_id": group_id, **buckets}},
-        ]
-    elif single_report_per_node(ast):
-        flag = _first_flag(summarize_by, count_by)
-        status_id = {field: f"${field}" for field in key_fields}
-        status_id["status"] = "$status"
-        buckets = {
-            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, "$n", 0]}}
-            for status, bucket in STATUS_BUCKETS.items()
-        }
-        stages = [
-            {
-                "$group": {
-                    "_id": status_id,
-                    "n": {"$sum": {"$cond": [{"$eq": [f"${flag}", True]}, 1, 0]}},
-                }
-            },
-            {"$group": {"_id": group_id, **buckets}},
-        ]
-    else:
-        identity = (
-            ("certname",)
-            if count_by == "certname"
-            else ("certname", "resource_type", "resource_title")
-        )
-        distinct_id = {field: f"${field}" for field in key_fields}
-        distinct_id["status"] = "$status"
-        distinct_id.update({f"by_{field}": f"${field}" for field in identity})
-        buckets = {
-            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, 1, 0]}}
-            for status, bucket in STATUS_BUCKETS.items()
+    buckets = {
+        bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, "$n", 0]}}
+        for status, bucket in STATUS_BUCKETS.items()
+    }
+    if count_by == "certname":
+        distinct_id = {
+            field: f"${field}"
+            for field in dict.fromkeys(DISTINCT_CERTNAME_FIELDS + key_fields)
         }
         stages = [
             {"$group": {"_id": distinct_id}},
-            {"$group": {"_id": group_id, **buckets}},
+            {
+                "$group": {
+                    "_id": {field: f"$_id.{field}" for field in key_fields + ("status",)},
+                    "n": {"$sum": 1},
+                }
+            },
         ]
+    else:
+        status_id = {field: f"${field}" for field in key_fields}
+        status_id["status"] = "$status"
+        stages = [{"$group": {"_id": status_id, "n": {"$sum": 1}}}]
+    stages.append(
+        {
+            "$group": {
+                "_id": {field: f"$_id.{field}" for field in key_fields},
+                **buckets,
+            }
+        }
+    )
     stages.append(
         {
             "$project": {

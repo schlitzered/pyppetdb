@@ -43,13 +43,11 @@ class TestCrudNodesEvents(unittest.IsolatedAsyncioTestCase):
             [
                 ("latest", 1),
                 ("status", 1),
-                ("first_for_resource", 1),
-                ("first_for_certname", 1),
-                ("first_for_class", 1),
                 ("node_id", 1),
                 ("resource_type", 1),
                 ("resource_title", 1),
                 ("containing_class", 1),
+                ("corrective_change", 1),
             ],
         )
 

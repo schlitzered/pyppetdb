@@ -754,6 +754,12 @@ class ControllerPdbCmdV1:
                 f"discarding report for {node_id}: no catalog has been stored yet"
             )
             return
+        report_hash = base["report"].get("hash")
+        if report_hash and await self.crud_nodes_reports.hash_exists(
+            node_id=node_id, report_hash=report_hash
+        ):
+            self.log.info(f"report {report_hash} for {node_id} is already stored")
+            return
         await self._job_update_node(node_id=node_id, base=base)
         placement = await self.crud_nodes.get_placement(_id=node_id)
         latest, stored = await self.crud_nodes_reports.create_latest(
