@@ -9,35 +9,38 @@ on:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libldap2-dev libsasl2-dev
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: uv sync --locked --group dev
       - name: Run unit tests
-        run: python3 -m unittest discover tests/unit
+        run: uv run python -m unittest discover tests/unit
         env:
           APP_SECRETKEY: ci-test-secret
 
   integration-tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - uses: actions/checkout@v5
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.10.0
+        uses: supercharge/mongodb-github-action@1.12.0
         with:
           mongodb-version: '8.0'
           mongodb-replica-set: rs0
@@ -45,12 +48,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libldap2-dev libsasl2-dev
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: uv sync --locked --group dev
       - name: Run integration tests
-        run: python3 -m unittest discover tests/integration
+        run: uv run python -m unittest discover tests/integration
         env:
           MONGODB_URL: mongodb://localhost:27017/?replicaSet=rs0
           APP_SECRETKEY: ci-test-secret

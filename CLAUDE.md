@@ -8,7 +8,7 @@ pyppetdb is a Python (FastAPI + MongoDB) replacement/middleware for Puppet infra
 
 ## Commands
 
-Use the project venv: `venv/bin/python` (or activate it).
+Dependencies are declared in `pyproject.toml` (direct ones only, with lower bounds) and locked in `uv.lock`; `requirements.txt` is `uv export` output for plain pip and never edited by hand. `uv sync --group dev` creates `.venv` for the current interpreter (3.12, 3.13 and 3.14 are supported and tested in CI); an existing `venv/` from earlier setups keeps working. To bump one package: `uv lock --upgrade-package <name>`, `uv sync`, tests, then re-export `requirements.txt`. Use the project venv (`.venv/bin/python`, or `venv/bin/python` on older checkouts, or `uv run`).
 
 ```bash
 # Unit tests (no external services needed)

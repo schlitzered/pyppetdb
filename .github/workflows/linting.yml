@@ -10,14 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
+          enable-cache: true
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install flake8 Flake8-pyproject
+        run: uv sync --locked --only-group dev --no-install-project
       - name: Run flake8
-        run: |
-          flake8 pyppetdb
+        run: uv run --no-sync flake8 pyppetdb

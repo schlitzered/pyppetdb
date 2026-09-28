@@ -6,9 +6,11 @@ This guide covers the installation of **pyppetdb** and how to configure it for y
 
 ### Prerequisites
 
-pyppetdb is strictly tested on **Python 3.12**. While it may run on other versions, all
-dependencies in `requirements.txt` are verified against the 3.12 runtime. It is highly
-recommended to run pyppetdb within a dedicated virtual environment.
+pyppetdb supports **Python 3.12, 3.13 and 3.14**; the test suite runs on all three in CI.
+Dependencies are declared in `pyproject.toml` and locked in `uv.lock`, a universal lock that
+resolves for every supported interpreter; `requirements.txt` is exported from that lock for
+plain `pip` installs. It is highly recommended to run pyppetdb within a dedicated virtual
+environment.
 
 ### System Dependencies
 
@@ -18,19 +20,19 @@ development headers and a C compiler installed.
 
 **On Debian/Ubuntu:**
 ```bash
-sudo apt-get install build-essential python3.12-dev libldap2-dev libsasl2-dev
+sudo apt-get install build-essential python3-dev libldap2-dev libsasl2-dev
 ```
 
 **On RHEL/CentOS:**
 ```bash
-sudo yum install gcc python3.12-devel openldap-devel cyrus-sasl-devel
+sudo yum install gcc python3-devel openldap-devel cyrus-sasl-devel
 ```
 
 ### Recommended Setup
 
 1.  **Create a Virtual Environment:**
     ```bash
-    python3.12 -m venv /opt/pyppetdb
+    python3 -m venv /opt/pyppetdb
     source /opt/pyppetdb/bin/activate
     ```
 
@@ -41,12 +43,22 @@ sudo yum install gcc python3.12-devel openldap-devel cyrus-sasl-devel
     ```
 
 3.  **Install from Source (Development):**
-    If you are installing from the repository:
+    The repository is managed with [uv](https://docs.astral.sh/uv/). `uv sync` creates
+    `.venv` with the exact locked versions for the interpreter you have (or downloads one):
     ```bash
     git clone https://github.com/schlitzered/pyppetdb.git
     cd pyppetdb
-    pip install -r requirements.txt
+    uv sync --group dev
+    uv run python -m unittest discover tests/unit
     ```
+    Without uv, `pip install -r requirements.txt` installs the same locked versions.
+
+4.  **Updating dependencies:**
+    Raise a single package (for example after a security advisory) with
+    `uv lock --upgrade-package <name>`, or everything with `uv lock --upgrade`, then
+    `uv sync` and run the tests. Regenerate the pip file with
+    `uv export --no-dev --no-hashes --no-emit-project -o requirements.txt`. Dependabot
+    opens the same kind of pull request for the lock file weekly.
 
 ---
 
