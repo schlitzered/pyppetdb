@@ -453,9 +453,10 @@ class TestEventCountsEndpoints(unittest.TestCase):
             self.controller.engine.group.assert_awaited_once()
             kwargs = self.controller.engine.group.await_args.kwargs
             self.assertEqual(kwargs["entity_name"], "events")
-            self.assertEqual(
-                kwargs["stages"], event_counts.summary_stages("certname", "certname")
-            )
+            expected = event_counts.summary_stages("certname", "certname")
+            if "aggregate" in path:
+                expected = expected + event_counts.aggregate_stages()
+            self.assertEqual(kwargs["stages"], expected)
 
     def test_every_summarize_by_is_grouped_separately(self):
         self.client.get(
@@ -464,14 +465,30 @@ class TestEventCountsEndpoints(unittest.TestCase):
         )
         self.assertEqual(self.controller.engine.group.await_count, 2)
 
-    def test_aggregate_event_counts(self):
+    def test_aggregate_event_counts_are_summed_in_the_database(self):
+        self.controller.engine.group = AsyncMock(
+            return_value=[{"failures": 1, "successes": 0, "noops": 0, "skips": 0, "total": 1}]
+        )
         response = self.client.get(
             "/pdb/query/v4/aggregate-event-counts",
             params={"summarize_by": "certname"},
         )
-        body = response.json()
-        self.assertEqual(body[0]["total"], 1)
-        self.assertEqual(body[0]["summarize_by"], "certname")
+        self.assertEqual(
+            response.json(),
+            [{"failures": 1, "successes": 0, "noops": 0, "skips": 0, "total": 1, "summarize_by": "certname"}],
+        )
+
+    def test_aggregate_event_counts_with_a_counts_filter_sum_in_python(self):
+        response = self.client.get(
+            "/pdb/query/v4/aggregate-event-counts",
+            params={"summarize_by": "certname", "counts_filter": '[">", "failures", 0]'},
+        )
+        self.assertEqual(
+            self.controller.engine.group.await_args.kwargs["stages"],
+            event_counts.summary_stages("certname", "resource"),
+        )
+        self.assertEqual(response.json()[0]["total"], 1)
+        self.assertEqual(response.json()[0]["failures"], 1)
 
     def test_counts_filter_applies(self):
         response = self.client.get(

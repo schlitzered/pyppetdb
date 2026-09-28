@@ -591,15 +591,23 @@ class ControllerPdbQueryV4:
         query = params.get("query")
         results = []
         for field in summarize_by:
+            stages = event_counts.summary_stages(field, count_by)
+            summed = aggregate and not counts_filter
+            if summed:
+                stages = stages + event_counts.aggregate_stages()
             counts = await self.engine.group(
                 entity_name="events",
                 ast=event_counts.extract_columns_query(query),
-                stages=event_counts.summary_stages(field, count_by),
+                stages=stages,
                 timeout=timeout,
                 distinct_window=distinct,
             )
             counts = event_counts.apply_counts_filter(counts, counts_filter)
-            if aggregate:
+            if summed:
+                summary = event_counts.aggregate_totals(counts)
+                summary["summarize_by"] = field
+                results.append(summary)
+            elif aggregate:
                 summary = event_counts.aggregate(counts)
                 summary["summarize_by"] = field
                 results.append(summary)

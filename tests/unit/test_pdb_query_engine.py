@@ -896,6 +896,29 @@ class TestIncrementalSort(unittest.IsolatedAsyncioTestCase):
             [{"node_id": 1, "timestamp": 1, "resource_title": 1}],
         )
 
+    async def test_a_single_value_on_a_leading_index_key_sorts_in_the_database(self):
+        events = FakeCollection(docs=self.events(), indexes=self.INDEX)
+        engine = engine_with(events=events)
+        await engine.run(
+            "events",
+            ["=", "certname", "a"],
+            paging=Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+        )
+        self.assertEqual(
+            stages(events.pipelines[0], "$sort"),
+            [{"node_id": 1, "timestamp": 1, "resource_title": 1}],
+        )
+
+    async def test_many_values_keep_the_incremental_sort(self):
+        events = FakeCollection(docs=self.events(), indexes=self.INDEX)
+        engine = engine_with(events=events)
+        await engine.run(
+            "events",
+            ["in", "certname", ["array", ["a", "b"]]],
+            paging=Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "timestamp": 1}])
+
     def test_boundary_condition_selects_the_group_and_everything_after(self):
         from pyppetdb.pdb.query.engine import _boundary_condition
 

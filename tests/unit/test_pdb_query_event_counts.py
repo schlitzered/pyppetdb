@@ -259,3 +259,21 @@ class TestCountsFilter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAggregateInTheDatabase(unittest.TestCase):
+    def test_totals_count_subjects_with_a_non_zero_bucket(self):
+        stage = event_counts.aggregate_stages()[0]["$group"]
+        self.assertEqual(stage["_id"], None)
+        self.assertEqual(stage["total"], {"$sum": 1})
+        self.assertEqual(
+            stage["failures"], {"$sum": {"$cond": [{"$gt": ["$failures", 0]}, 1, 0]}}
+        )
+
+    def test_no_events_mean_zero_totals(self):
+        self.assertEqual(
+            event_counts.aggregate_totals([]),
+            {"failures": 0, "successes": 0, "noops": 0, "skips": 0, "total": 0},
+        )
+        self.assertEqual(event_counts.aggregate_totals([]), event_counts.aggregate([]))
+

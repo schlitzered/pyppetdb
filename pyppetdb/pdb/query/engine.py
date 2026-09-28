@@ -573,7 +573,7 @@ class QueryEngine:
         incremental = None
         if early_sort and not distinct and distinct_window is None and not explain:
             incremental = await self._incremental_prefix(
-                collection, entity, query, early_sort
+                collection, entity, query, early_sort, prefilter
             )
         if incremental:
             head.append({"$sort": dict(list(early_sort.items())[:incremental])})
@@ -684,7 +684,9 @@ class QueryEngine:
             total = len(rows)
         return rows, total
 
-    async def _incremental_prefix(self, collection, entity, query: Query, sort: dict):
+    async def _incremental_prefix(
+        self, collection, entity, query: Query, sort: dict, prefilter: dict
+    ):
         if len(sort) < 2 or query.functions:
             return None
         if query.columns and not all(
@@ -696,8 +698,12 @@ class QueryEngine:
             if column is None or column.type not in ORDERABLE_TYPES:
                 return None
         wanted = list(sort.items())
+        indexes = await self._collection_index_keys(collection)
+        pinned = _single_value_fields(prefilter)
+        if any(keys and keys[0][0] in pinned for keys in indexes):
+            return None
         best = 0
-        for keys in await self._collection_index_keys(collection):
+        for keys in indexes:
             for flip in (1, -1):
                 length = 0
                 for (field, direction), (want, order) in zip(keys, wanted):
@@ -1017,6 +1023,28 @@ def _boundary_condition(fields: list, key: tuple):
         branch[fields[index]] = {"$gt": key[index]}
         branches.append(branch)
     return {"$or": branches}
+
+
+def _single_value_fields(prefilter: dict) -> set:
+    fields = set()
+    if not isinstance(prefilter, dict):
+        return fields
+    for key, value in prefilter.items():
+        if key == "$and" and isinstance(value, list):
+            for child in value:
+                fields |= _single_value_fields(child)
+        elif not key.startswith("$") and _single_value(value):
+            fields.add(key)
+    return fields
+
+
+def _single_value(condition) -> bool:
+    if isinstance(condition, dict):
+        if set(condition) == {"$eq"}:
+            return True
+        values = condition.get("$in")
+        return set(condition) == {"$in"} and isinstance(values, list) and len(values) == 1
+    return not isinstance(condition, list)
 
 
 def _boundary(fields: list, key: tuple, before: int):

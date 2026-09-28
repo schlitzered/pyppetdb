@@ -228,6 +228,31 @@ def _count_value(row, field) -> int:
     return value
 
 
+def aggregate_stages() -> list:
+    return [
+        {
+            "$group": {
+                "_id": None,
+                **{
+                    field: {"$sum": {"$cond": [{"$gt": [f"${field}", 0]}, 1, 0]}}
+                    for field in EMITTED_FIELDS
+                },
+                "total": {"$sum": 1},
+            }
+        },
+        {"$project": {"_id": 0}},
+    ]
+
+
+def aggregate_totals(rows) -> dict:
+    totals = {field: 0 for field in EMITTED_FIELDS}
+    totals["total"] = 0
+    for row in rows:
+        for field in totals:
+            totals[field] = row.get(field, 0)
+    return totals
+
+
 def aggregate(counts) -> dict:
     totals = {field: 0 for field in EMITTED_FIELDS}
     for row in counts:
