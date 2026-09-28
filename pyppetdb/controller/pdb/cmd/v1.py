@@ -383,13 +383,16 @@ class ControllerPdbCmdV1:
                 f"discarding catalog for {node_id}: no facts have been stored yet"
             )
             return
-        changed = state["content_hash"] != catalog.get("content_hash")
+        changed = (
+            not catalog.get("catalog_uuid")
+            or state["catalog_uuid"] != catalog.get("catalog_uuid")
+        )
         if changed:
             base["catalog"] = catalog_metadata(catalog)
         else:
             metadata = catalog_metadata(catalog)
             self.log.debug(
-                f"catalog content for {node_id} unchanged, keeping stored resources and "
+                f"catalog {catalog.get('catalog_uuid')} for {node_id} already stored, keeping resources and "
                 f"edges, updating {len(metadata)} catalog metadata fields"
             )
         await self._job_update_node(node_id=node_id, base=base)

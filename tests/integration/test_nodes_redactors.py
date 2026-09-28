@@ -30,7 +30,6 @@ class TestNodesRedactors(IntegrationTestBase):
                     "catalog_uuid": "seed",
                     "resources": [],
                     "edges": [],
-                    "content_hash": "seed",
                 },
             }
         )

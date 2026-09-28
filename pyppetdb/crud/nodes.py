@@ -507,7 +507,7 @@ class CrudNodes(CrudMongo):
                     "_id": 0,
                     "has_facts": {"$eq": [{"$type": "$facts"}, "object"]},
                     "has_catalog": {"$eq": [{"$type": "$catalog"}, "object"]},
-                    "content_hash": "$catalog.content_hash",
+                    "catalog_uuid": "$catalog.catalog_uuid",
                     "disabled": {"$ifNull": ["$disabled", False]},
                     "environment": "$environment",
                     "placement": "$placement",
@@ -524,7 +524,7 @@ class CrudNodes(CrudMongo):
         return {
             "has_facts": rows[0]["has_facts"],
             "has_catalog": rows[0]["has_catalog"],
-            "content_hash": rows[0].get("content_hash"),
+            "catalog_uuid": rows[0].get("catalog_uuid"),
             "disabled": bool(rows[0].get("disabled")),
             "environment": rows[0].get("environment"),
             "placement": rows[0].get("placement"),

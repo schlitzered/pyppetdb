@@ -47,12 +47,14 @@ the agent's next run repairs the state. Because commands are processed asynchron
 a report submitted while its catalog is still queued can hit this rule; with a normal
 queue depth the seconds between the agent's catalog request and its report are ample.
 
-`replace_catalog` computes a **content hash** over the resources and edges only — it
-excludes `version`, `catalog_uuid`, `transaction_uuid` and `producer_timestamp`, which
-change on every compile. When the incoming content matches what is already stored, the
-catalog itself is not rewritten; only the metadata (`change_catalog`, `environment`,
-`producer`) is updated, so `catalog_timestamp` still reflects when the catalog was last
-*received*, matching PuppetDB. Catalog history is written on every compile regardless.
+`replace_catalog` treats a catalog as unchanged when its `catalog_uuid` is the one
+already stored for the node. In that case the resources and edges are not rewritten; only
+the metadata (`change_catalog`, `environment`, `producer`, `transaction_uuid`, ...) is
+updated, so `catalog_timestamp` still reflects when the catalog was last *received*,
+matching PuppetDB. A new uuid is always stored in full, even when the compiled content is
+identical: pyppetdb relies on the Puppetserver front-end's catalog cache to re-serve
+unchanged catalogs, so a fresh uuid means a real compile. Catalog history is written on
+every compile regardless.
 
 The comparison happens in the background task, not on the request path, so it does not
 add latency to the agent's command submission.

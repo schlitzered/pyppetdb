@@ -116,10 +116,6 @@ def normalise_catalog_inputs(inputs) -> list:
     return normalised
 
 
-def catalog_content_hash(resources, edges) -> str:
-    return stable_hash({"resources": resources, "edges": edges})
-
-
 RESOURCE_PARAM_MAX_VALUE_LEN = 512
 
 
@@ -456,7 +452,6 @@ def catalog_payload(data: dict) -> dict:
             "edges": edges,
         }
     )
-    payload["content_hash"] = catalog_content_hash(resources, edges)
     return payload
 
 

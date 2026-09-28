@@ -61,9 +61,9 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         cursor.to_list = AsyncMock(return_value=rows)
         self.mock_coll.aggregate = MagicMock(return_value=cursor)
 
-    async def test_get_ingest_state_reports_facts_catalog_and_hash(self):
+    async def test_get_ingest_state_reports_facts_catalog_and_uuid(self):
         self._aggregate_returning(
-            [{"has_facts": True, "has_catalog": True, "content_hash": "abc"}]
+            [{"has_facts": True, "has_catalog": True, "catalog_uuid": "abc"}]
         )
         state = await self.crud.get_ingest_state(_id="node1")
         self.assertEqual(
@@ -71,7 +71,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             {
                 "has_facts": True,
                 "has_catalog": True,
-                "content_hash": "abc",
+                "catalog_uuid": "abc",
                 "disabled": False,
                 "environment": None,
                 "placement": None,
@@ -85,7 +85,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             {"$eq": [{"$type": "$facts"}, "object"]},
         )
 
-    async def test_get_ingest_state_without_catalog_has_no_hash(self):
+    async def test_get_ingest_state_without_catalog_has_no_uuid(self):
         self._aggregate_returning([{"has_facts": True, "has_catalog": False}])
         state = await self.crud.get_ingest_state(_id="node1")
         self.assertEqual(
@@ -93,7 +93,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             {
                 "has_facts": True,
                 "has_catalog": False,
-                "content_hash": None,
+                "catalog_uuid": None,
                 "disabled": False,
                 "environment": None,
                 "placement": None,

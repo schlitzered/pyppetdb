@@ -24,11 +24,11 @@ from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ingest import IngestQueue
 
 
-def ingest_state(content_hash=None, has_facts=True, has_catalog=True):
+def ingest_state(catalog_uuid=None, has_facts=True, has_catalog=True):
     return {
         "has_facts": has_facts,
         "has_catalog": has_catalog,
-        "content_hash": content_hash,
+        "catalog_uuid": catalog_uuid,
         "disabled": False,
         "environment": "production",
         "placement": {"provider": "aws"},
@@ -395,14 +395,14 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
 
         payload = self.mock_nodes.update.call_args.kwargs["payload"]
         self.assertIsNotNone(payload.catalog)
-        self.assertIsNotNone(payload.catalog.content_hash)
+        self.assertEqual(payload.catalog.catalog_uuid, "uuid1")
 
     async def test_replace_catalog_skips_the_catalog_when_unchanged(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         await self._post_catalog(generation=1)
-        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.content_hash
+        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.catalog_uuid
 
         self.mock_nodes.update = AsyncMock()
         self.mock_nodes.update_catalog_metadata = AsyncMock()
@@ -420,7 +420,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(metadata["version"], "2-1")
         self.assertEqual(metadata["catalog_uuid"], "uuid1")
-        self.assertEqual(metadata["content_hash"], stored)
+        self.assertEqual(metadata["catalog_uuid"], stored)
         self.assertIn("hash", metadata)
         self.assertIn("producer_timestamp", metadata)
         self.assertIn("num_resources", metadata)
@@ -452,7 +452,7 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         await self._post_catalog(generation=1)
-        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.content_hash
+        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.catalog_uuid
 
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(stored))
