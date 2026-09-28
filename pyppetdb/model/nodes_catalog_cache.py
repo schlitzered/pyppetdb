@@ -25,7 +25,6 @@ from pydantic import StrictStr
 filter_literal = Literal[
     "id",
     "facts",
-    "placement",
     "cached",
 ]
 
@@ -37,7 +36,6 @@ sort_literal = Literal["id"]
 class NodeCatalogCacheGet(BaseModel):
     id: Optional[StrictStr] = None
     facts: Optional[Dict[str, str]] = None
-    placement: Optional[Dict[str, str]] = None
     cached: Optional[bool] = None
 
 

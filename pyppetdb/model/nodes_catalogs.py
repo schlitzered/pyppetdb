@@ -30,7 +30,6 @@ filter_literal = Literal[
     "created",
     "node_id",
     "catalog",
-    "placement",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -43,7 +42,6 @@ class NodeCatalogGet(BaseModel):
     created: Optional[datetime] = None
     node_id: Optional[StrictStr] = None
     catalog: Optional[NodeGetCatalog] = None
-    placement: Optional[Dict[str, str]] = None
 
 
 class NodeCatalogGetMulti(BaseModel):
