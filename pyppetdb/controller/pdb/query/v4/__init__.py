@@ -493,7 +493,7 @@ class ControllerPdbQueryV4:
             implicit=implicit,
             timeout=timeout,
             restrict_active=restrict,
-            extra_columns=_extra_columns(entity, params) if route.kind != "single" else None,
+            extra_columns=_extra_columns(entity, params, route.kind),
             distinct_window=distinct,
         )
         if route.kind == "single":
@@ -655,13 +655,15 @@ def _root_entity(ast) -> str:
     return entity
 
 
-def _extra_columns(entity: str, params: dict) -> list:
+def _extra_columns(entity: str, params: dict, kind: str) -> list:
     extra = []
     normalised = entity.replace("_", "-")
     if normalised == "nodes" and parse_bool(params.get("include_facts_expiration", False)):
         extra.extend(["expires_facts", "expires_facts_updated"])
-    if normalised in ("factsets", "inventory") and parse_bool(
-        params.get("include_package_inventory", False)
+    if (
+        kind != "single"
+        and normalised in ("factsets", "inventory")
+        and parse_bool(params.get("include_package_inventory", False))
     ):
         extra.append("package_inventory")
     return extra

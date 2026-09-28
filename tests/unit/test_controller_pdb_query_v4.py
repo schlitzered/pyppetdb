@@ -369,7 +369,12 @@ class TestUpstreamRouteBehaviour(unittest.TestCase):
         self.client.get("/pdb/query/v4/nodes", params={"include_package_inventory": "true"})
         self.assertEqual(self.run.await_args.kwargs["extra_columns"], [])
         self.client.get("/pdb/query/v4/nodes/a", params={"include_facts_expiration": "true"})
-        self.assertIsNone(self.run.await_args.kwargs["extra_columns"])
+        self.assertEqual(
+            self.run.await_args.kwargs["extra_columns"],
+            ["expires_facts", "expires_facts_updated"],
+        )
+        self.client.get("/pdb/query/v4/factsets/a", params={"include_package_inventory": "true"})
+        self.assertEqual(self.run.await_args.kwargs["extra_columns"], [])
 
     def test_distinct_window_reaches_the_engine(self):
         self.client.get(
