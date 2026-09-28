@@ -63,7 +63,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_ingest_state_reports_facts_catalog_and_uuid(self):
         self._aggregate_returning(
-            [{"has_facts": True, "has_catalog": True, "catalog_uuid": "abc"}]
+            [{"has_facts": True, "has_catalog": True, "catalog_uuid": "abc", "content_hash": "h"}]
         )
         state = await self.crud.get_ingest_state(_id="node1")
         self.assertEqual(
@@ -72,6 +72,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
                 "has_facts": True,
                 "has_catalog": True,
                 "catalog_uuid": "abc",
+                "content_hash": "h",
                 "disabled": False,
                 "environment": None,
                 "placement": None,
@@ -94,6 +95,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
                 "has_facts": True,
                 "has_catalog": False,
                 "catalog_uuid": None,
+                "content_hash": None,
                 "disabled": False,
                 "environment": None,
                 "placement": None,

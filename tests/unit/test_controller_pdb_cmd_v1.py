@@ -24,11 +24,12 @@ from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.ingest import IngestQueue
 
 
-def ingest_state(catalog_uuid=None, has_facts=True, has_catalog=True):
+def ingest_state(catalog_uuid=None, has_facts=True, has_catalog=True, content_hash=None):
     return {
         "has_facts": has_facts,
         "has_catalog": has_catalog,
         "catalog_uuid": catalog_uuid,
+        "content_hash": content_hash,
         "disabled": False,
         "environment": "production",
         "placement": {"provider": "aws"},
@@ -356,12 +357,12 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.assertIn("uuid", result)
         self.assertEqual(self.queue.stats["accepted"], 0)
 
-    async def _post_catalog(self, generation=1):
+    async def _post_catalog(self, generation=1, catalog_uuid="uuid1"):
         mock_request = MagicMock()
         data = {
             "certname": "node1",
             "environment": "prod",
-            "catalog_uuid": "uuid1",
+            "catalog_uuid": catalog_uuid,
             "version": f"{generation}-1",
             "producer_timestamp": "2026-03-06T00:00:00Z",
             "resources": [
@@ -396,31 +397,38 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         payload = self.mock_nodes.update.call_args.kwargs["payload"]
         self.assertIsNotNone(payload.catalog)
         self.assertEqual(payload.catalog.catalog_uuid, "uuid1")
+        self.assertIsNotNone(payload.catalog.content_hash)
 
     async def test_replace_catalog_skips_the_catalog_when_unchanged(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         await self._post_catalog(generation=1)
-        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.catalog_uuid
+        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.content_hash
 
         self.mock_nodes.update = AsyncMock()
+        self.mock_catalogs.create = AsyncMock()
+        self.mock_resources.replace_for_node = AsyncMock()
         self.mock_nodes.update_catalog_metadata = AsyncMock()
-        self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(stored))
-        await self._post_catalog(generation=2)
+        self.mock_nodes.get_ingest_state = AsyncMock(
+            return_value=ingest_state("uuid1", content_hash=stored)
+        )
+        await self._post_catalog(generation=2, catalog_uuid="uuid2")
 
         payload = self.mock_nodes.update.call_args.kwargs["payload"]
         self.assertIsNone(payload.catalog)
         self.assertIsNotNone(payload.change_catalog)
         self.assertEqual(payload.environment, "prod")
+        self.mock_resources.replace_for_node.assert_not_called()
+        self.mock_catalogs.create.assert_called_once()
 
         metadata = self.mock_nodes.update_catalog_metadata.call_args.kwargs["metadata"]
         self.assertEqual(
             self.mock_nodes.update_catalog_metadata.call_args.kwargs["_id"], "node1"
         )
         self.assertEqual(metadata["version"], "2-1")
-        self.assertEqual(metadata["catalog_uuid"], "uuid1")
-        self.assertEqual(metadata["catalog_uuid"], stored)
+        self.assertEqual(metadata["catalog_uuid"], "uuid2")
+        self.assertEqual(metadata["content_hash"], stored)
         self.assertIn("hash", metadata)
         self.assertIn("producer_timestamp", metadata)
         self.assertIn("num_resources", metadata)
@@ -431,7 +439,9 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.update_catalog_metadata = AsyncMock()
-        self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state("stale"))
+        self.mock_nodes.get_ingest_state = AsyncMock(
+            return_value=ingest_state("uuid1", content_hash="stale")
+        )
 
         await self._post_catalog()
 
@@ -440,24 +450,29 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
     async def test_replace_catalog_writes_when_content_differs(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
-        self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state("stale"))
+        self.mock_nodes.get_ingest_state = AsyncMock(
+            return_value=ingest_state("uuid0", content_hash="stale")
+        )
 
         await self._post_catalog()
 
         payload = self.mock_nodes.update.call_args.kwargs["payload"]
         self.assertIsNotNone(payload.catalog)
+        self.mock_resources.replace_for_node.assert_called_once()
 
     async def test_replace_catalog_history_is_not_rewritten_for_a_stored_uuid(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         await self._post_catalog(generation=1)
-        stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.catalog_uuid
+        first = self.mock_nodes.update.call_args.kwargs["payload"].catalog
         self.mock_catalogs.create.assert_called_once()
 
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.update_catalog_metadata = AsyncMock()
-        self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(stored))
+        self.mock_nodes.get_ingest_state = AsyncMock(
+            return_value=ingest_state(first.catalog_uuid, content_hash=first.content_hash)
+        )
         await self._post_catalog(generation=2)
 
         self.mock_catalogs.create.assert_not_called()

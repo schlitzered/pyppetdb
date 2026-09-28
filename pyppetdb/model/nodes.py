@@ -101,6 +101,7 @@ class NodeGetCatalog(BaseModel):
     resources_exported: Optional[List[NodeGetCatalogResource]] = None
     edges: Optional[List[NodeGetCatalogEdge]] = None
     hash: Optional[str] = None
+    content_hash: Optional[str] = None
     version: Optional[str] = None
     transaction_uuid: Optional[str] = None
     code_id: Optional[str] = None

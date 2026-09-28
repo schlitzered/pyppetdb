@@ -473,6 +473,7 @@ class TestCatalogMetadata(unittest.TestCase):
         self.assertEqual(metadata["num_resources"], 1)
         self.assertEqual(metadata["num_resources_exported"], 1)
         self.assertEqual(metadata["hash"], payload["hash"])
+        self.assertEqual(metadata["content_hash"], payload["content_hash"])
         self.assertIsInstance(metadata["producer_timestamp"], datetime)
 
 

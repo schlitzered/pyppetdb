@@ -383,16 +383,17 @@ class ControllerPdbCmdV1:
                 f"discarding catalog for {node_id}: no facts have been stored yet"
             )
             return
-        changed = (
+        new_compile = (
             not catalog.get("catalog_uuid")
             or state["catalog_uuid"] != catalog.get("catalog_uuid")
         )
+        changed = state["content_hash"] != catalog.get("content_hash")
         if changed:
             base["catalog"] = catalog_metadata(catalog)
         else:
             metadata = catalog_metadata(catalog)
             self.log.debug(
-                f"catalog {catalog.get('catalog_uuid')} for {node_id} already stored, keeping resources and "
+                f"catalog content for {node_id} unchanged, keeping resources and "
                 f"edges, updating {len(metadata)} catalog metadata fields"
             )
         await self._job_update_node(node_id=node_id, base=base)
@@ -421,7 +422,7 @@ class ControllerPdbCmdV1:
                 _id=node_id,
                 metadata=metadata,
             )
-        if changed and self.config.app.main.storeHistory.catalog:
+        if new_compile and self.config.app.main.storeHistory.catalog:
             await self._store_catalog_history_async(
                 node_id=node_id,
                 catalog_uuid=catalog_uuid,
