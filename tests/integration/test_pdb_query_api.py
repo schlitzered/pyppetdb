@@ -18,6 +18,16 @@ import uuid
 from tests.integration.base import IntegrationTestBase
 
 
+COMMAND_VERSIONS = {
+    "replace_facts": 5,
+    "replace_catalog": 9,
+    "store_report": 8,
+    "deactivate_node": 3,
+    "replace_catalog_inputs": 1,
+    "configure_expiration": 1,
+}
+
+
 class PdbQueryApiIntegrationTests(IntegrationTestBase):
     def setUp(self):
         super().setUp()
@@ -38,7 +48,9 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         )
         self._seed()
 
-    def _post(self, command, payload, version=1):
+    def _post(self, command, payload, version=None):
+        if version is None:
+            version = COMMAND_VERSIONS[command]
         resp = self.client.post(
             f"/pdb/cmd/v1?certname={self.certname}&command={command}"
             f"&producer-timestamp=2026-03-20T10:00:00Z&version={version}",

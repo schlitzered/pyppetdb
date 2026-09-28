@@ -36,7 +36,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         }
 
         resp = self.client.post(
-            f"/pdb/cmd/v1?certname={certname}&command=replace_facts&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"/pdb/cmd/v1?certname={certname}&command=replace_facts&producer-timestamp=2026-03-20T10:00:00Z&version=5",
             content=json.dumps(facts_data),
             headers={"Content-Type": "application/json"},
         )
@@ -52,7 +52,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
 
     def _seed_facts(self, certname):
         resp = self.client.post(
-            f"/pdb/cmd/v1?certname={certname}&command=replace_facts&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"/pdb/cmd/v1?certname={certname}&command=replace_facts&producer-timestamp=2026-03-20T10:00:00Z&version=5",
             content=json.dumps(
                 {
                     "certname": certname,
@@ -73,7 +73,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         catalog_uuid = f"uuid-{uuid.uuid4().hex}"
         self.addCleanup(self._db["nodes_catalogs"].delete_many, {"id": catalog_uuid})
         resp = self.client.post(
-            f"/pdb/cmd/v1?certname={certname}&command=replace_catalog&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"/pdb/cmd/v1?certname={certname}&command=replace_catalog&producer-timestamp=2026-03-20T10:00:00Z&version=9",
             content=json.dumps(
                 {
                     "certname": certname,
@@ -121,7 +121,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         }
 
         resp = self.client.post(
-            f"/pdb/cmd/v1?certname={certname}&command=replace_catalog&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"/pdb/cmd/v1?certname={certname}&command=replace_catalog&producer-timestamp=2026-03-20T10:00:00Z&version=9",
             content=json.dumps(catalog_data),
             headers={"Content-Type": "application/json"},
         )
@@ -177,7 +177,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         }
         resp = self.client.post(
             f"/pdb/cmd/v1?certname={certname}&command=replace_catalog"
-            f"&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"&producer-timestamp=2026-03-20T10:00:00Z&version=9",
             content=json.dumps(catalog_data),
             headers={"Content-Type": "application/json"},
         )
@@ -264,7 +264,7 @@ class PdbCmdApiIntegrationTests(IntegrationTestBase):
         }
 
         resp = self.client.post(
-            f"/pdb/cmd/v1?certname={certname}&command=store_report&producer-timestamp=2026-03-20T10:00:00Z&version=1",
+            f"/pdb/cmd/v1?certname={certname}&command=store_report&producer-timestamp=2026-03-20T10:00:00Z&version=8",
             content=json.dumps(report_data),
             headers={"Content-Type": "application/json"},
         )
