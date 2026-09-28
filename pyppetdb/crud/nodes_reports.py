@@ -93,14 +93,14 @@ class CrudNodesReports(CrudMongo):
         config: Config,
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
-        secret_manager: NodesReportsRedactor,
+        redactor: NodesReportsRedactor,
     ):
         super(CrudNodesReports, self).__init__(
             config=config,
             log=log,
             coll=coll,
         )
-        self._secret_manager = secret_manager
+        self._redactor = redactor
         self._indices.extend(
             [
                 pymongo.IndexModel(
@@ -203,7 +203,6 @@ class CrudNodesReports(CrudMongo):
         return_none: bool = False,
     ) -> NodeReportGet | None:
         data = payload.model_dump()
-        data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
         data["created"] = _id
@@ -256,7 +255,7 @@ class CrudNodesReports(CrudMongo):
             query=query,
             fields=fields,
         )
-        return NodeReportGet(**result)
+        return NodeReportGet(**self._redactor.redact(result))
 
     async def resource_exists(
         self,
@@ -306,6 +305,7 @@ class CrudNodesReports(CrudMongo):
             page=page,
             limit=limit,
         )
+        result["result"] = [self._redactor.redact(item) for item in result["result"]]
         return NodeReportGetMulti(**result)
 
     async def create_latest(
@@ -315,7 +315,6 @@ class CrudNodesReports(CrudMongo):
         payload: NodeReportPostInternal,
     ) -> tuple:
         data = payload.model_dump()
-        data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
         data["created"] = _id

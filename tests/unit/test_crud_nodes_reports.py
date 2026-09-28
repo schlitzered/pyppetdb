@@ -121,7 +121,28 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
             _id=now, node_id="node1", payload=payload, fields=[]
         )
         self.assertEqual(result.id, now)
-        self.mock_redactor.redact.assert_called_once()
+        self.mock_redactor.redact.assert_not_called()
+        stored = self.crud._create.call_args.kwargs["payload"]
+        self.assertEqual(stored["report"]["status"], "changed")
+
+    async def test_get_redacts_on_read(self):
+        now = datetime.now()
+        self.crud._get = AsyncMock(return_value={"id": now, "node_id": "node1"})
+        self.mock_redactor.redact.side_effect = lambda x: {**x, "node_id": "redacted"}
+        result = await self.crud.get(_id=now, node_id="node1", placement={}, fields=[])
+        self.assertEqual(result.node_id, "redacted")
+
+    async def test_search_redacts_every_row(self):
+        now = datetime.now()
+        self.crud._search = AsyncMock(
+            return_value={
+                "result": [{"id": now, "node_id": "a"}, {"id": now, "node_id": "b"}],
+                "meta": {"result_size": 2, "total": 2, "page": 0, "limit": 10},
+            }
+        )
+        self.mock_redactor.redact.side_effect = lambda x: x
+        await self.crud.search(node_id="node1", placement={}, fields=["id"])
+        self.assertEqual(self.mock_redactor.redact.call_count, 2)
 
     async def test_get(self):
         now = datetime.now()

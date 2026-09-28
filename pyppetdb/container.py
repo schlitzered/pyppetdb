@@ -191,7 +191,8 @@ class AppContainer:
                 config=config,
                 log=log,
                 coll=mongo_db["nodes_catalogs"],
-                secret_manager=self.nodes_catalogs_redactor,
+                redactor=self.nodes_catalogs_redactor,
+                protector=self.nodes_data_protector,
             )
         )
 
@@ -232,7 +233,7 @@ class AppContainer:
                 config=config,
                 log=log,
                 coll=mongo_db["nodes_reports"],
-                secret_manager=self.nodes_reports_redactor,
+                redactor=self.nodes_reports_redactor,
             )
         )
 

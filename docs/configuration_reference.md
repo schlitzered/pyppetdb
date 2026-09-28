@@ -74,7 +74,6 @@ Serves `/puppet` and `/puppet-ca`. Binding and TLS are configured via `app_main_
 | `app_puppet_enable` | `true` | Enable the Puppet proxy router group. |
 | `app_puppet_serverurl` | *(unset)* | URL of the upstream Puppetserver. If unset, requests are not forwarded. |
 | `app_puppet_timeout` | `60` | Upstream request timeout (seconds). |
-| `app_puppet_authSecret` | `true` | Apply secret redaction to proxied responses. |
 | `app_puppet_trustedCns` | `[]` | JSON list of trusted client CNs allowed for privileged proxy operations. |
 | `app_puppet_catalogCache` | `true` | Enable catalog caching. |
 | `app_puppet_catalogCacheTTL` | `86400` | TTL (seconds) for cached catalogs. |

@@ -79,7 +79,6 @@ class ConfigAppPuppet(BaseModel):
     catalogCacheTTL: typing.Optional[int] = 86400
     serverurl: typing.Optional[str] = None
     timeout: int = 60
-    authSecret: typing.Optional[bool] = True
     trustedCns: typing.Optional[list[str]] = []
 
     @field_validator("catalogCacheFacts", mode="before")

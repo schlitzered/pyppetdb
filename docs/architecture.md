@@ -117,10 +117,15 @@ See [PuppetDB](puppetdb.md) for the endpoint and query-language reference.
 
 ## 4. Secret Redaction Strategy
 
-Redaction is applied at read time, when data is served over the `/api` routes. The Puppet Agent
-(on the `/puppet` routes) needs the unredacted catalog to configure the system, while humans and
-API consumers only ever see redacted data. Redaction happens even for deeply nested values and for
-job logs.
+Redaction is applied at read time, when data is served over the `/api` routes. MongoDB stores
+reports, catalogs, facts and events as received. The Puppet Agent (on the `/puppet` routes) needs
+the unredacted catalog to configure the system, the PuppetDB-compatible query API under `/pdb` is
+exempt on purpose because its consumers expect PuppetDB's exact answers, and facts are never
+redacted. Humans reading reports, catalog history and job logs over `/api` only ever see redacted
+data, even for deeply nested values, and a secret added later is redacted from everything already
+stored. Catalog history keeps the catalog's resources and edges as one compressed, encrypted blob
+(the same `NodesDataProtector` encoding the catalog cache uses) next to plain metadata; the blob is
+decrypted and redacted only when a request asks for the `catalog` field.
 
 ```mermaid
 sequenceDiagram

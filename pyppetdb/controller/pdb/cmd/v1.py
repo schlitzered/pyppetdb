@@ -488,12 +488,8 @@ class ControllerPdbCmdV1:
         created: datetime,
     ):
         placement = await self.crud_nodes.get_placement(_id=node_id)
-        payload = await asyncio.to_thread(
-            NodeCatalogPostInternal,
-            placement=placement,
-            created=created,
-            created_no_report_ttl=created,
-            catalog=catalog,
+        payload, content = await asyncio.to_thread(
+            self._history_entry, placement, created, catalog
         )
         await self.crud_nodes_catalogs.create(
             _id=catalog_uuid,
@@ -501,7 +497,17 @@ class ControllerPdbCmdV1:
             payload=payload,
             fields=["id"],
             return_none=True,
+            content=content,
         )
+
+    def _history_entry(self, placement, created: datetime, catalog: dict) -> tuple:
+        payload = NodeCatalogPostInternal(
+            placement=placement,
+            created=created,
+            created_no_report_ttl=created,
+            catalog=catalog_metadata(catalog),
+        )
+        return payload, self.crud_nodes_catalogs.encode_content(catalog)
 
     @staticmethod
     def _proxy_headers(request: Request) -> dict:

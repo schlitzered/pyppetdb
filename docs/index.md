@@ -61,6 +61,10 @@ To maintain a high security posture, pyppetdb can automatically redact sensitive
     nested in dictionaries or if the `Secret` keyword was omitted in the manifest.
 *   **Log Safety**: Redaction is applied globally, including to real-time **job logs**, ensuring
     that sensitive data never leaks into the UI or monitoring tools.
+*   **Read-time, `/api` only**: Data is stored as received and redacted when the management API
+    serves it, so secrets added later are redacted retroactively. The PuppetDB-compatible query
+    API under `/pdb` is deliberately exempt: it exists for tools that expect PuppetDB's exact
+    answers. Facts are never redacted.
 
 ### Secure Job Execution Engine
 Control your infrastructure via the optional **pyppetdb agent**.
