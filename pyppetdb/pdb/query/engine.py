@@ -21,11 +21,14 @@ import time
 from datetime import datetime
 from typing import Optional
 
+import pymongo
 import pymongo.errors
 
 from pyppetdb.helpers.puppetdb import FACTS_INDEX_FIELD
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
+from pyppetdb.helpers.puppetdb import decode_fact_path
+from pyppetdb.helpers.puppetdb import walk_fact
 from pyppetdb.pdb.query import matcher
 from pyppetdb.pdb.query.ast import FilterCompiler
 from pyppetdb.pdb.query.ast import TUPLE_IN
@@ -286,6 +289,8 @@ class QueryEngine:
         return rows, total
 
     def _explain_python(self, entity, match: dict) -> list:
+        if entity.distinct_source:
+            return [{"query plan": {"distinct": entity.collection, "key": entity.distinct_source}}]
         prefilter = build_prefilter(entity, match, self._facts_index) if match else {}
         return [{"query plan": {"find": entity.collection, "filter": prefilter, "expand": entity.python_expand}}]
 
@@ -563,12 +568,48 @@ class QueryEngine:
     ):
         if _is_never(match):
             return [], 0
+        if entity.distinct_source:
+            rows = await self._expand_distinct(entity, match)
+        else:
+            rows = await self._expand_documents(entity, query, match, include_total)
+        total = len(rows)
+        rows = _python_shape(rows, query, entity)
+        rows = _python_paging(rows, query)
+        return rows, total
+
+    async def _expand_distinct(self, entity, match: dict) -> list:
+        collection = self.collection(entity.collection)
+        options = {}
+        timeout = _query_timeout.get()
+        if timeout:
+            options["maxTimeMS"] = int(timeout * 1000)
+        values = await collection.distinct(entity.distinct_source, **options)
+        expander = PYTHON_EXPANDERS[entity.python_expand]
+        return [
+            row
+            for row in expander(values)
+            if not match or matcher.matches(row, match)
+        ]
+
+    async def _expand_documents(
+        self, entity, query: Query, match: dict, include_total: bool
+    ) -> list:
         collection = self.collection(entity.collection)
         prefilter = (
             build_prefilter(entity, match, self._facts_index) if match else {}
         )
+        keys = _pinned_node(match, "name") if match else None
+        candidates = await self._fact_path_candidates(entity, match)
+        if candidates is not None:
+            keys, entries = candidates
+            if not entries:
+                return []
+            if len(entries) <= MAX_PATH_PREFILTER:
+                prefilter = _and_filters(
+                    prefilter, {entity.path_source: {"$in": entries}}
+                )
         cursor = collection.find(
-            prefilter, projection=_python_projection(entity, match)
+            prefilter, projection=_python_projection(entity, keys)
         )
         timeout = _query_timeout.get()
         deadline = time.monotonic() + timeout if timeout else None
@@ -576,14 +617,12 @@ class QueryEngine:
             cursor = cursor.max_time_ms(timeout * 1000)
         expander = PYTHON_EXPANDERS[entity.python_expand]
         wanted = None
-        if not (
-            include_total
-            or query.order_by
-            or query.functions
-            or entity.distinct_rows
-        ):
-            wanted = (query.offset or 0) + query.limit if query.limit else None
-        seen = set() if entity.distinct_rows else None
+        if query.limit and not (include_total or query.functions):
+            order = _document_order(entity, query)
+            if order is not None:
+                cursor = cursor.sort(*order).allow_disk_use(True)
+            if order is not None or not query.order_by:
+                wanted = (query.offset or 0) + query.limit
         rows = []
         batch = []
         async for document in cursor:
@@ -592,7 +631,7 @@ class QueryEngine:
                 continue
             rows.extend(
                 await asyncio.to_thread(
-                    _expand_batch, expander, batch, match, seen, deadline
+                    _expand_batch, expander, batch, match, deadline
                 )
             )
             batch = []
@@ -601,19 +640,85 @@ class QueryEngine:
         if batch:
             rows.extend(
                 await asyncio.to_thread(
-                    _expand_batch, expander, batch, match, seen, deadline
+                    _expand_batch, expander, batch, match, deadline
                 )
             )
-        total = len(rows)
-        rows = _python_shape(rows, query, entity)
-        rows = _python_paging(rows, query)
-        return rows, total
+        return rows
+
+    async def _fact_path_candidates(self, entity, match: dict):
+        if not entity.path_source or not match:
+            return None
+        path_match = _path_node(match, PATH_COLUMNS)
+        if path_match is None:
+            return None
+        options = {}
+        timeout = _query_timeout.get()
+        if timeout:
+            options["maxTimeMS"] = int(timeout * 1000)
+        values = await self.collection(entity.collection).distinct(
+            entity.path_source, **options
+        )
+        names = set()
+        entries = []
+        for entry in values:
+            if not isinstance(entry, str):
+                continue
+            path, _value_type = decode_fact_path(entry)
+            if matcher.matches({"name": path[0], "path": path}, path_match):
+                names.add(path[0])
+                entries.append(entry)
+        return names, sorted(entries)
 
 
 PYTHON_BATCH_SIZE = 200
+MAX_PATH_PREFILTER = 100
+PATH_COLUMNS = ("name", "path")
 
 
-def _expand_batch(expander, documents: list, match: dict, seen, deadline) -> list:
+def _path_node(node, columns: tuple):
+    if not isinstance(node, dict) or not node:
+        return None
+    parts = []
+    for key, value in node.items():
+        if key == "$and":
+            for child in value:
+                derived = _path_node(child, columns)
+                if derived is not None:
+                    parts.append(derived)
+        elif key == "$or":
+            branches = []
+            for child in value:
+                derived = _path_node(child, columns)
+                if derived is None:
+                    branches = []
+                    break
+                branches.append(derived)
+            if branches:
+                parts.append({"$or": branches})
+        elif key in columns:
+            parts.append({key: value})
+    if not parts:
+        return None
+    return parts[0] if len(parts) == 1 else {"$and": parts}
+
+
+def _and_filters(left: dict, right: dict) -> dict:
+    if not left:
+        return right
+    return {"$and": [left, right]}
+
+
+def _document_order(entity, query: Query):
+    if not query.order_by:
+        return None
+    column_name, direction = query.order_by[0]
+    column = entity.by_name.get(column_name)
+    if column is None or column.prefilter != "id" or column.prefilter_kind != "path":
+        return None
+    return column.prefilter, pymongo.ASCENDING if direction > 0 else pymongo.DESCENDING
+
+
+def _expand_batch(expander, documents: list, match: dict, deadline) -> list:
     rows = []
     for document in documents:
         if deadline is not None and time.monotonic() > deadline:
@@ -621,18 +726,12 @@ def _expand_batch(expander, documents: list, match: dict, seen, deadline) -> lis
         for row in expander(document):
             if match and not matcher.matches(row, match):
                 continue
-            if seen is not None:
-                key = json.dumps(row, sort_keys=True, default=str)
-                if key in seen:
-                    continue
-                seen.add(key)
             rows.append(row)
     return rows
 
 
-def _python_projection(entity, match: dict) -> dict:
+def _python_projection(entity, keys) -> dict:
     projection = dict(PYTHON_PROJECTIONS[entity.python_expand])
-    keys = _pinned_node(match, "name") if match else None
     if not keys or len(keys) > MAX_PINNED_KEYS:
         return projection
     if any(not SAFE_KEY.match(key) for key in keys):
@@ -1530,7 +1629,7 @@ def expand_fact_contents(document: dict) -> list:
     state = "inactive" if document.get("disabled") else "active"
     rows = []
     for name, value in facts.items():
-        for path, leaf in _walk_fact(value, [name]):
+        for path, leaf in walk_fact(value, [name]):
             rows.append(
                 {
                     "certname": certname,
@@ -1544,53 +1643,14 @@ def expand_fact_contents(document: dict) -> list:
     return rows
 
 
-def expand_fact_paths(document: dict) -> list:
-    facts = document.get("facts")
-    if not isinstance(facts, dict):
-        return []
+def expand_fact_paths(entries: list) -> list:
     rows = []
-    for name, value in facts.items():
-        for path, leaf in _walk_fact(value, [name]):
-            rows.append(
-                {
-                    "name": name,
-                    "path": path,
-                    "type": _fact_type(leaf),
-                }
-            )
+    for entry in entries:
+        if not isinstance(entry, str):
+            continue
+        path, value_type = decode_fact_path(entry)
+        rows.append({"name": path[0], "path": path, "type": value_type})
     return rows
-
-
-def _walk_fact(value, path: list):
-    if isinstance(value, dict):
-        if not value:
-            yield list(path), value
-            return
-        for key, item in value.items():
-            yield from _walk_fact(item, path + [key])
-        return
-    if isinstance(value, list):
-        if not value:
-            yield list(path), value
-            return
-        for index, item in enumerate(value):
-            yield from _walk_fact(item, path + [index])
-        return
-    yield list(path), value
-
-
-def _fact_type(value) -> str:
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, int):
-        return "integer"
-    if isinstance(value, float):
-        return "float"
-    if isinstance(value, str):
-        return "string"
-    if value is None:
-        return "null"
-    return "json"
 
 
 PYTHON_EXPANDERS = {
@@ -1606,5 +1666,4 @@ PYTHON_PROJECTIONS = {
         "disabled": 1,
         "facts": 1,
     },
-    "fact_paths": {"_id": 0, "facts": 1},
 }

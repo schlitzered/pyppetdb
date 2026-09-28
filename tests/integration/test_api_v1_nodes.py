@@ -15,6 +15,7 @@
 import uuid
 from datetime import datetime, timedelta
 from pyppetdb.authorize import PERM_NODES_CREATE
+from pyppetdb.helpers.puppetdb import build_fact_paths
 from tests.integration.base import IntegrationTestBase
 
 
@@ -237,6 +238,9 @@ class ApiV1NodesAuthzIntegrationTests(IntegrationTestBase):
                     "environment": "production",
                     "disabled": False,
                     "facts": {},
+                    "fact_paths": build_fact_paths(
+                        {f"allowed{self.pfx}": {"os": ["a"]}}
+                    ),
                     "node_groups": [self.node_group_allowed],
                 },
                 {
@@ -244,6 +248,7 @@ class ApiV1NodesAuthzIntegrationTests(IntegrationTestBase):
                     "environment": "production",
                     "disabled": False,
                     "facts": {},
+                    "fact_paths": build_fact_paths({f"denied{self.pfx}": 1}),
                     "node_groups": [self.node_group_denied],
                 },
             ]
@@ -303,6 +308,24 @@ class ApiV1NodesAuthzIntegrationTests(IntegrationTestBase):
         ids = {n["id"] for n in resp.json()["result"]}
         self.assertIn(self.node_allowed, ids)
         self.assertNotIn(self.node_denied, ids)
+
+    def test_distinct_fact_names_are_scoped_to_node_groups(self):
+        resp = self.client.get(
+            "/api/v1/nodes/_distinct_fact_names", headers=self.ident.headers
+        )
+        self.assertEqual(resp.status_code, 200)
+        names = resp.json()["result"]
+        self.assertIn(f"allowed{self.pfx}.os", names)
+        self.assertNotIn(f"denied{self.pfx}", names)
+
+        resp = self.client.get(
+            "/api/v1/nodes/_distinct_fact_names",
+            headers={"x-secret-id": "test-cred", "x-secret": "test-secret"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        names = resp.json()["result"]
+        self.assertIn(f"allowed{self.pfx}.os", names)
+        self.assertIn(f"denied{self.pfx}", names)
 
     def test_admin_is_not_scoped(self):
         resp = self.client.get(

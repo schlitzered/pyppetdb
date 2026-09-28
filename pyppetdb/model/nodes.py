@@ -254,6 +254,7 @@ class NodePutInternal(BaseModel):
     facts: Optional[Dict] = None
     facts_expiration: Optional[NodeFactsExpiration] = None
     facts_index: Optional[List[Dict[str, Any]]] = None
+    fact_paths: Optional[List[str]] = None
     facts_hash: Optional[str] = None
     package_inventory: Optional[List[List[str]]] = None
     producer: Optional[str] = None
@@ -272,4 +273,9 @@ class NodeDistinctFactValue(BaseModel):
 
 class NodeGetDistinctFactValues(BaseModel):
     result: List[NodeDistinctFactValue]
+    meta: MetaMulti
+
+
+class NodeGetDistinctFactNames(BaseModel):
+    result: List[str]
     meta: MetaMulti

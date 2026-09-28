@@ -81,6 +81,28 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             _id="node1", user_node_groups=[], fields=[], outdated_threshold=None
         )
 
+    async def test_distinct_fact_names_is_scoped_to_the_users_node_groups(self):
+        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=["g1"])
+        self.mock_crud_nodes.distinct_fact_names = AsyncMock()
+
+        mock_request = MagicMock()
+        await self.controller.distinct_fact_names(
+            request=mock_request,
+            disabled=False,
+            environment="prod",
+            fact=None,
+            report_status=None,
+        )
+
+        self.mock_crud_nodes.distinct_fact_names.assert_awaited_once_with(
+            user_node_groups=["g1"],
+            disabled=False,
+            environment="prod",
+            fact=None,
+            report_status=None,
+        )
+
     async def test_delete_node_ignores_missing_certificate(self):
         self.mock_authorize.require_perm = AsyncMock()
         self.mock_ca_service.update_certificate_status = AsyncMock(
