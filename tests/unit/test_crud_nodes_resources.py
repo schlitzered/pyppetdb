@@ -33,3 +33,10 @@ class TestCrudNodesResourcesIndexes(unittest.TestCase):
         self.assertEqual(
             keys["idx_type_title"], [("type", 1), ("title", 1), ("node_id", 1)]
         )
+
+    def test_exported_resources_have_small_partial_indexes(self):
+        crud = CrudNodesResources(MagicMock(), logging.getLogger("test"), MagicMock())
+        indexes = {index.document["name"]: index.document for index in crud._indices}
+        for name, leading in (("idx_exported_type", "type"), ("idx_exported_node_id", "node_id")):
+            self.assertEqual(indexes[name]["partialFilterExpression"], {"exported": True})
+            self.assertEqual(next(iter(indexes[name]["key"])), leading)

@@ -64,6 +64,26 @@ class CrudNodesResources(CrudMongo):
                     ],
                     name="idx_params_index",
                 ),
+                pymongo.IndexModel(
+                    [
+                        ("type", pymongo.ASCENDING),
+                        ("title", pymongo.ASCENDING),
+                        ("node_id", pymongo.ASCENDING),
+                        ("disabled", pymongo.ASCENDING),
+                    ],
+                    name="idx_exported_type",
+                    partialFilterExpression={"exported": True},
+                ),
+                pymongo.IndexModel(
+                    [
+                        ("node_id", pymongo.ASCENDING),
+                        ("type", pymongo.ASCENDING),
+                        ("title", pymongo.ASCENDING),
+                        ("disabled", pymongo.ASCENDING),
+                    ],
+                    name="idx_exported_node_id",
+                    partialFilterExpression={"exported": True},
+                ),
             ]
         )
 

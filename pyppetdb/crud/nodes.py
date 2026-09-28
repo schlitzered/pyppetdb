@@ -70,6 +70,10 @@ class CrudNodes(CrudMongo):
                     [("disabled", pymongo.ASCENDING)], name="idx_disabled"
                 ),
                 pymongo.IndexModel(
+                    [("disabled", pymongo.ASCENDING), ("report.status", pymongo.ASCENDING)],
+                    name="idx_disabled_report_status",
+                ),
+                pymongo.IndexModel(
                     [("node_groups", pymongo.ASCENDING)], name="idx_node_groups"
                 ),
                 pymongo.IndexModel(

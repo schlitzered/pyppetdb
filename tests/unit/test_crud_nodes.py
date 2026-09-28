@@ -432,6 +432,16 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         payload = self.crud._create.call_args.kwargs["payload"]
         self.assertIn({"p": "osfamily", "v": "Debian"}, payload["facts_index"])
 
+    def test_status_grouping_is_covered_by_an_index(self):
+        model = next(
+            index
+            for index in self.crud._indices
+            if index.document["name"] == "idx_disabled_report_status"
+        )
+        self.assertEqual(
+            list(model.document["key"].items()), [("disabled", 1), ("report.status", 1)]
+        )
+
     def test_disabled_index_covers_active_counts(self):
         model = next(
             index for index in self.crud._indices if index.document["name"] == "idx_disabled"
