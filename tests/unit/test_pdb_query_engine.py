@@ -15,6 +15,7 @@
 import json
 import logging
 import unittest
+from unittest.mock import AsyncMock
 
 import pymongo.errors
 from datetime import UTC
@@ -700,7 +701,7 @@ class TestActiveRestriction(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection()
         engine = engine_with(nodes)
         await engine.run("environments", ["=", "name", "prod"], restrict_active=True)
-        self.assertFalse(any("disabled" in str(stage) for stage in nodes.pipelines[0]))
+        self.assertEqual(nodes.distincts, [("environment", {"environment": "prod"})])
 
 
 class TestDistinctWindow(unittest.IsolatedAsyncioTestCase):
@@ -918,6 +919,64 @@ class TestIncrementalSort(unittest.IsolatedAsyncioTestCase):
             sorted(values, key=_bson_order),
             [None, 1.5, 2, "a", "b", True, datetime(2026, 1, 1)],
         )
+
+
+class TestExists(unittest.IsolatedAsyncioTestCase):
+    async def test_document_entities_answer_with_find_one(self):
+        nodes = FakeCollection()
+        nodes.find_one = AsyncMock(return_value={"_id": 1})
+        engine = engine_with(nodes)
+        self.assertTrue(await engine.exists("nodes", "certname", "a"))
+        nodes.find_one.assert_awaited_once_with({"id": "a"}, projection={"_id": 1})
+        self.assertEqual(nodes.pipelines, [])
+
+    async def test_entity_stages_join_the_condition(self):
+        nodes = FakeCollection()
+        nodes.find_one = AsyncMock(return_value=None)
+        engine = engine_with(nodes)
+        self.assertFalse(await engine.exists("factsets", "certname", "a"))
+        condition = nodes.find_one.await_args.args[0]
+        self.assertIn({"id": "a"}, condition.get("$and", [condition]))
+
+    async def test_other_entities_fall_back_to_a_one_row_query(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}])
+        engine = engine_with(nodes)
+        self.assertTrue(await engine.exists("catalogs", "certname", "a"))
+        self.assertEqual(len(nodes.pipelines), 1)
+
+
+class TestLookupPruning(unittest.IsolatedAsyncioTestCase):
+    async def lookups(self, ast):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("catalogs", ast)
+        return [stage["$lookup"]["as"] for stage in nodes.pipelines[0] if "$lookup" in stage]
+
+    async def test_catalog_columns_without_children_skip_both_lookups(self):
+        self.assertEqual(
+            await self.lookups(["extract", ["certname", "catalog_uuid"], ["=", "certname", "a"]]),
+            [],
+        )
+
+    async def test_full_catalogs_keep_both_lookups(self):
+        self.assertEqual(
+            await self.lookups(["=", "certname", "a"]), ["_edges", "_resources"]
+        )
+
+    async def test_only_the_requested_child_is_looked_up(self):
+        self.assertEqual(
+            await self.lookups(["extract", ["certname", "edges"], ["=", "certname", "a"]]),
+            ["_edges"],
+        )
+
+    def test_root_references_keep_every_lookup(self):
+        from pyppetdb.pdb.query.engine import _prune_lookups
+
+        pipeline = [
+            {"$lookup": {"from": "x", "as": "_x", "pipeline": []}},
+            {"$replaceRoot": {"newRoot": "$$ROOT"}},
+        ]
+        self.assertEqual(_prune_lookups(pipeline), pipeline)
 
 
 class TestGroup(unittest.IsolatedAsyncioTestCase):
@@ -2324,19 +2383,33 @@ class TestDistinctEntities(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(rows, ["b", "a"])
 
-    async def test_a_filtered_query_still_aggregates(self):
-        nodes = FakeCollection(docs=[{"name": "prod"}])
+    async def test_an_exact_filter_is_passed_to_distinct(self):
+        nodes = FakeCollection(distinct_values=["prod"])
         engine = engine_with(nodes)
         rows, _total = await engine.run("environments", ["=", "name", "prod"])
-        self.assertEqual(nodes.distincts, [])
+        self.assertEqual(nodes.distincts, [("environment", {"environment": "prod"})])
+        self.assertEqual(nodes.pipelines, [])
         self.assertEqual(rows, [{"name": "prod"}])
 
-    async def test_an_extract_still_aggregates(self):
+    async def test_a_count_is_the_number_of_distinct_values(self):
+        nodes = FakeCollection(distinct_values=["os", "kernel", "os.family"])
+        engine = engine_with(nodes)
+        rows, total = await engine.run("fact-names", ["extract", [["function", "count"]]])
+        self.assertEqual(nodes.distincts, [("facts_index.p", None)])
+        self.assertEqual((rows, total), ([{"count": 2}], 1))
+
+    async def test_an_inexact_filter_still_aggregates(self):
         nodes = FakeCollection(docs=[{"name": "os"}])
         engine = engine_with(nodes)
-        await engine.run("fact-names", ["extract", [["function", "count"]]])
+        await engine.run("fact-names", ["~", "name", "^o"])
         self.assertEqual(nodes.distincts, [])
         self.assertTrue(nodes.pipelines)
+
+    async def test_grouped_or_multi_column_extracts_still_aggregate(self):
+        nodes = FakeCollection(docs=[{"count": 1}])
+        engine = engine_with(nodes)
+        await engine.run("environments", ["extract", [["function", "count"], "name"], ["group_by", "name"]])
+        self.assertEqual(nodes.distincts, [])
 
 
 class TestPythonEntities(unittest.IsolatedAsyncioTestCase):

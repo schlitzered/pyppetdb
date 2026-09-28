@@ -33,7 +33,6 @@ import socket
 import ssl
 import string
 import sys
-import time
 from pathlib import Path
 import datetime
 
@@ -65,6 +64,7 @@ from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.ca_spaces import CASpacePutInternal
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.ca.utils import CAUtils
+from pyppetdb.middleware import ProcessTimeMiddleware
 
 version = "0.0.0"
 
@@ -580,13 +580,7 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def add_process_time_header(request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
+app.add_middleware(ProcessTimeMiddleware)
 
 
 async def pyppetdb_nodes_heartbeat_worker(

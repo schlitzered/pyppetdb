@@ -40,6 +40,7 @@ from pyppetdb.pdb.query.ast import parse_query
 from pyppetdb.pdb.query.entities import ENTITIES
 from pyppetdb.pdb.query.entities import get_entity
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import Paging
 from pyppetdb.pdb.query.errors import page_too_large
 from pyppetdb.pdb.query.errors import subquery_too_large
 from pyppetdb.pdb.query.errors import unknown_entity
@@ -160,6 +161,29 @@ class QueryEngine:
             ),
         )
 
+    async def exists(self, entity_name: str, column: str, value, timeout=None) -> bool:
+        return await self._guarded(
+            None, timeout, lambda: self._exists(entity_name, column, value)
+        )
+
+    async def _exists(self, entity_name: str, column: str, value) -> bool:
+        entity = self.entity(entity_name)
+        ast = ["=", column, value]
+        if entity.document_rows:
+            match = await FilterCompiler(entity, engine=self).compile(ast)
+            prefilter, exact = build_prefilter_plan(entity, match, self._facts_index)
+            if exact and prefilter:
+                clauses = [stage["$match"] for stage in entity.stages] + [prefilter]
+                condition = clauses[0] if len(clauses) == 1 else {"$and": clauses}
+                found = await self.collection(entity.collection).find_one(
+                    condition, projection={"_id": 1}
+                )
+                return found is not None
+        rows, _total = await self._run(
+            entity_name, ["extract", [column], ast], Paging(limit=1)
+        )
+        return bool(rows)
+
     async def explain(
         self,
         entity_name: str,
@@ -277,6 +301,16 @@ class QueryEngine:
         compiler = FilterCompiler(target, engine=self)
         match = await compiler.compile(query.filter)
 
+        if not explain and _distinct_eligible(target, query) and not _is_never(match):
+            prefilter, exact = (
+                build_prefilter_plan(target, match, self._facts_index)
+                if match
+                else ({}, True)
+            )
+            if exact:
+                rows, total = await self._run_distinct(target, query, prefilter)
+                return _within_cap(rows, cap), total
+
         include_total = paging is not None and paging.include_total
         if target.python_expand:
             if explain:
@@ -368,7 +402,7 @@ class QueryEngine:
                 pipeline.append({"$match": condition})
             pipeline.extend(stages)
         return await self.collection(target.collection).aggregate(
-            pipeline, **self.aggregate_options
+            _prune_lookups(pipeline), **self.aggregate_options
         ).to_list(length=None)
 
     def _pipeline_head(self, entity, match: dict, distinct_window=None):
@@ -610,6 +644,7 @@ class QueryEngine:
             )
         if filter_only:
             pipeline.append({"$unset": sorted(filter_only)})
+        pipeline = _prune_lookups(pipeline)
         if explain:
             plan = await collection.database.command(
                 "explain",
@@ -767,19 +802,27 @@ class QueryEngine:
             pipeline.append({"$match": condition})
         pipeline.append({"$count": "count"})
         counted = await collection.aggregate(
-            pipeline, **self.aggregate_options
+            _prune_lookups(pipeline), **self.aggregate_options
         ).to_list(length=1)
         return counted[0]["count"] if counted else 0
 
-    async def _run_distinct(self, entity, query: Query):
+    async def _run_distinct(self, entity, query: Query, prefilter: Optional[dict] = None):
         collection = self.collection(entity.collection)
-        values = await collection.distinct(entity.distinct_field)
+        options = {}
+        timeout = _query_timeout.get()
+        if timeout:
+            options["maxTimeMS"] = int(timeout * 1000)
+        values = await collection.distinct(
+            entity.distinct_field, prefilter or None, **options
+        )
         names = sorted(
             value
             for value in values
             if isinstance(value, str)
             and not (entity.distinct_top_level and "." in value)
         )
+        if query.functions:
+            return [{query.functions[0].alias: len(names)}], 1
         rows = [{entity.columns[0].name: name} for name in names]
         total = len(rows)
         rows = _python_paging(rows, query)
@@ -944,6 +987,25 @@ class OrderedRowStream(RowStream):
 
 ORDERABLE_TYPES = ("string", "timestamp", "integer", "float", "boolean")
 BOUNDARY_BATCH_SIZE = 20000
+
+
+def _prune_lookups(pipeline: list) -> list:
+    kept = []
+    for index, stage in enumerate(pipeline):
+        lookup = stage.get("$lookup") if isinstance(stage, dict) else None
+        if lookup and _unused_field(lookup.get("as"), pipeline[index + 1:]):
+            continue
+        kept.append(stage)
+    return kept
+
+
+def _unused_field(field, rest: list) -> bool:
+    if not field:
+        return False
+    text = json.dumps(rest, default=str)
+    if "$$ROOT" in text or "$$CURRENT" in text:
+        return False
+    return f'"${field}' not in text and f'"{field}' not in text
 
 
 def _boundary_condition(fields: list, key: tuple):
@@ -1398,6 +1460,20 @@ def _collect_match_columns(node, into: set) -> None:
             into.update(value["keys"])
         elif not key.startswith("$") and not key.startswith("__"):
             into.add(key)
+
+
+def _distinct_eligible(entity, query: Query) -> bool:
+    if not entity.distinct_field or query.group_by:
+        return False
+    column = entity.columns[0].name
+    if query.columns and query.columns != [column]:
+        return False
+    if query.functions:
+        if query.columns or len(query.functions) != 1:
+            return False
+        function = query.functions[0]
+        return function.name == "count" and function.column in (None, column)
+    return True
 
 
 def _is_distinct_query(entity, query: Query) -> bool:

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import fnmatch
+import functools
 import hashlib
 import json
 import re
@@ -152,6 +153,7 @@ def build_resource_params(resources, max_value_len: int = RESOURCE_PARAM_MAX_VAL
 
 FACTS_INDEX_FIELD = "facts_index"
 FACT_PATHS_FIELD = "fact_paths"
+FACT_PATH_CACHE_SIZE = 100000
 FACTS_INDEX_MAX_VALUE_LEN = 256
 FACTS_INDEX_DEPTH = 3
 
@@ -316,9 +318,15 @@ def encode_fact_path(path: list, value_type: str) -> str:
     return json.dumps([path, value_type], separators=(",", ":"), ensure_ascii=False)
 
 
-def decode_fact_path(entry: str) -> tuple:
+@functools.lru_cache(maxsize=FACT_PATH_CACHE_SIZE)
+def _decoded_fact_path(entry: str) -> tuple:
     path, value_type = json.loads(entry)
-    return path, value_type
+    return tuple(path), value_type
+
+
+def decode_fact_path(entry: str) -> tuple:
+    path, value_type = _decoded_fact_path(entry)
+    return list(path), value_type
 
 
 def build_fact_paths(facts) -> list:

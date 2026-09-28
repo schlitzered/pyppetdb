@@ -555,12 +555,7 @@ class ControllerPdbQueryV4:
         return json_response(rows, pretty, headers=headers)
 
     async def _exists(self, entity: str, column: str, value) -> bool:
-        rows, _total = await self.engine.run(
-            entity_name=entity,
-            ast=["extract", [column], ["=", column, value]],
-            paging=Paging(limit=1),
-        )
-        return bool(rows)
+        return await self.engine.exists(entity, column, value)
 
     async def _report_data(self, route: Route, implicit: list, timeout, pretty: bool):
         rows, _total = await self.engine.run(

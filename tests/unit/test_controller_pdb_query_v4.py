@@ -50,6 +50,7 @@ def build(config_kwargs=None):
         crud_nodes_reports=MagicMock(),
         authorize_client_cert=authorize,
     )
+    controller.engine.exists = AsyncMock(return_value=True)
     app = FastAPI()
     app.include_router(controller.router, prefix="/pdb/query/v4")
     return controller, TestClient(app), authorize
@@ -299,16 +300,13 @@ class TestUpstreamRouteBehaviour(unittest.TestCase):
         self.run.assert_not_awaited()
 
     def test_child_routes_check_the_parent(self):
-        self.controller.engine.run = AsyncMock(return_value=([], 0))
+        self.controller.engine.exists = AsyncMock(return_value=False)
         response = self.client.get("/pdb/query/v4/nodes/nope/facts")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(
             response.json(), {"error": "No information is known about node nope"}
         )
-        self.assertEqual(
-            self.controller.engine.run.await_args.kwargs["ast"],
-            ["extract", ["certname"], ["=", "certname", "nope"]],
-        )
+        self.controller.engine.exists.assert_awaited_once_with("nodes", "certname", "nope")
 
     def test_single_routes_answer_a_json_404(self):
         self.controller.engine.run = AsyncMock(return_value=([], 0))
@@ -346,10 +344,7 @@ class TestUpstreamRouteBehaviour(unittest.TestCase):
 
     def test_report_metrics_and_logs_return_the_data_array(self):
         self.controller.engine.run = AsyncMock(
-            side_effect=[
-                ([{"hash": "abc"}], 1),
-                ([{"metrics": {"href": "/x", "data": [{"name": "total"}]}}], 1),
-            ]
+            return_value=([{"metrics": {"href": "/x", "data": [{"name": "total"}]}}], 1)
         )
         response = self.client.get("/pdb/query/v4/reports/abc/metrics")
         self.assertEqual(response.json(), [{"name": "total"}])
