@@ -53,8 +53,8 @@ the metadata (`change_catalog`, `environment`, `producer`, `transaction_uuid`, .
 updated, so `catalog_timestamp` still reflects when the catalog was last *received*,
 matching PuppetDB. A new uuid is always stored in full, even when the compiled content is
 identical: pyppetdb relies on the Puppetserver front-end's catalog cache to re-serve
-unchanged catalogs, so a fresh uuid means a real compile. Catalog history is written on
-every compile regardless.
+unchanged catalogs, so a fresh uuid means a real compile. Catalog history is written once
+per uuid.
 
 The comparison happens in the background task, not on the request path, so it does not
 add latency to the agent's command submission.

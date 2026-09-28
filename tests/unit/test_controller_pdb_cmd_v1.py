@@ -447,18 +447,21 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         payload = self.mock_nodes.update.call_args.kwargs["payload"]
         self.assertIsNotNone(payload.catalog)
 
-    async def test_replace_catalog_history_is_written_regardless(self):
+    async def test_replace_catalog_history_is_not_rewritten_for_a_stored_uuid(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_catalogs.create = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(None))
         await self._post_catalog(generation=1)
         stored = self.mock_nodes.update.call_args.kwargs["payload"].catalog.catalog_uuid
+        self.mock_catalogs.create.assert_called_once()
 
         self.mock_catalogs.create = AsyncMock()
+        self.mock_nodes.update_catalog_metadata = AsyncMock()
         self.mock_nodes.get_ingest_state = AsyncMock(return_value=ingest_state(stored))
         await self._post_catalog(generation=2)
 
-        self.mock_catalogs.create.assert_called_once()
+        self.mock_catalogs.create.assert_not_called()
+        self.mock_nodes.update_catalog_metadata.assert_called_once()
 
     async def _post_report(self):
         mock_request = MagicMock()

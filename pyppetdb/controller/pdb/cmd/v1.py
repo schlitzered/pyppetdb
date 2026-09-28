@@ -421,7 +421,7 @@ class ControllerPdbCmdV1:
                 _id=node_id,
                 metadata=metadata,
             )
-        if self.config.app.main.storeHistory.catalog:
+        if changed and self.config.app.main.storeHistory.catalog:
             await self._store_catalog_history_async(
                 node_id=node_id,
                 catalog_uuid=catalog_uuid,
