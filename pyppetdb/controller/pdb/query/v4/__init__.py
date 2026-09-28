@@ -75,8 +75,6 @@ ENTITY_ROUTES = (
     ("/nodes/{certname}", "nodes", True, (("certname", "certname"),)),
     ("/nodes/{certname}/facts", "facts", False, (("certname", "certname"),)),
     ("/nodes/{certname}/resources", "resources", False, (("certname", "certname"),)),
-    ("/nodes/{certname}/reports", "reports", False, (("certname", "certname"),)),
-    ("/nodes/{certname}/events", "events", False, (("certname", "certname"),)),
     ("/environments", "environments", False, ()),
     ("/environments/{environment}", "environments", True, (("environment", "name"),)),
     (

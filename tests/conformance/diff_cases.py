@@ -406,12 +406,10 @@ DIVERGENCES = [
        "(upstream: not a queryable object for packages)",
        "divergence", V4 + "/packages", ["=", "certname", "{node}"],
        expect_error=True),
-    _c("node reports sub-route "
-       "(upstream: HTTP 404, route does not exist)",
-       "divergence", V4 + "/nodes/{node}/reports", expect_error=True),
-    _c("node events sub-route "
-       "(upstream: HTTP 404, route does not exist)",
-       "divergence", V4 + "/nodes/{node}/events", expect_error=True),
+    _c("node reports sub-route does not exist", "conformance",
+       V4 + "/nodes/{node}/reports", expect_error=True),
+    _c("node events sub-route does not exist", "conformance",
+       V4 + "/nodes/{node}/events", expect_error=True),
     _c("root from producers "
        "(upstream: schema error, HTTP 500)",
        "divergence", V4, ["from", "producers"], expect_error=True),
