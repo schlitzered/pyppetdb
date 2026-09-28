@@ -8,7 +8,7 @@ scripts/
 *.pyc
 .idea
 venv
-.venv
+.venv*
 dist
 requests*
 ssl
