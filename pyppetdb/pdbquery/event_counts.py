@@ -154,8 +154,10 @@ def single_report_per_node(ast) -> bool:
     return ast[1] == "report" and isinstance(ast[2], str)
 
 
-def summary_projection(summarize_by: str, count_by: str, ast) -> dict:
-    if not single_report_per_node(ast):
+def summary_projection(
+    summarize_by: str, count_by: str, ast, distinct: bool = False
+) -> dict:
+    if distinct or not single_report_per_node(ast):
         return {}
     flag = _first_flag(summarize_by, count_by)
     return {flag: f"${flag}"}
@@ -167,10 +169,23 @@ def _first_flag(summarize_by: str, count_by: str) -> str:
     return FIRST_FLAGS["resource"]
 
 
-def summary_stages(summarize_by: str, count_by: str, ast=None) -> list:
+def summary_stages(
+    summarize_by: str, count_by: str, ast=None, distinct: bool = False
+) -> list:
     key_fields = SUMMARIZE_BY[summarize_by]
     group_id = {field: f"$_id.{field}" for field in key_fields}
-    if single_report_per_node(ast):
+    if distinct:
+        status_id = {field: f"${field}" for field in key_fields}
+        status_id["status"] = "$status"
+        buckets = {
+            bucket: {"$sum": {"$cond": [{"$eq": ["$_id.status", status]}, "$n", 0]}}
+            for status, bucket in STATUS_BUCKETS.items()
+        }
+        stages = [
+            {"$group": {"_id": status_id, "n": {"$sum": 1}}},
+            {"$group": {"_id": group_id, **buckets}},
+        ]
+    elif single_report_per_node(ast):
         flag = _first_flag(summarize_by, count_by)
         status_id = {field: f"${field}" for field in key_fields}
         status_id["status"] = "$status"

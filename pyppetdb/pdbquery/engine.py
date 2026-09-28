@@ -29,6 +29,8 @@ from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
 from pyppetdb.pdbquery import matcher
 from pyppetdb.pdbquery.ast import FilterCompiler
 from pyppetdb.pdbquery.ast import TUPLE_IN
+from pyppetdb.pdbquery.params import ACTIVE_CLAUSE
+from pyppetdb.pdbquery.params import has_active_criterion
 from pyppetdb.pdbquery.ast import check_depth
 from pyppetdb.pdbquery.ast import Query
 from pyppetdb.pdbquery.ast import parse_query
@@ -83,7 +85,7 @@ class QueryEngine:
         options = {"allowDiskUse": True}
         timeout = _query_timeout.get()
         if timeout:
-            options["maxTimeMS"] = timeout * 1000
+            options["maxTimeMS"] = int(timeout * 1000)
         return options
 
     def collection(self, name: str):
@@ -132,10 +134,47 @@ class QueryEngine:
         ast,
         paging=None,
         implicit: Optional[list] = None,
-        timeout: Optional[int] = None,
+        timeout=None,
+        restrict_active: bool = False,
+        extra_columns: Optional[list] = None,
+        distinct_window=None,
     ):
         return await self._guarded(
-            ast, timeout, lambda: self._run(entity_name, ast, paging, implicit)
+            ast,
+            timeout,
+            lambda: self._run(
+                entity_name,
+                ast,
+                paging,
+                implicit,
+                restrict_active=restrict_active,
+                extra_columns=extra_columns,
+                distinct_window=distinct_window,
+            ),
+        )
+
+    async def explain(
+        self,
+        entity_name: str,
+        ast,
+        paging=None,
+        implicit: Optional[list] = None,
+        timeout=None,
+        restrict_active: bool = False,
+        distinct_window=None,
+    ):
+        return await self._guarded(
+            ast,
+            timeout,
+            lambda: self._run(
+                entity_name,
+                ast,
+                paging,
+                implicit,
+                restrict_active=restrict_active,
+                distinct_window=distinct_window,
+                explain=True,
+            ),
         )
 
     async def group(
@@ -144,10 +183,13 @@ class QueryEngine:
         ast,
         stages: list,
         extra: Optional[dict] = None,
-        timeout: Optional[int] = None,
+        timeout=None,
+        distinct_window=None,
     ):
         return await self._guarded(
-            ast, timeout, lambda: self._group(entity_name, ast, stages, extra)
+            ast,
+            timeout,
+            lambda: self._group(entity_name, ast, stages, extra, distinct_window),
         )
 
     async def _guarded(self, ast, timeout: Optional[int], work):
@@ -174,7 +216,7 @@ class QueryEngine:
         if query.limit is None or query.limit > self._max_page_size:
             query.limit = self._max_page_size
 
-    def effective_timeout(self, requested: Optional[int]) -> int:
+    def effective_timeout(self, requested):
         seconds = self._query_timeout if requested is None else requested
         if self._query_timeout_max and (
             not seconds or seconds > self._query_timeout_max
@@ -188,19 +230,30 @@ class QueryEngine:
         ast,
         paging=None,
         implicit: Optional[list] = None,
+        restrict_active: bool = False,
+        extra_columns: Optional[list] = None,
+        distinct_window=None,
+        explain: bool = False,
     ):
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
         target = self.entity(query.entity)
-        if implicit:
-            query.filter = _merge_filters(query.filter, implicit)
+        clauses = list(implicit or [])
+        if (
+            restrict_active
+            and "node_state" in target.by_name
+            and not has_active_criterion(query.filter)
+        ):
+            clauses.append(ACTIVE_CLAUSE)
+        if clauses:
+            query.filter = _merge_filters(query.filter, clauses)
         self._check_columns(target, query)
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
         self._apply_page_cap(query)
 
-        if _is_distinct_query(target, query):
+        if _is_distinct_query(target, query) and not explain:
             return await self._run_distinct(target, query)
 
         compiler = FilterCompiler(target, engine=self)
@@ -208,13 +261,23 @@ class QueryEngine:
 
         include_total = paging is not None and paging.include_total
         if target.python_expand:
+            if explain:
+                return self._explain_python(target, match)
             rows, total = await self._run_python(
                 target, query, match, include_total=include_total
             )
         else:
             rows, total = await self._run_mongo(
-                target, query, match, include_total=include_total
+                target,
+                query,
+                match,
+                include_total=include_total,
+                extra_columns=extra_columns,
+                distinct_window=distinct_window,
+                explain=explain,
             )
+            if explain:
+                return rows
 
         if query.functions and not query.group_by and not rows:
             rows, total = [_empty_aggregate_row(query)], 1
@@ -222,8 +285,17 @@ class QueryEngine:
             rows = [row.get(target.scalar_result) for row in rows]
         return rows, total
 
+    def _explain_python(self, entity, match: dict) -> list:
+        prefilter = build_prefilter(entity, match, self._facts_index) if match else {}
+        return [{"query plan": {"find": entity.collection, "filter": prefilter, "expand": entity.python_expand}}]
+
     async def _group(
-        self, entity_name: str, ast, stages: list, extra: Optional[dict] = None
+        self,
+        entity_name: str,
+        ast,
+        stages: list,
+        extra: Optional[dict] = None,
+        distinct_window=None,
     ) -> list:
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -238,7 +310,7 @@ class QueryEngine:
         if _is_never(match):
             return []
         head, _prefilter, exact, element_cond, pinned = self._pipeline_head(
-            target, match
+            target, match, distinct_window
         )
         pipeline = list(head)
         rows_exact = (
@@ -266,13 +338,18 @@ class QueryEngine:
             pipeline, **self.aggregate_options
         ).to_list(length=None)
 
-    def _pipeline_head(self, entity, match: dict):
+    def _pipeline_head(self, entity, match: dict, distinct_window=None):
         prefilter, exact = (
             build_prefilter_plan(entity, match, self._facts_index)
             if match
             else ({}, True)
         )
+        if distinct_window is not None:
+            prefilter = _partition_prefilter(prefilter)
+            exact = False
         head = [{"$match": prefilter}] if prefilter else []
+        if distinct_window is not None:
+            head.extend(_distinct_event_stages(*distinct_window))
         element_cond = build_element_filter(entity, match) if match else None
         pinned = build_pinned_keys(entity, match) if match else None
         head.extend(entity.build_stages(element_cond, pinned))
@@ -349,11 +426,14 @@ class QueryEngine:
         match: dict,
         include_total: bool = False,
         distinct: bool = False,
+        extra_columns: Optional[list] = None,
+        distinct_window=None,
+        explain: bool = False,
     ):
         if _is_never(match):
             return [], 0
         head, prefilter, exact, element_cond, pinned = self._pipeline_head(
-            entity, match
+            entity, match, distinct_window
         )
         rows_exact = (
             exact
@@ -376,6 +456,8 @@ class QueryEngine:
             return [{query.functions[0].alias: total}], 1
 
         selected, filter_only = projection_plan(entity, query, match)
+        if extra_columns and not query.columns and not query.functions:
+            selected = selected | set(extra_columns)
         tail = [{"$project": build_projection(entity, selected)}]
         if match:
             tuple_fields = {}
@@ -412,6 +494,15 @@ class QueryEngine:
             pipeline.extend(_null_fill_stages(selected - filter_only))
         if filter_only:
             pipeline.append({"$unset": sorted(filter_only)})
+        if explain:
+            plan = await collection.database.command(
+                "explain",
+                {"aggregate": collection.name, "pipeline": pipeline, "cursor": {}},
+                verbosity="executionStats",
+            )
+            plan.pop("$clusterTime", None)
+            plan.pop("operationTime", None)
+            return [{"query plan": plan}], 1
         rows = await collection.aggregate(
             pipeline, **self.aggregate_options
         ).to_list(length=None)
@@ -423,7 +514,7 @@ class QueryEngine:
         options = {}
         timeout = _query_timeout.get()
         if timeout:
-            options["maxTimeMS"] = timeout * 1000
+            options["maxTimeMS"] = int(timeout * 1000)
         if not count_filter:
             options["hint"] = "_id_"
         return await collection.count_documents(count_filter, **options)
@@ -645,6 +736,48 @@ def build_early_sort(entity, query: Query, document_rows_only: bool = True):
     if len(keys) != len(query.order_by):
         return None
     return keys
+
+
+DISTINCT_EVENT_KEYS = ("node_id", "resource_type", "resource_title", "property", "name")
+PARTITION_PATHS = ("node_id", "latest")
+
+
+def _distinct_event_stages(start, end) -> list:
+    return [
+        {"$match": {"timestamp": {"$gte": start, "$lte": end}}},
+        {
+            "$group": {
+                "_id": {key: f"${key}" for key in DISTINCT_EVENT_KEYS},
+                "latest": {"$max": "$timestamp"},
+                "events": {"$push": "$$ROOT"},
+            }
+        },
+        {
+            "$project": {
+                "events": {
+                    "$filter": {
+                        "input": "$events",
+                        "as": "event",
+                        "cond": {"$eq": ["$$event.timestamp", "$latest"]},
+                    }
+                }
+            }
+        },
+        {"$unwind": "$events"},
+        {"$replaceRoot": {"newRoot": "$events"}},
+    ]
+
+
+def _partition_prefilter(prefilter: dict) -> dict:
+    clauses = prefilter.get("$and") if set(prefilter) == {"$and"} else [prefilter]
+    kept = [
+        clause
+        for clause in clauses
+        if isinstance(clause, dict) and set(clause) and set(clause) <= set(PARTITION_PATHS)
+    ]
+    if not kept:
+        return {}
+    return kept[0] if len(kept) == 1 else {"$and": kept}
 
 
 def _rewrite_to_storage(entity, stages: list):

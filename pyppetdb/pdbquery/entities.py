@@ -235,6 +235,20 @@ NODES = Entity(
         Column("latest_report_job_id", "string", "$report.job_id"),
         Column("cached_catalog_status", "string", "$report.cached_catalog_status"),
         Column("node_state", "state", _node_state(), projected=False),
+        Column(
+            "expires_facts",
+            "boolean",
+            {"$ifNull": ["$facts_expiration.expire", True]},
+            projected=False,
+            queryable=False,
+        ),
+        Column(
+            "expires_facts_updated",
+            "timestamp",
+            "$facts_expiration.updated",
+            projected=False,
+            queryable=False,
+        ),
         Column("facts", "json", "$facts", projected=False, dotted=True),
     ],
 )
@@ -310,6 +324,13 @@ FACTSETS = Entity(
             ),
         ),
         Column("node_state", "state", _node_state(), projected=False),
+        Column(
+            "package_inventory",
+            "array",
+            {"$ifNull": ["$package_inventory", []]},
+            projected=False,
+            queryable=False,
+        ),
     ],
 )
 
@@ -323,6 +344,13 @@ INVENTORY = Entity(
         Column("facts", "json", "$facts", dotted=True),
         Column("trusted", "json", "$facts.trusted", dotted=True),
         Column("node_state", "state", _node_state(), projected=False),
+        Column(
+            "package_inventory",
+            "array",
+            {"$ifNull": ["$package_inventory", []]},
+            projected=False,
+            queryable=False,
+        ),
     ],
 )
 

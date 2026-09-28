@@ -145,25 +145,52 @@ capacity.
 
 ## Query endpoints
 
-All endpoints accept `GET` (with a `query` URL parameter) and `POST` (with a
-`{"query": ...}` body or a bare AST array).
+The route tree is PuppetDB's, including every child route: all endpoints accept `GET`
+(with a `query` URL parameter) and `POST` (with a JSON map body whose keys are the
+parameters). `/pdb/query/v1`, `v2` and `v3` answer 404 "has been retired".
 
 | Endpoint | Notes |
 |----------|-------|
-| `/pdb/query/v4` | root endpoint, requires a `["from", <entity>, ...]` query |
-| `/pdb/query/v4/nodes`, `/nodes/{certname}` | plus `/facts`, `/resources`, `/reports`, `/events` subpaths |
+| `/pdb/query/v4` | root endpoint, requires a `["from", <entity>, ...]` query; `ast_only=true` echoes the query |
+| `/pdb/query/v4/nodes`, `/nodes/{certname}` | plus `/facts[/{name}[/{value}]]` and `/resources[/{type}[/{title}]]` |
 | `/pdb/query/v4/facts`, `/facts/{name}`, `/facts/{name}/{value}` | |
-| `/pdb/query/v4/fact-names`, `/fact-paths`, `/fact-contents`, `/factsets` | |
+| `/pdb/query/v4/fact-names`, `/fact-paths`, `/fact-contents` | |
+| `/pdb/query/v4/factsets`, `/factsets/{certname}`, `/factsets/{certname}/facts` | |
 | `/pdb/query/v4/inventory` | dotted access to `facts.` and `trusted.` |
 | `/pdb/query/v4/resources`, `/resources/{type}`, `/resources/{type}/{title}` | all resources, not just exported ones |
-| `/pdb/query/v4/edges`, `/catalogs`, `/catalogs/{certname}` | |
+| `/pdb/query/v4/edges` | |
+| `/pdb/query/v4/catalogs`, `/catalogs/{certname}` | plus `/edges` and `/resources[/{type}[/{title}]]` |
 | `/pdb/query/v4/catalog-inputs`, `/catalog-input-contents` | |
-| `/pdb/query/v4/packages`, `/package-inventory` | from `package_inventory` in `replace_facts` |
-| `/pdb/query/v4/reports`, `/events` | |
-| `/pdb/query/v4/event-counts`, `/aggregate-event-counts` | `summarize_by`, `count_by`, `counts_filter` |
-| `/pdb/query/v4/environments`, `/environments/{name}/...`, `/producers` | |
+| `/pdb/query/v4/packages`, `/package-inventory`, `/package-inventory/{certname}` | from `package_inventory` in `replace_facts` |
+| `/pdb/query/v4/reports`, `/reports/{hash}/events`, `/reports/{hash}/metrics`, `/reports/{hash}/logs` | |
+| `/pdb/query/v4/events` | `distinct_resources` with `distinct_start_time`/`distinct_end_time` |
+| `/pdb/query/v4/event-counts`, `/aggregate-event-counts` | `summarize_by`, `count_by`, `counts_filter`, `distinct_*` |
+| `/pdb/query/v4/environments`, `/environments/{name}` | plus the `facts`, `resources`, `reports` and `events` subtrees |
+| `/pdb/query/v4/producers`, `/producers/{name}` | plus the `factsets`, `catalogs` and `reports` subtrees |
 | `/pdb/meta/v1/version`, `/pdb/meta/v1/server-time` | |
 | `/status/v1/services` | unauthenticated service status |
+
+Behaviour shared with PuppetDB:
+
+- Entity listings that carry a certname (`nodes`, `facts`, `fact-contents`, `factsets`,
+  `inventory`, `resources`, `edges`, `catalog-inputs`, `catalog-input-contents`,
+  `package-inventory`, and the root endpoint for every entity except `fact_paths`,
+  `environments` and `packages`) are restricted to **active nodes** unless the query
+  already mentions `node_state` or `["node", "active"]`. `reports`, `events` and
+  `catalogs` are not restricted.
+- Child routes check that the parent exists and answer
+  `404 {"error": "No information is known about <node|report|catalog|factset|environment|producer> <id>"}`;
+  the single-object routes answer the same 404.
+- Query parameters are validated per endpoint: `query`, `limit`, `offset`, `order_by`,
+  `include_total`, `pretty`, `timeout` (integer or float seconds, `0` for none),
+  `explain=analyze` (answers with MongoDB's execution plan instead of rows), `origin`,
+  `optimize_drop_unused_joins` (accepted, no effect), `include_facts_expiration` (adds
+  `expires_facts`/`expires_facts_updated` to `nodes` listings), `include_package_inventory`
+  (adds `package_inventory` to `factsets`/`inventory` listings), `ast_only` (root only),
+  `distinct_resources`/`distinct_start_time`/`distinct_end_time` (events and counts) and
+  the counts parameters. Anything else is a 400 `Unsupported query parameter 'x'`, a
+  missing required one a 400 `Missing required query parameter 'x'`; the single-object
+  routes and `aggregate-event-counts` take no paging parameters.
 
 ## Query language
 
@@ -207,6 +234,12 @@ throughput than the embedded-only model.
 
 **PQL is not supported.** A `query` parameter that is not a JSON array is rejected with
 a 400 explaining that an AST query is required.
+
+`distinct_resources` keeps, for every `(certname, resource, property, name)`, the events
+with the latest timestamp inside the window and applies the query afterwards, exactly like
+upstream's `latest_events` — including its tie handling: events with equal latest
+timestamps are all kept, and the counts endpoints then count events rather than distinct
+resources, as upstream does on that path.
 
 ## Migration: removed extensions
 
@@ -283,6 +316,13 @@ and a real OpenVoxDB holding identical data and compares the responses field by 
 - **`/catalogs/<certname>/edges` is restricted to that certname.** Upstream forgets the
   restriction on this one child route (its `/resources` sibling has it) and answers with
   every edge of every node; pyppetdb answers with the edges the `href` refers to.
+- **Two upstream routes are broken upstream.** `/environments/<env>/reports/<hash>/metrics`
+  (and `/logs`) answer 400 with a PostgreSQL type error, and `/reports/<hash>/events`
+  answers 500 as soon as `order_by` is given. pyppetdb serves both; the conformance corpus
+  lists them under divergences.
+- **`explain=analyze` returns a MongoDB plan**, not a PostgreSQL one.
+- **`/producers/<p>/catalogs/<node>/edges` cannot work** on either side: neither
+  implementation has a `producer` column on edges, both answer 400.
 - **`resource_events.data` is always `null`.** The `href` resolves to the full event list.
   Upstream inlines the data for small result sets; computing it on every report query cost
   roughly a factor of seven.

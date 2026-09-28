@@ -248,6 +248,23 @@ class TestSingleReportFastPath(unittest.TestCase):
         )
 
 
+class TestDistinctWindowCounts(unittest.TestCase):
+    def test_distinct_windows_count_events_per_bucket_and_status(self):
+        stages = event_counts.summary_stages("resource", "resource", ["=", "certname", "a"], distinct=True)
+        self.assertEqual(len(stages), 3)
+        self.assertEqual(
+            stages[0]["$group"],
+            {
+                "_id": {"resource_type": "$resource_type", "resource_title": "$resource_title", "status": "$status"},
+                "n": {"$sum": 1},
+            },
+        )
+        self.assertEqual(
+            event_counts.summary_projection("resource", "resource", ["=", "latest_report?", True], distinct=True),
+            {},
+        )
+
+
 class TestCountsFilter(unittest.TestCase):
     def test_counts_filter(self):
         filtered = event_counts.apply_counts_filter(COUNTS, [">", "failures", 0])

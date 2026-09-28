@@ -104,6 +104,8 @@ def _entity_of(path: str, query):
     parts = [part for part in tail.split("/") if part]
     if not parts:
         return None
+    if parts[0] == "factsets" and len(parts) == 3:
+        return "factsets"
     if parts[-1] in ORDER_KEYS:
         return parts[-1]
     if parts[0] in LIST_SUBROUTES:
@@ -136,6 +138,33 @@ def _pageable(path: str, query, params: dict):
 
 def _ignored(field: str) -> bool:
     return field in IGNORED_FIELDS or field.split(".")[0] in IGNORED_FIELDS
+
+
+async def _latest_report_hash(client, base: str, node: str) -> str:
+    response = await client.get(
+        f"{base}/pdb/query/v4/reports",
+        params={
+            "query": json.dumps(["=", "certname", node]),
+            "order_by": json.dumps([{"field": "receive_time", "order": "desc"}]),
+            "limit": 1,
+        },
+    )
+    rows = response.json() if response.status_code == 200 else []
+    return rows[0].get("hash", "") if rows else ""
+
+
+async def _node_producer(client, base: str, node: str) -> str:
+    response = await client.get(f"{base}/pdb/query/v4/factsets/{node}")
+    if response.status_code != 200:
+        return ""
+    return response.json().get("producer") or ""
+
+
+async def _node_environment(client, base: str, node: str) -> str:
+    response = await client.get(f"{base}/pdb/query/v4/nodes/{node}")
+    if response.status_code != 200:
+        return "production"
+    return response.json().get("report_environment") or "production"
 
 
 def _substitute(text: str, substitutions: dict) -> str:
@@ -301,6 +330,33 @@ async def fetch_all(
     return rows, headers, status, total
 
 
+def _row_signature(row, keys) -> str:
+    if not isinstance(row, dict):
+        return json.dumps(normalise(row), sort_keys=True)
+    parts = {}
+    for key in sorted(keys):
+        if _ignored(key):
+            continue
+        value = normalise(row.get(key))
+        if _is_child(value):
+            value = None if _ignored(f"{key}.data") else value.get("data")
+            if key in UNORDERED_CHILD_FIELDS and isinstance(value, list):
+                value = sorted((_canonical_element(e) for e in value), key=_stable)
+        elif key in SET_FIELDS and isinstance(value, list):
+            value = sorted(map(str, value))
+        parts[key] = value
+    return json.dumps(parts, sort_keys=True, default=str)
+
+
+def _best_match(row, matches: list, keys):
+    if len(matches) > 1:
+        wanted = _row_signature(row, keys)
+        for index, candidate in enumerate(matches):
+            if _row_signature(candidate, keys) == wanted:
+                return matches.pop(index)
+    return matches.pop(0)
+
+
 def compare(name, a, b, headers_a, headers_b) -> Report:
     report = Report(name)
     if not isinstance(a, list):
@@ -333,7 +389,7 @@ def compare(name, a, b, headers_a, headers_b) -> Report:
                 "<row missing upstream>", json.dumps(normalise(row))[:160]
             )
             continue
-        other = matches.pop(0)
+        other = _best_match(row, matches, keys_a & keys_b)
         if not isinstance(row, dict) or not isinstance(other, dict):
             continue
         for key in keys_a & keys_b:
@@ -569,7 +625,8 @@ async def main() -> int:
     parser.add_argument("--fact", default="kernel")
     parser.add_argument("--fact-value", default="Linux")
     parser.add_argument("--type", default="File")
-    parser.add_argument("--environment", default="production")
+    parser.add_argument("--environment", default=None)
+    parser.add_argument("--producer", default=None)
     parser.add_argument("--ca")
     parser.add_argument("--cert")
     parser.add_argument("--key")
@@ -627,7 +684,14 @@ async def main() -> int:
             "{fact}": args.fact,
             "{factvalue}": args.fact_value,
             "{type}": args.type,
-            "{environment}": args.environment,
+            "{environment}": args.environment
+            or await _node_environment(client, args.a, args.node),
+            "{producer}": args.producer
+            or await _node_producer(client, args.a, args.node),
+        }
+        hashes = {
+            args.a: await _latest_report_hash(client, args.a, args.node),
+            args.b: await _latest_report_hash(client, args.b, args.node),
         }
         for case in cases:
             resolved_path = _substitute(case.path, substitutions)
@@ -639,18 +703,20 @@ async def main() -> int:
                 for key, value in case.params.items()
             }
             entity = _pageable(resolved_path, resolved_query, params)
+            path_a = _substitute(resolved_path, {"{hash}": hashes[args.a]})
+            path_b = _substitute(resolved_path, {"{hash}": hashes[args.b]})
             a = b = None
             ms_a = ms_b = None
             try:
                 started = time.perf_counter()
                 a, headers_a, status_a, total_a = await fetch_all(
-                    client, args.a, resolved_path, resolved_query, params,
+                    client, args.a, path_a, resolved_query, params,
                     entity, args.page_size, args.max_rows, args.totals,
                 )
                 ms_a = (time.perf_counter() - started) * 1000
                 started = time.perf_counter()
                 b, headers_b, status_b, total_b = await fetch_all(
-                    client, args.b, resolved_path, resolved_query, params,
+                    client, args.b, path_b, resolved_query, params,
                     entity, args.page_size, args.max_rows, args.totals,
                 )
                 ms_b = (time.perf_counter() - started) * 1000

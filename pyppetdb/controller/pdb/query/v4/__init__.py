@@ -18,7 +18,6 @@ import orjson
 import logging
 import ssl
 from datetime import datetime
-from typing import Optional
 
 import httpx
 from fastapi import APIRouter
@@ -38,7 +37,14 @@ from pyppetdb.pdbquery import event_counts
 from pyppetdb.pdbquery.engine import QueryEngine
 from pyppetdb.pdbquery.engine import _sort_key
 from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdbquery.paging import Paging
 from pyppetdb.pdbquery.paging import parse_paging
+from pyppetdb.pdbquery.params import parse_bool
+from pyppetdb.pdbquery.params import parse_distinct
+from pyppetdb.pdbquery.params import parse_explain
+from pyppetdb.pdbquery.params import parse_timeout
+from pyppetdb.pdbquery.params import root_entity_restricted
+from pyppetdb.pdbquery.params import validate_params
 
 
 def _encode(value):
@@ -62,6 +68,26 @@ class PdbJSONResponse(JSONResponse):
         return orjson.dumps(content, default=_encode, option=JSON_OPTIONS)
 
 
+class PrettyJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return orjson.dumps(
+            content, default=_encode, option=JSON_OPTIONS | orjson.OPT_INDENT_2
+        )
+
+
+def json_response(content, pretty: bool, status_code: int = 200, headers=None):
+    cls = PrettyJSONResponse if pretty else PdbJSONResponse
+    return cls(content=content, status_code=status_code, headers=headers)
+
+
+def not_found(label: str, identifier: str, pretty: bool = False):
+    return json_response(
+        {"error": f"No information is known about {label} {identifier}"},
+        pretty,
+        status_code=404,
+    )
+
+
 HOP_HEADERS = (
     "host",
     "content-length",
@@ -70,78 +96,243 @@ HOP_HEADERS = (
     "keep-alive",
 )
 
-ENTITY_ROUTES = (
-    ("/nodes", "nodes", False, ()),
-    ("/nodes/{certname}", "nodes", True, (("certname", "certname"),)),
-    ("/nodes/{certname}/facts", "facts", False, (("certname", "certname"),)),
-    ("/nodes/{certname}/resources", "resources", False, (("certname", "certname"),)),
-    ("/environments", "environments", False, ()),
-    ("/environments/{environment}", "environments", True, (("environment", "name"),)),
-    (
-        "/environments/{environment}/facts",
-        "facts",
-        False,
-        (("environment", "environment"),),
-    ),
-    (
-        "/environments/{environment}/resources",
-        "resources",
-        False,
-        (("environment", "environment"),),
-    ),
-    (
-        "/environments/{environment}/reports",
-        "reports",
-        False,
-        (("environment", "environment"),),
-    ),
-    (
-        "/environments/{environment}/events",
-        "events",
-        False,
-        (("environment", "environment"),),
-    ),
-    ("/producers", "producers", False, ()),
-    ("/producers/{producer}", "producers", True, (("producer", "name"),)),
-    ("/facts", "facts", False, ()),
-    ("/facts/{name}", "facts", False, (("name", "name"),)),
-    (
-        "/facts/{name}/{value:path}",
-        "facts",
-        False,
-        (("name", "name"), ("value", "value")),
-    ),
-    ("/fact-names", "fact-names", False, ()),
-    ("/fact-paths", "fact-paths", False, ()),
-    ("/fact-contents", "fact-contents", False, ()),
-    ("/factsets", "factsets", False, ()),
-    ("/inventory", "inventory", False, ()),
-    ("/resources", "resources", False, ()),
-    ("/resources/{type}", "resources", False, (("type", "type"),)),
-    (
-        "/resources/{type}/{title:path}",
-        "resources",
-        False,
-        (("type", "type"), ("title", "title")),
-    ),
-    ("/edges", "edges", False, ()),
-    ("/catalogs", "catalogs", False, ()),
-    ("/catalogs/{certname}", "catalogs", True, (("certname", "certname"),)),
-    ("/catalogs/{certname}/edges", "edges", False, (("certname", "certname"),)),
-    (
-        "/catalogs/{certname}/resources",
-        "resources",
-        False,
-        (("certname", "certname"),),
-    ),
-    ("/catalog-inputs", "catalog-inputs", False, ()),
-    ("/catalog-input-contents", "catalog-input-contents", False, ()),
-    ("/packages", "packages", False, ()),
-    ("/package-inventory", "packages", False, ()),
-    ("/reports", "reports", False, ()),
-    ("/reports/{hash}/events", "events", False, (("hash", "report"),)),
-    ("/events", "events", False, ()),
-)
+NODE_PARENT = ("nodes", "certname", "certname", "node")
+REPORT_PARENT = ("reports", "hash", "hash", "report")
+CATALOG_PARENT = ("catalogs", "certname", "certname", "catalog")
+FACTSET_PARENT = ("factsets", "certname", "certname", "factset")
+ENVIRONMENT_PARENT = ("environments", "name", "environment", "environment")
+PRODUCER_PARENT = ("producers", "name", "producer", "producer")
+SINGLE_LABELS = {
+    "nodes": "node",
+    "environments": "environment",
+    "producers": "producer",
+    "catalogs": "catalog",
+    "factsets": "factset",
+}
+CERTNAME = (("certname", "certname"),)
+
+
+class Route:
+    def __init__(
+        self,
+        path: str,
+        entity: str,
+        kind: str = "list",
+        implicit=(),
+        parent=None,
+        params: str = "typical",
+        restrict: bool = False,
+    ):
+        self.path = path
+        self.entity = entity
+        self.kind = kind
+        self.implicit = tuple(implicit)
+        self.parent = parent
+        self.params = params
+        self.restrict = restrict
+
+
+def _fact_routes(prefix: str, implicit, parent) -> list:
+    return [
+        Route(f"{prefix}/facts", "facts", "list", implicit, parent, "typical", True),
+        Route(
+            f"{prefix}/facts/{{name}}",
+            "facts",
+            "list",
+            implicit + (("name", "name"),),
+            parent,
+            "typical",
+            True,
+        ),
+        Route(
+            f"{prefix}/facts/{{name}}/{{value:path}}",
+            "facts",
+            "list",
+            implicit + (("name", "name"), ("value", "value")),
+            parent,
+            "typical",
+            True,
+        ),
+    ]
+
+
+def _resource_routes(prefix: str, implicit, parent) -> list:
+    return [
+        Route(
+            f"{prefix}/resources", "resources", "list", implicit, parent, "typical", True
+        ),
+        Route(
+            f"{prefix}/resources/{{type}}",
+            "resources",
+            "list",
+            implicit + (("type", "type"),),
+            parent,
+            "typical",
+            True,
+        ),
+        Route(
+            f"{prefix}/resources/{{type}}/{{title:path}}",
+            "resources",
+            "list",
+            implicit + (("type", "type"), ("title", "title")),
+            parent,
+            "typical",
+            True,
+        ),
+    ]
+
+
+def _report_routes(prefix: str, implicit, parent) -> list:
+    report = implicit + (("hash", "report"),)
+    return [
+        Route(f"{prefix}/reports", "reports", "list", implicit, parent, "typical"),
+        Route(
+            f"{prefix}/reports/{{hash}}/events",
+            "events",
+            "list",
+            report,
+            REPORT_PARENT,
+            "events",
+        ),
+        Route(
+            f"{prefix}/reports/{{hash}}/metrics",
+            "reports",
+            "metrics",
+            implicit + (("hash", "hash"),),
+            REPORT_PARENT,
+            "status",
+        ),
+        Route(
+            f"{prefix}/reports/{{hash}}/logs",
+            "reports",
+            "logs",
+            implicit + (("hash", "hash"),),
+            REPORT_PARENT,
+            "status",
+        ),
+    ]
+
+
+def _catalog_routes(prefix: str, implicit, parent) -> list:
+    certname = implicit + CERTNAME
+    return [
+        Route(f"{prefix}/catalogs", "catalogs", "list", implicit, parent, "typical"),
+        Route(
+            f"{prefix}/catalogs/{{certname}}",
+            "catalogs",
+            "single",
+            certname,
+            None,
+            "status",
+        ),
+        Route(
+            f"{prefix}/catalogs/{{certname}}/edges",
+            "edges",
+            "list",
+            certname,
+            CATALOG_PARENT,
+            "typical",
+            True,
+        ),
+        *_resource_routes(f"{prefix}/catalogs/{{certname}}", certname, CATALOG_PARENT),
+    ]
+
+
+def _factset_routes(prefix: str, implicit, parent) -> list:
+    certname = implicit + CERTNAME
+    return [
+        Route(
+            f"{prefix}/factsets", "factsets", "list", implicit, parent, "typical", True
+        ),
+        Route(
+            f"{prefix}/factsets/{{certname}}",
+            "factsets",
+            "single",
+            certname,
+            None,
+            "status",
+        ),
+        Route(
+            f"{prefix}/factsets/{{certname}}/facts",
+            "factsets",
+            "list",
+            certname,
+            FACTSET_PARENT,
+            "typical",
+        ),
+    ]
+
+
+def _routes() -> list:
+    environment = (("environment", "environment"),)
+    producer = (("producer", "producer"),)
+    return [
+        Route("/nodes", "nodes", "list", (), None, "typical", True),
+        Route("/nodes/{certname}", "nodes", "single", CERTNAME, None, "status"),
+        *_fact_routes("/nodes/{certname}", CERTNAME, NODE_PARENT),
+        *_resource_routes("/nodes/{certname}", CERTNAME, NODE_PARENT),
+        Route("/environments", "environments"),
+        Route(
+            "/environments/{environment}",
+            "environments",
+            "single",
+            (("environment", "name"),),
+            None,
+            "status",
+        ),
+        *_fact_routes("/environments/{environment}", environment, ENVIRONMENT_PARENT),
+        *_resource_routes(
+            "/environments/{environment}", environment, ENVIRONMENT_PARENT
+        ),
+        *_report_routes("/environments/{environment}", environment, ENVIRONMENT_PARENT),
+        Route(
+            "/environments/{environment}/events",
+            "events",
+            "list",
+            environment,
+            ENVIRONMENT_PARENT,
+            "events",
+        ),
+        Route("/producers", "producers"),
+        Route(
+            "/producers/{producer}",
+            "producers",
+            "single",
+            (("producer", "name"),),
+            None,
+            "status",
+        ),
+        *_factset_routes("/producers/{producer}", producer, PRODUCER_PARENT),
+        *_catalog_routes("/producers/{producer}", producer, PRODUCER_PARENT),
+        *_report_routes("/producers/{producer}", producer, PRODUCER_PARENT),
+        *_fact_routes("", (), None),
+        Route("/fact-names", "fact-names"),
+        Route("/fact-paths", "fact-paths"),
+        Route("/fact-contents", "fact-contents", "list", (), None, "typical", True),
+        *_factset_routes("", (), None),
+        Route("/inventory", "inventory", "list", (), None, "typical", True),
+        *_resource_routes("", (), None),
+        Route("/edges", "edges", "list", (), None, "typical", True),
+        *_catalog_routes("", (), None),
+        Route("/catalog-inputs", "catalog-inputs", "list", (), None, "typical", True),
+        Route(
+            "/catalog-input-contents",
+            "catalog-input-contents",
+            "list",
+            (),
+            None,
+            "typical",
+            True,
+        ),
+        Route("/packages", "packages"),
+        Route("/package-inventory", "packages", "list", (), None, "typical", True),
+        Route("/package-inventory/{certname}", "packages", "list", CERTNAME),
+        *_report_routes("", (), None),
+        Route("/events", "events", "list", (), None, "events"),
+    ]
+
+
+ENTITY_ROUTES = _routes()
 
 
 class ControllerPdbQueryV4:
@@ -179,9 +370,9 @@ class ControllerPdbQueryV4:
         )
         self._router = APIRouter(tags=["pdb_query_v4"])
 
-        self._add_route("", self._make_handler(None, False, ()))
-        for path, entity, single, implicit in ENTITY_ROUTES:
-            self._add_route(path, self._make_handler(entity, single, implicit))
+        self._add_route("", self._make_handler(Route("", None, "root", (), None, "root")))
+        for route in ENTITY_ROUTES:
+            self._add_route(route.path, self._make_handler(route))
         self._add_route("/event-counts", self._make_event_counts_handler(False))
         self._add_route(
             "/aggregate-event-counts", self._make_event_counts_handler(True)
@@ -235,11 +426,11 @@ class ControllerPdbQueryV4:
                 )
         return self._http
 
-    def _make_handler(self, entity: Optional[str], single: bool, implicit):
+    def _make_handler(self, route: Route):
         async def handler(request: Request):
             await self.authorize_client_cert.require_cn_trusted(request)
             try:
-                return await self._dispatch(request, entity, single, implicit)
+                return await self._dispatch(request, route)
             except PuppetDBQueryError as err:
                 return PlainTextResponse(err.message, status_code=err.status_code)
 
@@ -255,62 +446,117 @@ class ControllerPdbQueryV4:
 
         return handler
 
-    async def _dispatch(
-        self,
-        request: Request,
-        entity: Optional[str],
-        single: bool,
-        implicit,
-    ):
-        if self.config.app.puppetdb.query_upstream(entity):
+    async def _dispatch(self, request: Request, route: Route):
+        if self.config.app.puppetdb.query_upstream(route.entity):
             return await self.proxy(request)
 
         params = await read_params(request)
-        ast = params["query"]
-        if entity is None:
-            if not isinstance(ast, list) or not ast or ast[0] != "from":
-                raise PuppetDBQueryError(
-                    "Queries against the root endpoint must be a 'from' expression"
-                )
-            entity = ast[1] if len(ast) > 1 and isinstance(ast[1], str) else None
-            if entity is None:
-                raise PuppetDBQueryError("from requires an entity name")
+        validate_params(params, route.params)
+        ast = params.get("query")
+        entity = route.entity
+        restrict = route.restrict
+        pretty = parse_bool(params.get("pretty", False))
+        if route.kind == "root":
+            entity = _root_entity(ast)
+            if parse_bool(params.get("ast_only", False)):
+                return json_response(ast, pretty)
+            restrict = root_entity_restricted(entity)
+        timeout = parse_timeout(params.get("timeout"))
+        explain = parse_explain(params.get("explain"))
+        distinct = parse_distinct(params)
+        implicit = build_implicit(request, route.implicit)
+        if route.parent is not None:
+            parent_entity, column, param, label = route.parent
+            identifier = request.path_params.get(param)
+            if not await self._exists(parent_entity, column, identifier):
+                return not_found(label, identifier, pretty)
 
         paging = parse_paging(params)
-        clauses = build_implicit(request, implicit)
+        if explain:
+            plan = await self.engine.explain(
+                entity_name=entity,
+                ast=ast,
+                paging=paging,
+                implicit=implicit,
+                timeout=timeout,
+                restrict_active=restrict,
+                distinct_window=distinct,
+            )
+            return json_response(plan, pretty)
+        if route.kind in ("metrics", "logs"):
+            return await self._report_data(route, implicit, timeout, pretty)
+
         rows, total = await self.engine.run(
             entity_name=entity,
             ast=ast,
             paging=paging,
-            implicit=clauses,
-            timeout=parse_timeout(params.get("timeout")),
+            implicit=implicit,
+            timeout=timeout,
+            restrict_active=restrict,
+            extra_columns=_extra_columns(entity, params) if route.kind != "single" else None,
+            distinct_window=distinct,
         )
-        if single:
+        if route.kind == "single":
             if not rows:
-                return PlainTextResponse("", status_code=404)
-            return PdbJSONResponse(content=rows[0])
+                label = SINGLE_LABELS.get(entity, entity)
+                return not_found(label, request.path_params.get(route.implicit[0][0]), pretty)
+            return json_response(rows[0], pretty)
         headers = {"X-Records": str(total)} if paging.include_total else None
-        return PdbJSONResponse(content=rows, headers=headers)
+        return json_response(rows, pretty, headers=headers)
+
+    async def _exists(self, entity: str, column: str, value) -> bool:
+        rows, _total = await self.engine.run(
+            entity_name=entity,
+            ast=["extract", [column], ["=", column, value]],
+            paging=Paging(limit=1),
+        )
+        return bool(rows)
+
+    async def _report_data(self, route: Route, implicit: list, timeout, pretty: bool):
+        rows, _total = await self.engine.run(
+            entity_name="reports",
+            ast=["extract", [route.kind]],
+            paging=Paging(limit=1),
+            implicit=implicit,
+            timeout=timeout,
+        )
+        if not rows:
+            return not_found("report", implicit[-1][2], pretty)
+        value = rows[0].get(route.kind)
+        if isinstance(value, dict) and "data" in value:
+            value = value["data"]
+        return json_response(value if value is not None else [], pretty)
 
     async def _dispatch_event_counts(self, request: Request, aggregate: bool):
         if self.config.app.puppetdb.query_upstream("events"):
             return await self.proxy(request)
 
         params = await read_params(request)
+        validate_params(
+            params, "aggregate-event-counts" if aggregate else "event-counts"
+        )
         summarize_by = event_counts.parse_summarize_by(params.get("summarize_by"))
         count_by = event_counts.parse_count_by(params.get("count_by"))
         counts_filter = event_counts.parse_counts_filter(params.get("counts_filter"))
+        pretty = parse_bool(params.get("pretty", False))
+        distinct = parse_distinct(params)
+        timeout = parse_timeout(params.get("timeout"))
         paging = parse_paging(params)
 
-        query = params["query"]
+        query = params.get("query")
         results = []
         for field in summarize_by:
             counts = await self.engine.group(
                 entity_name="events",
                 ast=event_counts.extract_columns_query(query),
-                stages=event_counts.summary_stages(field, count_by, query),
-                extra=event_counts.summary_projection(field, count_by, query),
-                timeout=parse_timeout(params.get("timeout")),
+                stages=event_counts.summary_stages(
+                    field, count_by, query, distinct=distinct is not None
+                ),
+                extra=event_counts.summary_projection(
+                    field, count_by, query, distinct=distinct is not None
+                ),
+                timeout=timeout,
+                distinct_window=distinct,
             )
             counts = event_counts.apply_counts_filter(counts, counts_filter)
             if aggregate:
@@ -325,7 +571,7 @@ class ControllerPdbQueryV4:
         headers = (
             {"X-Records": str(len(results))} if paging.include_total else None
         )
-        return PdbJSONResponse(content=results, headers=headers)
+        return json_response(results, pretty, headers=headers)
 
     async def proxy(self, request: Request) -> Response:
         if not self.config.app.puppetdb.serverurl:
@@ -369,34 +615,15 @@ async def read_params(request: Request) -> dict:
             if isinstance(body, dict):
                 for key, value in body.items():
                     params[key] = value
-            elif isinstance(body, list):
-                params["query"] = body
             else:
-                raise PuppetDBQueryError(
-                    "request body must be a JSON object or array"
-                )
-    params["query"] = parse_query_param(params.get("query"))
+                raise PuppetDBQueryError("request body must be a JSON map")
+    if "query" in params:
+        params["query"] = parse_query_param(params["query"])
     if isinstance(params.get("order_by"), list):
         params["order_by"] = json.dumps(params["order_by"])
     if isinstance(params.get("counts_filter"), list):
         params["counts_filter"] = json.dumps(params["counts_filter"])
     return params
-
-
-def parse_timeout(raw) -> Optional[int]:
-    if raw is None or raw == "":
-        return None
-    try:
-        seconds = int(str(raw))
-    except ValueError:
-        raise PuppetDBQueryError(
-            f"Illegal value '{raw}' for :timeout; expected a positive integer"
-        )
-    if seconds < 0:
-        raise PuppetDBQueryError(
-            f"Illegal value '{raw}' for :timeout; expected a positive integer"
-        )
-    return seconds
 
 
 def parse_query_param(raw):
@@ -415,6 +642,29 @@ def parse_query_param(raw):
         return json.loads(text)
     except ValueError as err:
         raise PuppetDBQueryError(f"malformed query: {err}")
+
+
+def _root_entity(ast) -> str:
+    if not isinstance(ast, list) or not ast or ast[0] != "from":
+        raise PuppetDBQueryError(
+            "Queries against the root endpoint must be a 'from' expression"
+        )
+    entity = ast[1] if len(ast) > 1 and isinstance(ast[1], str) else None
+    if entity is None:
+        raise PuppetDBQueryError("from requires an entity name")
+    return entity
+
+
+def _extra_columns(entity: str, params: dict) -> list:
+    extra = []
+    normalised = entity.replace("_", "-")
+    if normalised == "nodes" and parse_bool(params.get("include_facts_expiration", False)):
+        extra.extend(["expires_facts", "expires_facts_updated"])
+    if normalised in ("factsets", "inventory") and parse_bool(
+        params.get("include_package_inventory", False)
+    ):
+        extra.append("package_inventory")
+    return extra
 
 
 def build_implicit(request: Request, implicit) -> list:

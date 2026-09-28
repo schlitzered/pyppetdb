@@ -81,8 +81,10 @@ class TestQueryRouting(unittest.TestCase):
         self.assertEqual(self.run.await_args.kwargs["ast"], ["=", "certname", "a"])
         self.assertEqual(self.run.await_args.kwargs["paging"].limit, 3)
 
-    def test_post_body_as_bare_ast(self):
-        self.client.post("/pdb/query/v4/nodes", json=["=", "certname", "a"])
+    def test_post_body_must_be_a_map(self):
+        response = self.client.post("/pdb/query/v4/nodes", json=["=", "certname", "a"])
+        self.assertEqual(response.status_code, 400)
+        self.client.post("/pdb/query/v4/nodes", json={"query": ["=", "certname", "a"]})
         self.assertEqual(self.run.await_args.kwargs["ast"], ["=", "certname", "a"])
 
     def test_path_parameters_become_implicit_filters(self):
@@ -253,6 +255,144 @@ class TestQuerySourceSwitch(unittest.TestCase):
     def test_upstream_without_serverurl_is_rejected_by_config(self):
         with self.assertRaises(ValueError):
             ConfigAppPuppetdb(querySource="upstream")
+
+
+class TestUpstreamRouteBehaviour(unittest.TestCase):
+    def setUp(self):
+        self.controller, self.client, _ = build()
+        self.run = AsyncMock(return_value=([{"certname": "a"}], 1))
+        self.controller.engine.run = self.run
+
+    def test_unknown_parameter_is_a_400(self):
+        response = self.client.get("/pdb/query/v4/nodes", params={"bogus": "1"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.text, "Unsupported query parameter 'bogus'")
+
+    def test_root_requires_a_query(self):
+        response = self.client.get("/pdb/query/v4")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.text, "Missing required query parameter 'query'")
+
+    def test_entity_lists_are_restricted_to_active_nodes(self):
+        self.client.get("/pdb/query/v4/nodes")
+        self.assertTrue(self.run.await_args.kwargs["restrict_active"])
+        self.client.get("/pdb/query/v4/reports")
+        self.assertFalse(self.run.await_args.kwargs["restrict_active"])
+        self.client.get("/pdb/query/v4/nodes/a")
+        self.assertFalse(self.run.await_args.kwargs["restrict_active"])
+
+    def test_root_restriction_skips_entities_without_certname(self):
+        self.client.get("/pdb/query/v4", params={"query": '["from", "nodes"]'})
+        self.assertTrue(self.run.await_args.kwargs["restrict_active"])
+        self.client.get("/pdb/query/v4", params={"query": '["from", "fact_paths"]'})
+        self.assertFalse(self.run.await_args.kwargs["restrict_active"])
+
+    def test_ast_only_echoes_the_query(self):
+        response = self.client.get(
+            "/pdb/query/v4",
+            params={"query": '["from", "nodes", ["=", "certname", "x"]]', "ast_only": "true"},
+        )
+        self.assertEqual(response.json(), ["from", "nodes", ["=", "certname", "x"]])
+        self.run.assert_not_awaited()
+
+    def test_child_routes_check_the_parent(self):
+        self.controller.engine.run = AsyncMock(return_value=([], 0))
+        response = self.client.get("/pdb/query/v4/nodes/nope/facts")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json(), {"error": "No information is known about node nope"}
+        )
+        self.assertEqual(
+            self.controller.engine.run.await_args.kwargs["ast"],
+            ["extract", ["certname"], ["=", "certname", "nope"]],
+        )
+
+    def test_single_routes_answer_a_json_404(self):
+        self.controller.engine.run = AsyncMock(return_value=([], 0))
+        response = self.client.get("/pdb/query/v4/environments/nope")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.json(), {"error": "No information is known about environment nope"}
+        )
+
+    def test_nested_routes_exist(self):
+        for path, entity in (
+            ("/nodes/a/facts/os/linux", "facts"),
+            ("/nodes/a/resources/File/%2Fx", "resources"),
+            ("/environments/prod/facts/os", "facts"),
+            ("/environments/prod/resources/File", "resources"),
+            ("/environments/prod/reports/abc/events", "events"),
+            ("/producers/p/factsets", "factsets"),
+            ("/producers/p/catalogs/a/edges", "edges"),
+            ("/producers/p/reports", "reports"),
+            ("/factsets/a/facts", "factsets"),
+            ("/package-inventory/a", "packages"),
+            ("/catalogs/a/resources/File/x", "resources"),
+        ):
+            self.run.reset_mock()
+            response = self.client.get("/pdb/query/v4" + path)
+            self.assertEqual(response.status_code, 200, msg=path)
+            self.assertEqual(self.run.await_args.kwargs["entity_name"], entity, msg=path)
+
+    def test_environment_children_carry_the_environment_filter(self):
+        self.client.get("/pdb/query/v4/environments/prod/reports/abc/events")
+        self.assertEqual(
+            self.run.await_args.kwargs["implicit"],
+            [["=", "environment", "prod"], ["=", "report", "abc"]],
+        )
+
+    def test_report_metrics_and_logs_return_the_data_array(self):
+        self.controller.engine.run = AsyncMock(
+            side_effect=[
+                ([{"hash": "abc"}], 1),
+                ([{"metrics": {"href": "/x", "data": [{"name": "total"}]}}], 1),
+            ]
+        )
+        response = self.client.get("/pdb/query/v4/reports/abc/metrics")
+        self.assertEqual(response.json(), [{"name": "total"}])
+        kwargs = self.controller.engine.run.await_args.kwargs
+        self.assertEqual(kwargs["ast"], ["extract", ["metrics"]])
+        self.assertEqual(kwargs["implicit"], [["=", "hash", "abc"]])
+
+    def test_pretty_indents_the_output(self):
+        response = self.client.get("/pdb/query/v4/nodes", params={"pretty": "true"})
+        self.assertIn("\n", response.text)
+
+    def test_include_flags_add_extra_columns(self):
+        self.client.get("/pdb/query/v4/nodes", params={"include_facts_expiration": "true"})
+        self.assertEqual(
+            self.run.await_args.kwargs["extra_columns"],
+            ["expires_facts", "expires_facts_updated"],
+        )
+        self.client.get("/pdb/query/v4/factsets", params={"include_package_inventory": "true"})
+        self.assertEqual(self.run.await_args.kwargs["extra_columns"], ["package_inventory"])
+        self.client.get("/pdb/query/v4/nodes", params={"include_package_inventory": "true"})
+        self.assertEqual(self.run.await_args.kwargs["extra_columns"], [])
+        self.client.get("/pdb/query/v4/nodes/a", params={"include_facts_expiration": "true"})
+        self.assertIsNone(self.run.await_args.kwargs["extra_columns"])
+
+    def test_distinct_window_reaches_the_engine(self):
+        self.client.get(
+            "/pdb/query/v4/events",
+            params={
+                "distinct_resources": "true",
+                "distinct_start_time": "2026-01-01T00:00:00Z",
+                "distinct_end_time": "2026-01-02T00:00:00Z",
+            },
+        )
+        window = self.run.await_args.kwargs["distinct_window"]
+        self.assertEqual(window[0].isoformat(), "2026-01-01T00:00:00+00:00")
+
+    def test_explain_uses_the_explain_entry_point(self):
+        self.controller.engine.explain = AsyncMock(return_value=[{"query plan": {}}])
+        response = self.client.get("/pdb/query/v4/nodes", params={"explain": "analyze"})
+        self.assertEqual(response.json(), [{"query plan": {}}])
+        self.run.assert_not_awaited()
+
+    def test_float_timeout_is_accepted(self):
+        response = self.client.get("/pdb/query/v4/nodes", params={"timeout": "1.5"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.run.await_args.kwargs["timeout"], 1.5)
 
 
 class TestCatalogChildRoutes(unittest.TestCase):

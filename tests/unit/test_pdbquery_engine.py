@@ -593,6 +593,74 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
         )
 
 
+class TestActiveRestriction(unittest.IsolatedAsyncioTestCase):
+    async def test_restriction_adds_the_active_clause(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("nodes", ["=", "certname", "a"], restrict_active=True)
+        first = nodes.pipelines[0][0]["$match"]
+        self.assertIn({"disabled": {"$ne": True}}, first["$and"])
+
+    async def test_explicit_node_state_wins(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("nodes", ["=", "node_state", "inactive"], restrict_active=True)
+        self.assertEqual(nodes.pipelines[0][0], {"$match": {"disabled": True}})
+
+    async def test_entities_without_node_state_are_left_alone(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("environments", ["=", "name", "prod"], restrict_active=True)
+        self.assertFalse(any("disabled" in str(stage) for stage in nodes.pipelines[0]))
+
+
+class TestDistinctWindow(unittest.IsolatedAsyncioTestCase):
+    async def test_latest_event_per_resource_is_picked_before_the_filter(self):
+        events = FakeCollection()
+        engine = engine_with(events=events)
+        start, end = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)
+        await engine.run(
+            "events",
+            ["and", ["=", "certname", "a"], ["=", "status", "failure"]],
+            distinct_window=(start, end),
+        )
+        pipeline = events.pipelines[0]
+        self.assertEqual(pipeline[0], {"$match": {"node_id": "a"}})
+        self.assertEqual(pipeline[1], {"$match": {"timestamp": {"$gte": start, "$lte": end}}})
+        group = pipeline[2]["$group"]
+        self.assertEqual(
+            group["_id"],
+            {
+                "node_id": "$node_id",
+                "resource_type": "$resource_type",
+                "resource_title": "$resource_title",
+                "property": "$property",
+                "name": "$name",
+            },
+        )
+        self.assertEqual(group["latest"], {"$max": "$timestamp"})
+        self.assertEqual(pipeline[4], {"$unwind": "$events"})
+        self.assertEqual(pipeline[5], {"$replaceRoot": {"newRoot": "$events"}})
+        later = [s["$match"] for s in pipeline[6:] if "$match" in s]
+        self.assertTrue(any("failure" in str(m) for m in later))
+
+
+class TestExtraColumns(unittest.IsolatedAsyncioTestCase):
+    async def test_extra_columns_are_projected_and_null_filled(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("nodes", None, extra_columns=["expires_facts", "expires_facts_updated"])
+        project = stage(nodes.pipelines[0], "$project")
+        self.assertEqual(project["expires_facts"], {"$ifNull": ["$facts_expiration.expire", True]})
+        self.assertIn("expires_facts_updated", stage(nodes.pipelines[0], "$set"))
+
+    async def test_extract_ignores_extra_columns(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("nodes", ["extract", ["certname"]], extra_columns=["expires_facts"])
+        self.assertNotIn("expires_facts", stage(nodes.pipelines[0], "$project"))
+
+
 class TestGroup(unittest.IsolatedAsyncioTestCase):
     async def test_group_appends_the_stages_behind_the_match(self):
         events = FakeCollection(docs=[{"subject": {"title": "a"}}])
