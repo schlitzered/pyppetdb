@@ -18,7 +18,7 @@ from pyppetdb.ca.protocol import ClientCertProtocol
 
 
 class TestClientCertProtocol(unittest.IsolatedAsyncioTestCase):
-    @patch("pyppetdb.ca.protocol.H11Protocol.__init__", return_value=None)
+    @patch("pyppetdb.ca.protocol.HttpToolsProtocol.__init__", return_value=None)
     async def test_connection_made(self, mock_init):
         # 1. Create Mock Transport and SSL Object
         mock_transport = MagicMock()
@@ -34,20 +34,20 @@ class TestClientCertProtocol(unittest.IsolatedAsyncioTestCase):
         mock_transport.get_extra_info.side_effect = get_extra_info
 
         # 2. Instantiate Protocol
-        with patch("pyppetdb.ca.protocol.H11Protocol.connection_made"):
+        with patch("pyppetdb.ca.protocol.HttpToolsProtocol.connection_made"):
             protocol = ClientCertProtocol()
             protocol.connection_made(mock_transport)
             self.assertEqual(protocol._peer_cert_dict, mock_cert_dict)
 
-    @patch("pyppetdb.ca.protocol.H11Protocol.__init__", return_value=None)
-    async def test_handle_events(self, mock_init):
+    @patch("pyppetdb.ca.protocol.HttpToolsProtocol.__init__", return_value=None)
+    async def test_on_headers_complete_injects_the_client_cert(self, mock_init):
         protocol = ClientCertProtocol()
         protocol._peer_cert_dict = {"subject": "test_cert"}
-        # scope is normally populated by uvicorn/h11_impl before/during handle_events
         protocol.scope = {"type": "http"}
 
-        with patch("pyppetdb.ca.protocol.H11Protocol.handle_events"):
-            protocol.handle_events()
+        with patch("pyppetdb.ca.protocol.HttpToolsProtocol.on_headers_complete") as done:
+            protocol.on_headers_complete()
+            done.assert_called_once()
             self.assertEqual(
                 protocol.scope["client_cert_dict"], {"subject": "test_cert"}
             )

@@ -15,7 +15,7 @@
 import typing
 import json
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log_levels = typing.Literal[
@@ -25,8 +25,11 @@ log_levels = typing.Literal[
 
 class ConfigAppFacts(BaseModel):
     index: typing.Optional[typing.List[str]] = None
+    indexMaxValueLen: int = 256
+    indexDepth: int = 3
+    indexDeny: typing.List[str] = []
 
-    @field_validator("index", mode="before")
+    @field_validator("index", "indexDeny", mode="before")
     @classmethod
     def parse_index(cls, v):
         if isinstance(v, str):
@@ -76,7 +79,6 @@ class ConfigAppPuppet(BaseModel):
     catalogCacheTTL: typing.Optional[int] = 86400
     serverurl: typing.Optional[str] = None
     timeout: int = 60
-    authSecret: typing.Optional[bool] = True
     trustedCns: typing.Optional[list[str]] = []
 
     @field_validator("catalogCacheFacts", mode="before")
@@ -94,12 +96,26 @@ class ConfigAppPuppet(BaseModel):
         return v
 
 
+query_sources = typing.Literal["internal", "upstream"]
+
+
 class ConfigAppPuppetdb(BaseModel):
     enable: bool = True
     serverurl: typing.Optional[str] = None
     timeout: int = 60
     trustedCns: typing.Optional[list[str]] = []
+    querySource: query_sources = "internal"
     resourceQueryInternal: bool = True
+    writeQueueSize: int = 500
+    writeQueueWorkers: int = 32
+    writeQueueDrainTimeout: float = 30.0
+    writeQueueWaitTimeout: float = 30.0
+    maxQueryDepth: int = 50
+    maxSubqueryDepth: int = 3
+    queryTimeout: int = 600
+    queryTimeoutMax: int = 0
+    maxPageSize: int = 10000
+    maxCommandSize: int = 0
 
     @field_validator("trustedCns", mode="before")
     @classmethod
@@ -107,6 +123,21 @@ class ConfigAppPuppetdb(BaseModel):
         if isinstance(v, str):
             return json.loads(v)
         return v
+
+    @model_validator(mode="after")
+    def validate_query_source(self):
+        if self.querySource == "upstream" and not self.serverurl:
+            raise ValueError(
+                "app_puppetdb_querySource 'upstream' requires app_puppetdb_serverurl"
+            )
+        return self
+
+    def query_upstream(self, entity: typing.Optional[str] = None) -> bool:
+        if self.querySource == "upstream":
+            return True
+        if entity == "resources" and not self.resourceQueryInternal:
+            return bool(self.serverurl)
+        return False
 
 
 class ConfigApp(BaseModel):

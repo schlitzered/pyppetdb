@@ -1,0 +1,41 @@
+name: pyppetdb-benchmark
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openvoxdb
+      POSTGRES_PASSWORD: openvoxdb
+      POSTGRES_DB: openvoxdb
+    command: >
+      postgres -c max_connections=200 -c shared_buffers=256MB
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openvoxdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  openvoxdb:
+    image: ghcr.io/openvoxproject/openvoxdb:8.15.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      USE_OPENVOXSERVER: "false"
+      OPENVOXDB_POSTGRES_HOSTNAME: postgres
+      OPENVOXDB_POSTGRES_DATABASE: openvoxdb
+      OPENVOXDB_POSTGRES_USER: openvoxdb
+      OPENVOXDB_POSTGRES_PASSWORD: openvoxdb
+      OPENVOXDB_CERTIFICATE_ALLOWLIST: bench-client
+      OPENVOXDB_JAVA_ARGS: >-
+        -Djava.net.preferIPv4Stack=true -Xms1g -Xmx1g -XX:+UseParallelGC
+    ports:
+      - "18081:8081"
+      - "18080:8080"
+    volumes:
+      - ${BENCH_CERTS:?set BENCH_CERTS to the directory created by gen_certs.sh}/server.key:/opt/puppetlabs/server/data/puppetdb/certs/private_keys/server.key:ro
+      - ${BENCH_CERTS}/server.crt:/opt/puppetlabs/server/data/puppetdb/certs/certs/server.crt:ro
+      - ${BENCH_CERTS}/ca.pem:/opt/puppetlabs/server/data/puppetdb/certs/certs/ca.pem:ro
+      - ./openvoxdb-mtls.sh:/container-custom-entrypoint.d/90-mtls.sh:ro

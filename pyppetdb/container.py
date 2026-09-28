@@ -35,6 +35,9 @@ from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_resources import CrudNodesResources
+from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.crud.users import CrudUsers
@@ -47,6 +50,7 @@ from pyppetdb.ca.service import CAService
 from pyppetdb.jobs.service import JobService
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.ws.hub import WsHub
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys
@@ -187,7 +191,32 @@ class AppContainer:
                 config=config,
                 log=log,
                 coll=mongo_db["nodes_catalogs"],
-                secret_manager=self.nodes_catalogs_redactor,
+                redactor=self.nodes_catalogs_redactor,
+                protector=self.nodes_data_protector,
+            )
+        )
+
+        self.crud_nodes_resources = self.crud_manager.register(
+            crud=CrudNodesResources(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_resources"],
+            )
+        )
+
+        self.crud_nodes_edges = self.crud_manager.register(
+            crud=CrudNodesEdges(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_edges"],
+            )
+        )
+
+        self.crud_nodes_events = self.crud_manager.register(
+            crud=CrudNodesEvents(
+                config=config,
+                log=log,
+                coll=mongo_db["nodes_events"],
             )
         )
 
@@ -204,7 +233,7 @@ class AppContainer:
                 config=config,
                 log=log,
                 coll=mongo_db["nodes_reports"],
-                secret_manager=self.nodes_reports_redactor,
+                redactor=self.nodes_reports_redactor,
             )
         )
 
@@ -293,6 +322,13 @@ class AppContainer:
             config=config,
             trusted_cns=config.app.puppet.trustedCns,
             crud_ca_certificates=self.crud_ca_certificates,
+        )
+
+        self.ingest_queue = IngestQueue(
+            log=log,
+            size=config.app.puppetdb.writeQueueSize,
+            workers=config.app.puppetdb.writeQueueWorkers,
+            drain_timeout=config.app.puppetdb.writeQueueDrainTimeout,
         )
 
         self.ws_hub = WsHub(
@@ -428,6 +464,9 @@ class AppContainer:
                 )
 
     async def close(self):
+        self.log.info(msg="Stopping ingest queue...")
+        await self.ingest_queue.stop()
+
         instance_id = f"{socket.getfqdn()}:{self.config.app.main.port}"
         self.log.info(msg=f"Removing PyppetDB node '{instance_id}' from database...")
         try:

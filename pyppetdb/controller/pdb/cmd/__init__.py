@@ -17,6 +17,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes
@@ -24,6 +25,9 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_resources import CrudNodesResources
+from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 
 
 class ControllerPdbCmd:
@@ -36,7 +40,11 @@ class ControllerPdbCmd:
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        crud_nodes_resources: CrudNodesResources,
+        crud_nodes_edges: CrudNodesEdges,
+        crud_nodes_events: CrudNodesEvents,
         authorize_client_cert: AuthorizeClientCert,
+        ingest_queue: IngestQueue,
     ):
         self._log = log
         self._router = APIRouter()
@@ -50,7 +58,11 @@ class ControllerPdbCmd:
                 crud_nodes_catalogs=crud_nodes_catalogs,
                 crud_nodes_groups=crud_nodes_groups,
                 crud_nodes_reports=crud_nodes_reports,
+                crud_nodes_resources=crud_nodes_resources,
+                crud_nodes_edges=crud_nodes_edges,
+                crud_nodes_events=crud_nodes_events,
                 authorize_client_cert=authorize_client_cert,
+                ingest_queue=ingest_queue,
             ).router
         )
 

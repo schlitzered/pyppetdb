@@ -41,156 +41,7 @@ from pyppetdb.model.nodes import NodeGetCatalogResources
 from pyppetdb.errors import BackendError
 
 from pyppetdb.helpers.placement import calculate_placement
-
-
-class PuppetDBASTParser:
-    def __init__(self):
-        self._operators = {
-            "and": self._translate_and,
-            "or": self._translate_or,
-            "not": self._translate_not,
-            "=": self._translate_comparison,
-            ">": self._translate_comparison,
-            "<": self._translate_comparison,
-            ">=": self._translate_comparison,
-            "<=": self._translate_comparison,
-            "~": self._translate_comparison,
-            "null?": self._translate_comparison,
-            "in": self._translate_in,
-        }
-
-    def parse(self, ast: list) -> Optional[dict]:
-        if not ast or not isinstance(ast, list):
-            return None
-        res = self._translate(ast)
-        if res is None:
-            return None
-        return self._cleanup(res)
-
-    def _translate(self, node: list) -> Optional[dict]:
-        if not isinstance(node, list) or not node:
-            return None
-        op = node[0]
-        handler = self._operators.get(op)
-        if handler:
-            return handler(node)
-        return None
-
-    def _translate_and(self, node: list) -> Optional[dict]:
-        translated = [self._translate(x) for x in node[1:]]
-        valid = [x for x in translated if x is not None]
-        if not valid:
-            return None
-        if len(valid) == 1:
-            return valid[0]
-        return {"$and": valid}
-
-    def _translate_or(self, node: list) -> Optional[dict]:
-        translated = [self._translate(x) for x in node[1:]]
-        valid = [x for x in translated if x is not None]
-        if not valid:
-            return None
-        if len(valid) == 1:
-            return valid[0]
-        return {"$or": valid}
-
-    def _translate_not(self, node: list) -> Optional[dict]:
-        if len(node) != 2:
-            return None
-        translated = self._translate(node[1])
-        if not translated:
-            return None
-        if len(translated) == 1:
-            k = list(translated.keys())[0]
-            v = translated[k]
-            if isinstance(v, dict):
-                return {k: {"$not": v}}
-            else:
-                return {k: {"$ne": v}}
-        return {"$nor": [translated]}
-
-    def _translate_comparison(self, node: list) -> Optional[dict]:
-        if len(node) != 3:
-            return None
-        op = node[0]
-        field = node[1]
-        val = node[2]
-        target = self._map_field(field)
-        if not target:
-            return None
-
-        if (
-            target == "catalog.resources_exported.exported"
-            and op == "="
-            and val is True
-        ):
-            return {}
-
-        if op == "=":
-            return {target: val}
-        elif op == ">":
-            return {target: {"$gt": val}}
-        elif op == "<":
-            return {target: {"$lt": val}}
-        elif op == ">=":
-            return {target: {"$gte": val}}
-        elif op == "<=":
-            return {target: {"$lte": val}}
-        elif op == "~":
-            return {target: {"$regex": val}}
-        elif op == "null?":
-            return (
-                {target: {"$type": 10}}
-                if val
-                else {target: {"$ne": None, "$exists": True}}
-            )
-        return None
-
-    def _translate_in(self, node: list) -> Optional[dict]:
-        if len(node) != 3:
-            return None
-        field = node[1]
-        target = self._map_field(field)
-        if not target:
-            return None
-        val = node[2]
-        if isinstance(val, list) and val and val[0] == "array":
-            return {target: {"$in": val[1]}}
-        return None
-
-    @staticmethod
-    def _map_field(field) -> Optional[str]:
-        if isinstance(field, str):
-            if field.startswith("fact_"):
-                path = field.replace("fact_", "", 1).replace("__", ".")
-                return f"facts.{path}"
-            elif field in ["type", "title", "file", "line", "exported"]:
-                return f"catalog.resources_exported.{field}"
-            elif field == "tag":
-                return "catalog.resources_exported.tags"
-            elif field == "certname":
-                return "id"
-            elif field == "environment":
-                return "environment"
-        elif isinstance(field, list) and len(field) == 2 and field[0] == "parameter":
-            return f"catalog.resources_exported.parameters.{field[1]}"
-        return None
-
-    def _cleanup(self, q: dict) -> dict:
-        if not isinstance(q, dict):
-            return q
-        cleaned = {}
-        for k, v in q.items():
-            if k in ("$and", "$or"):
-                valid = [self._cleanup(x) for x in v if self._cleanup(x) != {}]
-                if valid:
-                    if len(valid) == 1:
-                        return valid[0]
-                    else:
-                        cleaned[k] = valid
-            else:
-                cleaned[k] = v
-        return cleaned
+from pyppetdb.helpers.puppetdb import build_facts_index
 
 
 class CrudNodes(CrudMongo):
@@ -205,7 +56,6 @@ class CrudNodes(CrudMongo):
             log=log,
             coll=coll,
         )
-        self._ast_parser = PuppetDBASTParser()
         self._indices.extend(
             [
                 pymongo.IndexModel(
@@ -237,18 +87,24 @@ class CrudNodes(CrudMongo):
                     name="idx_remote_agent_connected",
                 ),
                 pymongo.IndexModel(
-                    [
-                        ("catalog.resources_exported.type", pymongo.ASCENDING),
-                        ("catalog.resources_exported.title", pymongo.ASCENDING),
-                    ],
-                    name="idx_exported_resources_title",
+                    [("producer", pymongo.ASCENDING)], name="idx_producer"
+                ),
+                pymongo.IndexModel(
+                    [("report.end_time", pymongo.DESCENDING)],
+                    name="idx_report_end_time",
+                ),
+                pymongo.IndexModel(
+                    [("environment", pymongo.ASCENDING)], name="idx_environment"
+                ),
+                pymongo.IndexModel(
+                    [("report.hash", pymongo.ASCENDING)], name="idx_report_hash"
                 ),
                 pymongo.IndexModel(
                     [
-                        ("catalog.resources_exported.type", pymongo.ASCENDING),
-                        ("catalog.resources_exported.tags", pymongo.ASCENDING),
+                        ("facts_index.p", pymongo.ASCENDING),
+                        ("facts_index.v", pymongo.ASCENDING),
                     ],
-                    name="idx_exported_resources_tags",
+                    name="idx_facts_index",
                 ),
             ]
         )
@@ -266,37 +122,6 @@ class CrudNodes(CrudMongo):
                         name=f"idx_fact_{fact}",
                     )
                 )
-
-    def translate_resource_query(self, ast: list) -> Optional[dict]:
-        return self._ast_parser.parse(ast)
-
-    async def query_exported_resources(self, query: dict) -> list:
-        self.log.debug(f"Executing aggregation pipeline with query: {query}")
-        pipeline = [
-            {"$match": query},
-            {"$unwind": "$catalog.resources_exported"},
-            {"$match": query},
-            {
-                "$project": {
-                    "_id": 0,
-                    "certname": "$id",
-                    "environment": "$environment",
-                    "exported": "$catalog.resources_exported.exported",
-                    "type": "$catalog.resources_exported.type",
-                    "title": "$catalog.resources_exported.title",
-                    "tags": "$catalog.resources_exported.tags",
-                    "parameters": "$catalog.resources_exported.parameters",
-                    "file": "$catalog.resources_exported.file",
-                    "line": "$catalog.resources_exported.line",
-                }
-            },
-        ]
-        cursor = self.coll.aggregate(pipeline)
-        result = []
-        async for doc in cursor:
-            result.append(doc)
-        self.log.debug(f"Aggregation result: {len(result)} resources")
-        return result
 
     async def delete(
         self,
@@ -432,42 +257,42 @@ class CrudNodes(CrudMongo):
         fact: Optional[set[str]] = None,
         environment: Optional[str] = None,
     ) -> NodeGetCatalogResources:
-        query = {}
-        self._filter_list(query, "node_groups", user_node_groups)
-        self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
-        self._filter_boolean(query, "disabled", disabled)
-        self._filter_literal(query, "environment", environment)
-        project_filter = [
-            {"$eq": ["$$resource.type", resource_type]},
-        ]
+        node_query = {}
+        self._filter_list(node_query, "node_groups", user_node_groups)
+        self._filter_complex_search(
+            node_query, base_attribute="facts", complex_search=fact
+        )
+
+        resource_query = {"exported": True, "type": resource_type}
+        self._filter_boolean(resource_query, "disabled", disabled)
+        self._filter_literal(resource_query, "environment", environment)
         if resource_title:
-            project_filter.append({"$eq": ["$$resource.title", resource_title]})
+            resource_query["title"] = resource_title
         if resource_tags:
-            for tag in resource_tags:
-                project_filter.append(
-                    {"$in": [tag, "$$resource.tags"]},
-                )
-        pipeline = [
-            {"$match": query},
-            {
-                "$project": {
-                    "resources_exported": {
-                        "$filter": {
-                            "input": "$catalog.resources_exported",
-                            "as": "resource",
-                            "cond": {"$and": project_filter},
-                        }
-                    }
-                }
+            resource_query["tags"] = {"$all": resource_tags}
+
+        if node_query:
+            node_ids = await self._coll.distinct("id", filter=node_query)
+            resource_query["node_id"] = {"$in": node_ids}
+
+        resources_coll = self.coll.database["nodes_resources"]
+        cursor = resources_coll.find(
+            filter=resource_query,
+            projection={
+                "_id": 0,
+                "resource": 1,
+                "type": 1,
+                "title": 1,
+                "exported": 1,
+                "tags": 1,
+                "file": 1,
+                "line": 1,
+                "parameters": 1,
             },
-            {"$unwind": "$resources_exported"},
-            {"$group": {"_id": None, "results": {"$push": "$resources_exported"}}},
-        ]
+        )
         result = list()
-        _results = await self.coll.aggregate(pipeline).to_list(length=None)
-        for _result in _results:
-            for item in _result["results"]:
-                result.append(NodeGetCatalogResource(**item))
+        async for item in cursor:
+            result.append(NodeGetCatalogResource(**item))
         return NodeGetCatalogResources(
             **{"result": result, "meta": {"result_size": len(result)}}
         )
@@ -673,6 +498,53 @@ class CrudNodes(CrudMongo):
 
         return NodeGetMulti(**formatted_result)
 
+    async def get_ingest_state(self, _id: str) -> Optional[dict]:
+        pipeline = [
+            {"$match": {"id": _id}},
+            {"$limit": 1},
+            {
+                "$project": {
+                    "_id": 0,
+                    "has_facts": {"$eq": [{"$type": "$facts"}, "object"]},
+                    "has_catalog": {"$eq": [{"$type": "$catalog"}, "object"]},
+                    "catalog_uuid": "$catalog.catalog_uuid",
+                    "content_hash": "$catalog.content_hash",
+                    "disabled": {"$ifNull": ["$disabled", False]},
+                    "environment": "$environment",
+                    "placement": "$placement",
+                }
+            },
+        ]
+        try:
+            rows = await self._coll.aggregate(pipeline).to_list(length=1)
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        if not rows:
+            return None
+        return {
+            "has_facts": rows[0]["has_facts"],
+            "has_catalog": rows[0]["has_catalog"],
+            "catalog_uuid": rows[0].get("catalog_uuid"),
+            "content_hash": rows[0].get("content_hash"),
+            "disabled": bool(rows[0].get("disabled")),
+            "environment": rows[0].get("environment"),
+            "placement": rows[0].get("placement"),
+        }
+
+    async def update_catalog_metadata(self, _id: str, metadata: dict) -> None:
+        if not metadata:
+            return
+        update = {f"catalog.{key}": value for key, value in metadata.items()}
+        try:
+            await self._coll.update_one(
+                filter={"id": _id},
+                update={"$set": update},
+            )
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+
     async def get_placement(self, _id: str) -> dict[str, str]:
         if not self.config.mongodb.placementFacts:
             return {}
@@ -687,13 +559,26 @@ class CrudNodes(CrudMongo):
         facts = node.get("facts", {}) if node else {}
         return calculate_placement(self.config, facts)
 
+    def _with_facts_index(self, data: dict) -> dict:
+        facts = data.get("facts")
+        if not isinstance(facts, dict):
+            return data
+        settings = self.config.app.main.facts
+        data["facts_index"] = build_facts_index(
+            facts,
+            max_value_len=settings.indexMaxValueLen,
+            depth=settings.indexDepth,
+            deny=settings.indexDeny,
+        )
+        return data
+
     async def create(
         self,
         _id: str,
         payload: NodePutInternal,
         fields: list,
     ) -> NodeGet:
-        data = payload.model_dump()
+        data = self._with_facts_index(payload.model_dump())
         data["id"] = _id
 
         result = await self._create(
@@ -711,7 +596,7 @@ class CrudNodes(CrudMongo):
         return_none: bool = False,
     ) -> NodeGet | None:
         query = {"id": _id}
-        data = payload.model_dump()
+        data = self._with_facts_index(payload.model_dump())
 
         result = await self._update(
             query=query,

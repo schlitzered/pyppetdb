@@ -71,12 +71,61 @@ graph LR
     P1 -- "6. Return catalog" --> Node
 ```
 
-## 3. Secret Redaction Strategy
+## 3. PuppetDB Command & Query API
 
-Redaction is applied at read time, when data is served over the `/api` routes. The Puppet Agent
-(on the `/puppet` routes) needs the unredacted catalog to configure the system, while humans and
-API consumers only ever see redacted data. Redaction happens even for deeply nested values and for
-job logs.
+The `/pdb` routes implement the PuppetDB API against pyppetdb's own MongoDB store. Commands are
+always written locally, and additionally forwarded to `app_puppetdb_serverurl` when an upstream
+OpenVoxDB is configured. Queries are answered locally or proxied upstream depending on
+`app_puppetdb_querySource`.
+
+```mermaid
+graph LR
+    C[PuppetDB client]
+    P["pyppetdb /pdb"]
+    E["Query engine<br/>pyppetdb/pdb/query"]
+    DB[(MongoDB)]
+    UPS[Upstream OpenVoxDB]
+
+    C -- "commands (/pdb/cmd/v1)" --> P
+    P -- "always store" --> DB
+    P -- "always forward when serverurl set" --> UPS
+    C -- "queries (/pdb/query/v4)" --> P
+    P -- "querySource = internal" --> E
+    E -- "aggregation pipeline" --> DB
+    P -- "querySource = upstream" --> UPS
+```
+
+`pyppetdb/pdb/query/` holds the query engine: `entities.py` maps each PuppetDB entity onto the
+MongoDB documents (as a projection whose keys are the PuppetDB column names), `ast.py` parses and
+compiles the AST query language into a `$match` document, `engine.py` assembles and runs the
+aggregation pipeline, and `paging.py` and `event_counts.py` cover the remaining query parameters.
+Entities whose rows cannot be produced by an aggregation pipeline (`fact-paths`,
+`fact-contents`) are expanded in Python and filtered with the evaluator in `matcher.py`.
+
+The compiled `$match` is written in PuppetDB column names and therefore has to sit behind
+the `$project` that renames storage paths into columns — which would leave MongoDB unable
+to use an index. The engine therefore derives two additional filters from it:
+a **document pre-filter** in storage paths that runs before every other stage (and hits
+the `catalog.resources.*` indexes), and an **element filter** that is pushed into the
+`$filter` of the projection so that arrays are narrowed before `$unwind` rather than
+after. Both are derived only from clauses in positive polarity — anything under `not`,
+an `or` with a branch that yields nothing, and equality against an `$ifNull` default are
+skipped — so they can only ever match too much, never too little. The exact `$match`
+behind the projection stays in place and decides the result.
+
+See [PuppetDB](puppetdb.md) for the endpoint and query-language reference.
+
+## 4. Secret Redaction Strategy
+
+Redaction is applied at read time, when data is served over the `/api` routes. MongoDB stores
+reports, catalogs, facts and events as received. The Puppet Agent (on the `/puppet` routes) needs
+the unredacted catalog to configure the system, the PuppetDB-compatible query API under `/pdb` is
+exempt on purpose because its consumers expect PuppetDB's exact answers, and facts are never
+redacted. Humans reading reports, catalog history and job logs over `/api` only ever see redacted
+data, even for deeply nested values, and a secret added later is redacted from everything already
+stored. Catalog history keeps the catalog's resources and edges as one compressed, encrypted blob
+(the same `NodesDataProtector` encoding the catalog cache uses) next to plain metadata; the blob is
+decrypted and redacted only when a request asks for the `catalog` field.
 
 ```mermaid
 sequenceDiagram
@@ -101,7 +150,7 @@ sequenceDiagram
     PP-->>User: Redacted catalog
 ```
 
-## 4. Secure Job Execution (Inter-Instance WebSocket)
+## 5. Secure Job Execution (Inter-Instance WebSocket)
 
 The pyppetdb agent connects to one pyppetdb instance over a WebSocket. When you run several
 replicas behind a load balancer, a user's job request may land on a *different* instance than the
@@ -125,7 +174,7 @@ graph TD
     Agent -. "Stream logs back" .-> Proxy
 ```
 
-## 5. Storage
+## 6. Storage
 
 pyppetdb stores all state in **MongoDB** and requires a **replica set**, because it relies on
 [change streams](https://www.mongodb.com/docs/manual/changeStreams/) to react to data changes

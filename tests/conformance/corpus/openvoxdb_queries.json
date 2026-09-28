@@ -1,0 +1,9161 @@
+[
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo.local"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    "status",
+    "success"
+   ],
+   [
+    "=",
+    "status",
+    "skipped"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "<",
+   "successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "latest_report?",
+    true
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "=",
+       "certname",
+       "foo.local"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "latest_report?",
+    true
+   ],
+   [
+    "=",
+    "certname",
+    "foo.local"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "DEV"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "DE"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "PROD"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "PR"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "D"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "<",
+   "timestamp",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/aggregate_event_counts_test.clj",
+  "path": "/pdb/query/v4/aggregate-event-counts",
+  "method": "GET",
+  "query": [
+   "<",
+   "intentional_successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "host-1"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "=",
+   "type",
+   "hiera"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "puppetdb::globals::version"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "puppetdb::disable_cleartext"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname"
+   ],
+   [
+    "~",
+    "certname",
+    ""
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "=",
+    "certname",
+    "host-1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "group_by",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_catalog_input_contents",
+      [
+       "=",
+       "certname",
+       "host-1"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "name",
+    [
+     "extract",
+     "name",
+     [
+      "select_catalog_input_contents",
+      [
+       "in",
+       "name",
+       [
+        "array",
+        [
+         "puppetdb::globals::version"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "catalog_input_contents",
+     [
+      "extract",
+      "certname",
+      [
+       "=",
+       "certname",
+       "host-1"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "name",
+    [
+     "from",
+     "catalog_input_contents",
+     [
+      "extract",
+      "name",
+      [
+       "in",
+       "name",
+       [
+        "array",
+        [
+         "puppetdb::globals::version"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "catalog_input_contents",
+    [
+     "=",
+     "catalog_uuid",
+     "80a1f1d2-1bd3-4f68-86db-74b3d0d96f95"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_input_contents_test.clj",
+  "path": "/pdb/query/v4/catalog-input-contents",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "catalog_input_contents",
+    [
+     "in",
+     "name",
+     [
+      "array",
+      [
+       "puppetdb::globals::version"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "host-1"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname"
+   ],
+   [
+    "~",
+    "certname",
+    ""
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "=",
+    "certname",
+    "host-1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "group_by",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_catalog_inputs",
+      [
+       "=",
+       "certname",
+       "host-1"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "catalog_inputs",
+     [
+      "extract",
+      "certname",
+      [
+       "=",
+       "certname",
+       "host-1"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalog_inputs_test.clj",
+  "path": "/pdb/query/v4/catalog-inputs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "catalog_inputs",
+    [
+     "=",
+     "catalog_uuid",
+     "80a1f1d2-1bd3-4f68-86db-74b3d0d96f95"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "myhost.localdomain"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "host2.localdomain"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "<",
+   "producer_timestamp",
+   "2014-07-10T22:33:54.781Z"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "PROD"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "PR"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname"
+   ],
+   [
+    "~",
+    "certname",
+    ""
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "edges"
+   ],
+   [
+    "=",
+    "certname",
+    "host2.localdomain"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "environment"
+   ],
+   [
+    "~",
+    "certname",
+    ""
+   ],
+   [
+    "group_by",
+    "environment"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "=",
+       "type",
+       "Apt::Pin"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "in",
+       "type",
+       [
+        "array",
+        [
+         "Apt::Pin"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "resources",
+     [
+      "extract",
+      "certname",
+      [
+       "=",
+       "type",
+       "Apt::Pin"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "resources",
+    [
+     "=",
+     "type",
+     "Apt::Pin"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "resources",
+    [
+     "in",
+     "type",
+     [
+      "array",
+      [
+       "Apt::Pin"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_edges",
+      [
+       "=",
+       "target_type",
+       "File"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "edges",
+     [
+      "extract",
+      "certname",
+      [
+       "=",
+       "target_type",
+       "File"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "edges",
+    [
+     "=",
+     "target_type",
+     "File"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/catalogs_test.clj",
+  "path": "/pdb/query/v4/catalogs",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "edges",
+    [
+     "in",
+     "target_type",
+     [
+      "array",
+      [
+       "File"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "~",
+   "name",
+   "f.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "name",
+    "foo"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "extract",
+    "environment",
+    [
+     "select_facts",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "from",
+    "facts",
+    [
+     "extract",
+     "environment",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "facts",
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "operatingsystem"
+    ],
+    [
+     "=",
+     "value",
+     "Debian"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "in",
+    "name",
+    [
+     "extract",
+     "environment",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "operatingsystem"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "in",
+    "name",
+    [
+     "from",
+     "facts",
+     [
+      "extract",
+      "environment",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "operatingsystem"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "subquery",
+    "facts",
+    [
+     "and",
+     [
+      "=",
+      "name",
+      "operatingsystem"
+     ],
+     [
+      "=",
+      "value",
+      "Debian"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "extract",
+    "environment",
+    [
+     "select_facts",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "hostname"
+      ],
+      [
+       "in",
+       "value",
+       [
+        "extract",
+        "title",
+        [
+         "select_resources",
+         [
+          "=",
+          "type",
+          "Class"
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "from",
+    "facts",
+    [
+     "extract",
+     "environment",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "hostname"
+      ],
+      [
+       "in",
+       "value",
+       [
+        "from",
+        "resources",
+        [
+         "extract",
+         "title",
+         [
+          "=",
+          "type",
+          "Class"
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "<=",
+   "name",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   ">=",
+   "name",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   "<",
+   "name",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/environments_test.clj",
+  "path": "/pdb/query/v4/environments",
+  "method": "GET",
+  "query": [
+   ">",
+   "name",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo.local"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   ".*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    "status",
+    "success"
+   ],
+   [
+    "=",
+    "status",
+    "skipped"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "<",
+   "successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   ">",
+   "successes",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   ">=",
+   "successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "<=",
+   "successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   ">",
+   "timestamp",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   ".*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "property",
+   ".*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "~",
+      "certname",
+      ".*"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "~",
+      "tag",
+      ".*"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "DEV"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "DE.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "environment",
+    "PROD"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "PROD"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "<",
+   "intentional_successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "=",
+   "corrective_successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   ">",
+   "corrective_successes",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   ">=",
+   "corrective_successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/event_counts_test.clj",
+  "path": "/pdb/query/v4/event-counts",
+  "method": "GET",
+  "query": [
+   "<=",
+   "intentional_successes",
+   1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "or",
+    [
+     "=",
+     "resource_title",
+     "hi"
+    ],
+    [
+     "=",
+     "resource_title",
+     "notify, yo"
+    ]
+   ],
+   [
+    "=",
+    "status",
+    "success"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "and",
+    [
+     "=",
+     "resource_title",
+     "hi"
+    ],
+    [
+     "=",
+     "status",
+     "success"
+    ]
+   ],
+   [
+    "and",
+    [
+     "=",
+     "resource_type",
+     "Notify"
+    ],
+    [
+     "=",
+     "property",
+     "message"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "status",
+    "success"
+   ],
+   [
+    "<",
+    "timestamp",
+    "2011-01-01T12:00:02-03:00"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    "status",
+    "skipped"
+   ],
+   [
+    "<",
+    "timestamp",
+    "2011-01-01T12:00:02-03:00"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "extract",
+   "status",
+   [
+    "and",
+    [
+     "or",
+     [
+      "=",
+      "resource_title",
+      "hi"
+     ],
+     [
+      "=",
+      "resource_title",
+      "notify, yo"
+     ]
+    ],
+    [
+     "=",
+     "status",
+     "success"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "status",
+    "line"
+   ],
+   [
+    "and",
+    [
+     "or",
+     [
+      "=",
+      "resource_title",
+      "hi"
+     ],
+     [
+      "=",
+      "resource_title",
+      "notify, yo"
+     ]
+    ],
+    [
+     "=",
+     "status",
+     "success"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "status",
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "or",
+    [
+     "=",
+     "resource_title",
+     "hi"
+    ],
+    [
+     "=",
+     "resource_title",
+     "notify,yo"
+    ]
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   ">",
+   "timestamp",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo.local"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "certname",
+    "foo.local"
+   ],
+   [
+    "=",
+    "status",
+    "success"
+   ],
+   [
+    "=",
+    "resource_title",
+    "notify, yar"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "<",
+   "run_start_time",
+   "2011-01-02T00:00:00-03:00"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   ">",
+   "run_end_time",
+   "2011-01-02T00:00:00-03:00"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   ">",
+   "run_end_time",
+   "2011-01-04T00:00:00-03:00"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "null?",
+   "corrective_change",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "=",
+   "corrective_change",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "containing_class",
+    "Foo"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "=",
+       "title",
+       "foobar"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "containing_class",
+    "Foo"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "=",
+       "value",
+       "1.1.1.1"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "containing_class",
+    "Foo"
+   ],
+   [
+    "in",
+    [
+     "certname",
+     "environment"
+    ],
+    [
+     "extract",
+     [
+      "certname",
+      "environment"
+     ],
+     [
+      "select_resources",
+      [
+       "=",
+       "title",
+       "foobar"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "nothing",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    [
+     "nothing",
+     "nothing2",
+     "certname"
+    ],
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "in",
+   "nothing",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "=",
+   "line",
+   "100"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "extract",
+   "nothing",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "*abc"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/events_test.clj",
+  "path": "/pdb/query/v4/events",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "[]"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "and",
+       [
+        "=",
+        "type",
+        "Class"
+       ],
+       [
+        "=",
+        "title",
+        "Apache"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "not",
+    [
+     "in",
+     "certname",
+     [
+      "extract",
+      "certname",
+      [
+       "select_resources",
+       [
+        "and",
+        [
+         "=",
+         "type",
+         "Class"
+        ],
+        [
+         "=",
+         "title",
+         "Apache"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "=",
+       "type",
+       "Class"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "or",
+    [
+     "=",
+     "name",
+     "ipaddress"
+    ],
+    [
+     "=",
+     "name",
+     "operatingsystem"
+    ]
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "and",
+       [
+        "=",
+        "type",
+        "Class"
+       ],
+       [
+        "=",
+        "title",
+        "Apache"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "or",
+    [
+     "in",
+     "certname",
+     [
+      "extract",
+      "certname",
+      [
+       "select_resources",
+       [
+        "and",
+        [
+         "=",
+         "type",
+         "Class"
+        ],
+        [
+         "=",
+         "title",
+         "Apache"
+        ]
+       ]
+      ]
+     ]
+    ],
+    [
+     "in",
+     "certname",
+     [
+      "extract",
+      "certname",
+      [
+       "select_resources",
+       [
+        "and",
+        [
+         "=",
+         "type",
+         "Class"
+        ],
+        [
+         "=",
+         "title",
+         "Main"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "=",
+       "type",
+       "NotRealAtAll"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "nosuchfact"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_resources",
+      [
+       "=",
+       "type",
+       "Class"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "osfamily"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "extract",
+    "name",
+    [
+     "select_facts",
+     [
+      "=",
+      "name",
+      "osfamily"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "osfamily"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ],
+       [
+        "in",
+        "certname",
+        [
+         "extract",
+         "certname",
+         [
+          "select_facts",
+          [
+           "and",
+           [
+            "=",
+            "name",
+            "uptime_seconds"
+           ],
+           [
+            ">",
+            "value",
+            10000
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   "value",
+   [
+    "array",
+    [
+     "192.168.1.100"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "osfamily"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ]
+      ]
+     ]
+    ]
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "uptime_seconds"
+       ],
+       [
+        ">",
+        "value",
+        10000
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "certname",
+    "name"
+   ],
+   [
+    "extract",
+    [
+     "certname",
+     "name"
+    ],
+    [
+     "select_fact_contents",
+     [
+      "and",
+      [
+       "=",
+       "path",
+       [
+        "osfamily"
+       ]
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "avg",
+     "value"
+    ]
+   ],
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "uptime_seconds"
+    ],
+    [
+     "=",
+     "certname",
+     "foo"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "fact_contents",
+   [
+    "and",
+    [
+     "=",
+     "path",
+     [
+      "osfamily"
+     ]
+    ],
+    [
+     "=",
+     "value",
+     "Debian"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "name",
+    "certname"
+   ],
+   [
+    "extract",
+    [
+     "name",
+     "certname"
+    ],
+    [
+     "select_fact_contents",
+     [
+      "and",
+      [
+       "<",
+       "value",
+       10000
+      ],
+      [
+       "~>",
+       "path",
+       [
+        "up.*"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "nothing",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    [
+     "nothing",
+     "nothing2",
+     "certname"
+    ],
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   "nothing",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "name",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "=",
+      "type",
+      "Class"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "value",
+   "100"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "nothing",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "test",
+   "test",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">",
+   "test",
+   50,
+   100
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">=",
+   "test",
+   50,
+   100
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">=",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "test",
+   50,
+   100
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<=",
+   "test",
+   50,
+   100
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<=",
+   "test"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "from",
+   "fact_contents",
+   [
+    "extract",
+    [
+     "certname",
+     "value"
+    ],
+    [
+     "~>",
+     "path",
+     [
+      "virtual"
+     ]
+    ]
+   ],
+   [
+    "order_by",
+    [
+     "certname"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "*abc"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "[]"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "domain"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "value",
+   "Darwin"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "kernel"
+   ],
+   [
+    "~",
+    "value",
+    "i.u[xX]"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "name",
+   "^ho\\wt.*e$"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "value",
+   "^(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "hostname"
+   ],
+   [
+    "~",
+    "certname",
+    "^foo[12]$"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "hostname"
+   ],
+   [
+    "not",
+    [
+     "~",
+     "certname",
+     "^foo[12]$"
+    ]
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    "name",
+    "kernel"
+   ],
+   [
+    "=",
+    "name",
+    "operatingsystem"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "node",
+    "active"
+   ],
+   false
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    [
+     "node",
+     "active"
+    ],
+    true
+   ],
+   [
+    "=",
+    [
+     "node",
+     "active"
+    ],
+    false
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "node_state",
+   "any"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "name",
+    "domain"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "uptime_seconds"
+   ],
+   [
+    ">",
+    "value",
+    5000
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "uptime_seconds"
+   ],
+   [
+    ">=",
+    "value",
+    4000
+   ],
+   [
+    "<",
+    "value",
+    6000.0
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "name",
+    "domain"
+   ],
+   [
+    ">",
+    "value",
+    5000
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "not",
+    [
+     "=",
+     "name",
+     "domain"
+    ]
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "name"
+   ],
+   [
+    "not",
+    [
+     "=",
+     "name",
+     "domain"
+    ]
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo2"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "node",
+    "active"
+   ],
+   true
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "name",
+    "ipaddress"
+   ],
+   [
+    "=",
+    "name",
+    "operatingsystem"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo1"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "hostname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "environment",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "DEV"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "timestamp",
+   "2014-01-01"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "producer_timestamp",
+   "2014-01-01"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "hash"
+   ],
+   [
+    "=",
+    "certname",
+    "foo1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "producer",
+   "bar2"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "uptime_seconds"
+       ],
+       [
+        "=",
+        "value",
+        "4000"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "facts",
+     [
+      "extract",
+      "certname",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "uptime_seconds"
+       ],
+       [
+        "=",
+        "value",
+        "4000"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "facts",
+    [
+     "and",
+     [
+      "=",
+      "name",
+      "uptime_seconds"
+     ],
+     [
+      "=",
+      "value",
+      "4000"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_fact_contents",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "uptime_seconds"
+       ],
+       [
+        "=",
+        "value",
+        "4000"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "fact_contents",
+     [
+      "extract",
+      "certname",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "uptime_seconds"
+       ],
+       [
+        "=",
+        "value",
+        "4000"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "fact_contents",
+    [
+     "and",
+     [
+      "=",
+      "name",
+      "uptime_seconds"
+     ],
+     [
+      "=",
+      "value",
+      "4000"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "fact_contents",
+    [
+     "and",
+     [
+      "subquery",
+      "nodes",
+      [
+       "~",
+       "certname",
+       ".*"
+      ]
+     ],
+     [
+      "=",
+      "name",
+      "uptime_seconds"
+     ],
+     [
+      "=",
+      "value",
+      "4000"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "value",
+   3.14
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<=",
+   "value",
+   10
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">=",
+   "value",
+   10
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "<",
+   "value",
+   10
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">",
+   "value",
+   10
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "my_structured_fact"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "max",
+     "value"
+    ]
+   ],
+   [
+    "=",
+    "name",
+    "uptime_seconds"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "avg",
+     "value"
+    ]
+   ],
+   [
+    "=",
+    "name",
+    "uptime_seconds"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "value"
+   ],
+   [
+    "=",
+    "name",
+    "uptime_seconds"
+   ],
+   [
+    "group_by",
+    "value"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "max",
+     "name"
+    ],
+    "environment"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ],
+   [
+    "group_by",
+    "environment"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "value"
+   ],
+   [
+    "group_by",
+    "value"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "path",
+   [
+    "my_structured_fact",
+    "c",
+    2
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    "my_structured_fact",
+    "f"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    ".*structured.*",
+    "a"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    ".+structured.+",
+    "a"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    "my_structured_fact",
+    "[a-b]"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    "my_structured_fact"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~>",
+   "path",
+   [
+    "my_structured_fact",
+    "^a"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "~>",
+    "path",
+    [
+     "my_structured_fact",
+     ".*"
+    ]
+   ],
+   [
+    "=",
+    "certname",
+    "foo1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "~>",
+    "path",
+    [
+     "my_structured_fact",
+     ".+"
+    ]
+   ],
+   [
+    "=",
+    "certname",
+    "foo1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "~>",
+    "path",
+    [
+     "my_structured_fact",
+     ".{1,20}"
+    ]
+   ],
+   [
+    "=",
+    "certname",
+    "foo1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "~>",
+    "path",
+    [
+     "my_structured_fact",
+     "c",
+     1
+    ]
+   ],
+   [
+    "=",
+    "certname",
+    "foo2"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "=",
+   "value",
+   "a"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   ">",
+   "value",
+   3.1
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "value",
+   "testing"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "null?",
+   "value",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "~",
+   "name",
+   "#~"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   "value",
+   [
+    "=",
+    "name",
+    "domain"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "value"
+   ],
+   [
+    "=",
+    "name",
+    "domain"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "to_string",
+     "value",
+     "FM9999"
+    ]
+   ],
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "uptime_seconds"
+    ],
+    [
+     "=",
+     "certname",
+     "foo1"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "query": [
+   "from",
+   "fact_paths"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "pql": "inventory[certname] { facts.my_structured_fact.a = 1 }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "pql": "inventory[certname] { facts.my_structured_fact.b2 = 3.14 }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/facts_test.clj",
+  "path": "/pdb/query/v4/facts",
+  "method": "GET",
+  "pql": "inventory[certname] { facts.my_structured_fact.c.match(\"\\\\d+\") = 'a' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "foobar"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "order_by",
+    [
+     "certname"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "order_by",
+    [
+     [
+      "certname",
+      "desc"
+     ]
+    ]
+   ],
+   [
+    "limit",
+    2
+   ],
+   [
+    "offset",
+    1
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "order_by",
+    [
+     [
+      "certname",
+      "desc"
+     ]
+    ]
+   ],
+   [
+    "offset",
+    1
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "catalogs",
+   [
+    "in",
+    "certname",
+    [
+     "from",
+     "nodes",
+     [
+      "extract",
+      "certname"
+     ],
+     [
+      "limit",
+      1
+     ],
+     [
+      "order_by",
+      [
+       "certname"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "in",
+    [
+     "certname",
+     "name"
+    ],
+    [
+     "from",
+     "fact_contents",
+     [
+      "extract",
+      [
+       "certname",
+       "name"
+      ]
+     ],
+     [
+      "limit",
+      1
+     ],
+     [
+      "order_by",
+      [
+       "certname"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "extract",
+    "foo"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "<",
+    "certname",
+    "host1"
+   ]
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "foo"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "extract",
+    "certname",
+    [
+     "=",
+     "certname",
+     "host2"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "=",
+    [
+     "node",
+     "active"
+    ],
+    true
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "=",
+    "node_state",
+    "active"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "or",
+    [
+     "=",
+     [
+      "node",
+      "active"
+     ],
+     false
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "=",
+    "node_state",
+    "inactive"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "or",
+    [
+     "=",
+     [
+      "node",
+      "active"
+     ],
+     true
+    ],
+    [
+     "=",
+     [
+      "node",
+      "active"
+     ],
+     false
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "=",
+    "node_state",
+    "any"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "~",
+    "certname",
+    "^host"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "resources",
+   [
+    "=",
+    "type",
+    "File"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "resources",
+   [
+    "=",
+    "type",
+    "Foobar"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "=",
+    "name",
+    "kernel"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "kernel"
+    ],
+    [
+     "=",
+     "value",
+     "Linux"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "=",
+    "name",
+    "blah"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "fact_contents",
+   [
+    "=",
+    "certname",
+    "host1"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     [
+      "function",
+      "count"
+     ]
+    ],
+    [
+     "group_by",
+     "name"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes",
+   [
+    "in",
+    "certname",
+    [
+     "array",
+     [
+      "host1",
+      "host2"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "value",
+      "value"
+     ],
+     [
+      "extract",
+      [
+       "name",
+       "value"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "name",
+      "value"
+     ],
+     [
+      "extract",
+      [
+       "name",
+       "value"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "name",
+      "value"
+     ],
+     [
+      "extract",
+      [
+       "value",
+       "name"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "~",
+     "name",
+     "match"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "value"
+     ],
+     [
+      "extract",
+      [
+       "name"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "name"
+     ],
+     [
+      "extract",
+      [
+       "value"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts",
+   [
+    "extract",
+    [
+     "name",
+     "value"
+    ],
+    [
+     "in",
+     [
+      "value"
+     ],
+     [
+      "extract",
+      [
+       "value"
+      ],
+      [
+       "select_facts"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "resources",
+   [
+    "and",
+    [
+     "=",
+     "type",
+     "File"
+    ],
+    [
+     "in",
+     [
+      "title"
+     ],
+     [
+      "extract",
+      [
+       "value"
+      ],
+      [
+       "select_facts",
+       [
+        "=",
+        "name",
+        "apache_conf"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "catalogs { certname in nodes[certname] { limit 1 order by certname } }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "fact_contents { certname = 'host1' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts [name, count()] { group by name }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts { [certname,name] in fact_contents[certname,name] { limit 1 order by certname } }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts { name = 'blah' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts { name = 'kernel' and value = 'Linux' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts { name = 'kernel' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "facts[certname]{ name = \"ipaddress\" and value in [\"192.168.0.10\"] }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "foobar {}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "foo{}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes [] {}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes [certname] {certname = 'host2'}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { certname = '%s' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { certname in ['host1', 'host2'] }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { certname ~ '^host' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { certname ~ '^host\\\\d' and node_state = 'any' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { node_state = 'active' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { node_state = 'any' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes { node_state = 'inactive' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes {}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes{foo=host1}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes{}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "resources { certname = '%s' and type = 'File' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "resources { certname = '%s' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "resources { type = 'File' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/index_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "resources { type = 'Foobar' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "bar.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "facts.kernel",
+   "Linux"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   "facts.kernel",
+   [
+    "=",
+    "facts.kernel",
+    "Linux"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   "facts.my_structured_fact",
+   [
+    "=",
+    "facts.kernel",
+    "Linux"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   "facts.my_weird_fact.blah.\"dotted.thing\".\"dashed-thing\"",
+   [
+    "=",
+    "facts.kernel",
+    "Linux"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   "facts.my_weird_fact.blah.\"double\"quoted\"",
+   [
+    "=",
+    "facts.my_weird_fact.blah.\"double\"quoted\"",
+    "baz"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   "facts.my_weird_fact.blah.\"single'quoted\"",
+   [
+    "=",
+    "facts.my_weird_fact.blah.\"single'quoted\"",
+    "bar"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.kernel",
+   "Li.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "facts.array_fact.foo[1]",
+   "baz"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.array_fact.foo[0]",
+   "bi.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "facts.my_structured_fact.foo.baz",
+   3
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "<=",
+   "facts.my_structured_fact.foo.baz",
+   4
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "trusted.foo.baz",
+   "bar"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "trusted.foo.baz",
+   "ba.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "=",
+   "facts.my_weird_fact.blah.\"dotted.thing\".\"dashed-thing\".\"quoted\"thing\"",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.kernel",
+   "^Linux$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.trusted.foo.baz",
+   "^biz"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.trusted.foo.baz",
+   "biz$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.domain",
+   "^test.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.domain",
+   "com$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.double_quote",
+   "^foo\"bar$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "~",
+   "facts.backslash",
+   "^foo\\\\bar$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "facts.custom.nested.fact",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "trusted.foo.bin",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "trusted.foo.baz",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "facts.my_weird_fact.blah.\"dotted.thing\".\"dashed-thing\".\"quoted\"thing\"",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "trusted.path.doesnt.exist",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "facts.path.doesnt.exist",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "null?",
+   "facts",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "facts.domain"
+   ],
+   [
+    "group_by",
+    "facts.domain"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count",
+     "certname"
+    ]
+   ],
+   [
+    "in",
+    "facts.os.family",
+    [
+     "array",
+     [
+      "RedHat"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/inventory_test.clj",
+  "path": "/pdb/query/v4/inventory",
+  "method": "GET",
+  "pql": "inventory[]{}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "web1.example.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "facts_environment",
+   "DEV"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_corrective_change",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "null?",
+   "latest_report_corrective_change",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_job_id",
+   "1234567890"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_job_id",
+   "0987654321"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "null?",
+   "latest_report_job_id",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "web\\d+.example.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "\\w+.example.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "example.net"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "latest_report_hash"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_status",
+   "success"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_status",
+   "failure"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_status",
+   "unchanged"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "latest_report_status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_noop",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report_noop",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "cached_catalog_status",
+   "not_used"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   "cached_catalog_status",
+   null
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "operatingsystem"
+   ],
+   "Debian"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   10000
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   "10000"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   10000.0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   [
+    "array",
+    [
+     10000.0
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   [
+    "array",
+    [
+     10000,
+     50000
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "fact",
+    "fake_fact"
+   ],
+   "something"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   [
+    "fact",
+    "fake_fact"
+   ],
+   [
+    "array",
+    [
+     "something",
+     "something else",
+     "a whole other thing entirely"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    [
+     "fact",
+     "fake_fact"
+    ],
+    "something"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "<",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   12000
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "<",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   12000.0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    [
+     "fact",
+     "uptime_seconds"
+    ],
+    10000
+   ],
+   [
+    "<",
+    [
+     "fact",
+     "uptime_seconds"
+    ],
+    15000
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "<=",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   15000
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   [
+    "fact",
+    "ipaddress"
+   ],
+   "192.168.1.11\\d"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   [
+    "fact",
+    "hostname"
+   ],
+   "web\\d"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "<",
+   [
+    "fact",
+    "uptime_seconds"
+   ],
+   "12000"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_facts",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "from",
+    "facts",
+    [
+     "extract",
+     "certname",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "facts",
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "operatingsystem"
+    ],
+    [
+     "=",
+     "value",
+     "Debian"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_fact_contents",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "from",
+    "fact_contents",
+    [
+     "extract",
+     "certname",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "operatingsystem"
+      ],
+      [
+       "=",
+       "value",
+       "Debian"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "fact_contents",
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "operatingsystem"
+    ],
+    [
+     "=",
+     "value",
+     "Debian"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_facts",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "hostname"
+      ],
+      [
+       "in",
+       "value",
+       [
+        "extract",
+        "title",
+        [
+         "select_resources",
+         [
+          "and",
+          [
+           "=",
+           "type",
+           "Class"
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "from",
+    "facts",
+    [
+     "extract",
+     "certname",
+     [
+      "and",
+      [
+       "=",
+       "name",
+       "hostname"
+      ],
+      [
+       "in",
+       "value",
+       [
+        "extract",
+        "title",
+        [
+         "select_resources",
+         [
+          "and",
+          [
+           "=",
+           "type",
+           "Class"
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "facts",
+   [
+    "and",
+    [
+     "=",
+     "name",
+     "hostname"
+    ],
+    [
+     "in",
+     "value",
+     [
+      "extract",
+      "title",
+      [
+       "select_resources",
+       [
+        "and",
+        [
+         "=",
+         "type",
+         "Class"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "and",
+      [
+       "=",
+       "file",
+       "/etc/puppet/modules/settings/manifests/init.pp"
+      ],
+      [
+       "=",
+       "line",
+       1
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "from",
+    "resources",
+    [
+     "extract",
+     "certname",
+     [
+      "and",
+      [
+       "=",
+       "file",
+       "/etc/puppet/modules/settings/manifests/init.pp"
+      ],
+      [
+       "=",
+       "line",
+       1
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "resources",
+   [
+    "and",
+    [
+     "=",
+     "file",
+     "/etc/puppet/modules/settings/manifests/init.pp"
+    ],
+    [
+     "=",
+     "line",
+     1
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "extract",
+    "certname",
+    [
+     "select_resources",
+     [
+      "and",
+      [
+       "=",
+       "sourcefile",
+       "/etc/puppet/modules/settings/manifests/init.pp"
+      ],
+      [
+       "=",
+       "sourceline",
+       1
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "in",
+   "certname",
+   [
+    "from",
+    "reports",
+    [
+     "extract",
+     "certname"
+    ],
+    [
+     "order_by",
+     [
+      "certname"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count",
+     "certname"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "group_by",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "<",
+   "catalog_timestamp",
+   "'2018-08-15 21:11:21 UTC'"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   "nothing",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "*abc"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "[]"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/nodes_test.clj",
+  "path": "/pdb/query/v4/nodes",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "=",
+    "certname",
+    "puppet.example.com"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "node1"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "package_name",
+    "bar"
+   ],
+   [
+    "=",
+    "version",
+    "2.3.4"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "package_name",
+    "version",
+    "provider"
+   ],
+   [
+    "and",
+    [
+     "~",
+     "package_name",
+     "ba?"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "package_name",
+    "version",
+    [
+     "function",
+     "count",
+     "certname"
+    ]
+   ],
+   [
+    "~",
+    "package_name",
+    "ba?"
+   ],
+   [
+    "group_by",
+    "package_name",
+    "version"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "package_name",
+    "version",
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "in",
+    "package_name",
+    [
+     "from",
+     "packages",
+     [
+      "extract",
+      [
+       "package_name"
+      ]
+     ],
+     [
+      "order_by",
+      [
+       "package_name"
+      ]
+     ],
+     [
+      "limit",
+      100
+     ]
+    ]
+   ],
+   [
+    "group_by",
+    "package_name",
+    "version",
+    "provider"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "package_name",
+    "version",
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "in",
+    "package_name",
+    [
+     "from",
+     "packages",
+     [
+      "extract",
+      [
+       "package_name"
+      ],
+      [
+       "~",
+       "package_name",
+       "ba?"
+      ]
+     ],
+     [
+      "order_by",
+      [
+       "package_name"
+      ]
+     ],
+     [
+      "limit",
+      100
+     ]
+    ]
+   ],
+   [
+    "group_by",
+    "package_name",
+    "version",
+    "provider"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "version"
+   ],
+   [
+    "and",
+    [
+     "=",
+     "package_name",
+     "foo"
+    ],
+    [
+     "subquery",
+     "fact_contents",
+     [
+      "and",
+      [
+       "~>",
+       "path",
+       [
+        "os",
+        "name"
+       ]
+      ],
+      [
+       "=",
+       "value",
+       "Ubuntu"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "from",
+   "packages",
+   [
+    "extract",
+    [
+     [
+      "function",
+      "count"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "query": [
+   "from",
+   "packages",
+   [
+    "extract",
+    [
+     [
+      "function",
+      "count"
+     ]
+    ],
+    [
+     "~",
+     "package_name",
+     "ba?"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/packages_test.clj",
+  "path": "/pdb/query/v4/packages",
+  "method": "GET",
+  "pql": "package_inventory { certname = 'node1' }"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "=",
+   "name",
+   "foo.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "~",
+   "name",
+   "f.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "name",
+    "foo.com"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "extract",
+    "producer",
+    [
+     "select_reports",
+     [
+      "and",
+      [
+       "=",
+       "certname",
+       "web1.example.com"
+      ],
+      [
+       "=",
+       "environment",
+       "DEV"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "in",
+   "name",
+   [
+    "from",
+    "reports",
+    [
+     "extract",
+     "producer",
+     [
+      "and",
+      [
+       "=",
+       "certname",
+       "web1.example.com"
+      ],
+      [
+       "=",
+       "environment",
+       "DEV"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "subquery",
+   "reports",
+   [
+    "and",
+    [
+     "=",
+     "certname",
+     "web1.example.com"
+    ],
+    [
+     "=",
+     "environment",
+     "DEV"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "in",
+    "name",
+    [
+     "extract",
+     "producer",
+     [
+      "select_factsets",
+      [
+       "and",
+       [
+        "=",
+        "certname",
+        "web1.example.com"
+       ],
+       [
+        "=",
+        "environment",
+        "DEV"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "in",
+    "name",
+    [
+     "from",
+     "factsets",
+     [
+      "extract",
+      "producer",
+      [
+       "and",
+       [
+        "=",
+        "certname",
+        "web1.example.com"
+       ],
+       [
+        "=",
+        "environment",
+        "DEV"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "subquery",
+    "factsets",
+    [
+     "and",
+     [
+      "=",
+      "certname",
+      "web1.example.com"
+     ],
+     [
+      "=",
+      "environment",
+      "DEV"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "<=",
+   "name",
+   "foo.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   ">=",
+   "name",
+   "foo.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   "<",
+   "name",
+   "foo.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/producers_test.clj",
+  "path": "/pdb/query/v4/producers",
+  "method": "GET",
+  "query": [
+   ">",
+   "name",
+   "foo.com"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_logging_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "nodes"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_logging_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "facts"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_logging_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "catalogs"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_logging_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "pql": "nodes {}"
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "=",
+   "bar",
+   7
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "=",
+   "foo",
+   42
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "bar",
+    7
+   ],
+   [
+    "=",
+    "foo",
+    42
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "foo",
+    "bar"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "foo",
+    "bar"
+   ],
+   [
+    "=",
+    "foo",
+    42
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "foo",
+    "bar"
+   ],
+   null
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "foo",
+    "bar"
+   ],
+   [
+    "=",
+    "bar",
+    7
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "foo",
+    "bar"
+   ],
+   [
+    "and",
+    [
+     "=",
+     "bar",
+     7
+    ],
+    [
+     "=",
+     "foo",
+     42
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "thing",
+   [
+    "extract",
+    [
+     "foo",
+     "bar"
+    ],
+    [
+     "=",
+     "bar",
+     7
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "thing",
+   [
+    "extract",
+    [
+     "foo",
+     "bar"
+    ],
+    [
+     "and",
+     [
+      "=",
+      "bar",
+      7
+     ],
+     [
+      "=",
+      "foo",
+      42
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "thing"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/query_test.clj",
+  "path": "/pdb/query/v4",
+  "method": "GET",
+  "query": [
+   "from",
+   "thing",
+   [
+    "=",
+    "foo",
+    42
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "group_by",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "status"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count",
+     "certname"
+    ],
+    [
+     "function",
+     "min",
+     "producer_timestamp"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "to_string",
+     "producer_timestamp",
+     "FMDAY"
+    ],
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "group_by",
+    [
+     "function",
+     "to_string",
+     "producer_timestamp",
+     "FMDAY"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    [
+     "function",
+     "to_string",
+     "producer_timestamp",
+     "FMDAY"
+    ],
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "group_by",
+    "certname",
+    [
+     "function",
+     "to_string",
+     "producer_timestamp",
+     "FMDAY"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "status"
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "sum",
+     "report_format"
+    ],
+    "status"
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "sum",
+     "report_format"
+    ],
+    "status"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "status",
+    "certname"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "array",
+     [
+      "bar.local",
+      "foo.local"
+     ]
+    ]
+   ],
+   [
+    "group_by",
+    "status",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "hash"
+   ],
+   [
+    "in",
+    "hash",
+    [
+     "array",
+     [
+      "5bc5d561c7912570a7c7f525b815477cdaed70a2",
+      "5067c5ac56f39501e504c0b76186d31ec1b5ca94"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "status",
+    "certname"
+   ],
+   [
+    "or",
+    [
+     "in",
+     "status",
+     [
+      "array",
+      [
+       "unchanged"
+      ]
+     ]
+    ],
+    [
+     "in",
+     "certname",
+     [
+      "array",
+      [
+       "baz.local"
+      ]
+     ]
+    ]
+   ],
+   [
+    "group_by",
+    "status",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "status",
+    "certname"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ],
+   [
+    "group_by",
+    "status",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ]
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [],
+   [
+    "=",
+    "type",
+    "any"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [],
+   [
+    "and",
+    [
+     "=",
+     "type",
+     "any"
+    ],
+    [
+     "=",
+     "node_state",
+     "any"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [],
+   [
+    "or",
+    [
+     "=",
+     "type",
+     "any"
+    ],
+    [
+     "=",
+     "node_state",
+     "any"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [],
+   [
+    "not",
+    [
+     "=",
+     "type",
+     "any"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "to_string",
+     "producer_timestamp",
+     "month"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "certname",
+   "foo.local"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "<",
+   "environment",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "timestamp",
+   0
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "null?",
+    "type",
+    false
+   ],
+   [
+    "groupy_by",
+    "certname"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "certname"
+   ],
+   [
+    "null?",
+    "type",
+    false
+   ],
+   [
+    "some_invalid_string"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "hash",
+    "certname",
+    "transaction_uuid"
+   ],
+   [
+    "=",
+    "certname",
+    "foo.com"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "transaction_uuid",
+   [
+    "=",
+    "certname",
+    "foo.com"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "status"
+   ],
+   [
+    "=",
+    "certname",
+    "foo.com"
+   ],
+   [
+    "group_by",
+    "status"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "status",
+   "unchanged"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "status",
+   "changed"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "status",
+   "failed"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "puppet_version",
+   "3.0.1"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "puppet_version",
+   "3.6.0"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "~",
+   "puppet_version",
+   "3\\.0\\..*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "report_format",
+   4
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    "report_format",
+    4
+   ],
+   [
+    "<",
+    "report_format",
+    6
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    "report_format",
+    4
+   ],
+   [
+    "<=",
+    "report_format",
+    6
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "configuration_version",
+   "a81jasj123"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "~",
+   "configuration_version",
+   ".*23"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "corrective_change",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "start_time",
+   "2011-01-01T12:00:00-03:00"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    "start_time",
+    "2010-01-01T12:00:00-03:00"
+   ],
+   [
+    "<",
+    "end_time",
+    "2012-01-01T12:00:00-03:00"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    "start_time",
+    "2010-01-01T12:00:00-03:00"
+   ],
+   [
+    "<",
+    "end_time",
+    "2014-01-01T12:00:00-03:00"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "end_time",
+   "2013-08-28T19:10:00-03:00"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "transaction_uuid",
+   "68b08e2a-eeb1-4322-b241-bfdf151d294b"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "~",
+   "transaction_uuid",
+   "b$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "=",
+   "latest_report?",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "latest_report?",
+    true
+   ],
+   [
+    "=",
+    "noop",
+    false
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "latest_report?",
+    true
+   ],
+   [
+    "=",
+    "noop",
+    true
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "hash",
+    [
+     "extract",
+     "report",
+     [
+      "select_events",
+      [
+       "=",
+       "file",
+       "bar"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "in",
+    "hash",
+    [
+     "from",
+     "events",
+     [
+      "extract",
+      "report",
+      [
+       "=",
+       "file",
+       "bar"
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "events",
+    [
+     "=",
+     "file",
+     "bar"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "nothing",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "*abc"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "~",
+   "certname",
+   "[]"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/reports_test.clj",
+  "path": "/pdb/query/v4/reports",
+  "method": "GET",
+  "query": [
+   "extract",
+   "certname",
+   [
+    "subquery",
+    "reports",
+    [
+     "order_by",
+     "certname"
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "type",
+   "File"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "tag",
+   "one"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "tag",
+   "two"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "tag",
+   "\u00e6\u00f8\u00e5\u06ff\u16a0\ud841\udf0e\u0664"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "tag",
+   "tw"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "certname",
+    "one.local"
+   ],
+   [
+    "=",
+    "type",
+    "File"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "~",
+    "certname",
+    "one.lo.*"
+   ],
+   [
+    "=",
+    "type",
+    "File"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "parameter",
+    "ensure"
+   ],
+   "file"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "parameter",
+    "owner"
+   ],
+   "root"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   [
+    "parameter",
+    "acl"
+   ],
+   [
+    "john:rwx",
+    "fred:rwx"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   [
+    "parameter",
+    "owner"
+   ],
+   "ro.t"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "~",
+    [
+     "parameter",
+     "owner"
+    ],
+    "ro.t"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.ensure",
+   "file"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.owner",
+   "root"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.nested.foo",
+   "bar"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.boolean",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.numeric",
+   1337
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.double",
+   3.14
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "parameters.acl",
+   [
+    "john:rwx",
+    "fred:rwx"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.owner",
+   "oot"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.owner",
+   "^root"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.owner",
+   "oot$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.nested.foo",
+   "ar"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.nested.foo",
+   "^bar$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.double_quote",
+   "^foo\"bar$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "parameters.backslash",
+   "^foo\\\\bar$"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "null?",
+   "parameters.path.doesnt.exist",
+   true
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "null?",
+   "parameters.path.doesnt.exist",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "null?",
+   "parameters.ensure",
+   false
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    "=",
+    "type",
+    "File"
+   ],
+   [
+    "in",
+    "certname",
+    [
+     "extract",
+     "certname",
+     [
+      "select_facts",
+      [
+       "and",
+       [
+        "=",
+        "name",
+        "operatingsystem"
+       ],
+       [
+        "=",
+        "value",
+        "Debian"
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "in",
+   "title",
+   [
+    "extract",
+    "value",
+    [
+     "select_facts",
+     [
+      "=",
+      "name",
+      "message"
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "or",
+   [
+    "=",
+    "exported",
+    true
+   ],
+   [
+    "and",
+    [
+     "=",
+     "exported",
+     false
+    ],
+    [
+     "in",
+     "title",
+     [
+      "extract",
+      "title",
+      [
+       "select_resources",
+       [
+        "=",
+        "exported",
+        true
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "="
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "sourceline",
+   22
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "sourcefile",
+   "foo"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "sourcefile",
+   "/foo/bar"
+  ],
+  "expects_error": true
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "file",
+   "/foo/bar"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "file",
+   "foo"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "line",
+   22
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "and",
+   [
+    ">",
+    "line",
+    21
+   ],
+   [
+    "<",
+    "line",
+    23
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "DEV"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   ".*V"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "~",
+    "environment",
+    "PR.*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "environment",
+    "PROD"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "environment",
+   "PROD"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "~",
+   "environment",
+   "PR.*"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "environment",
+    "DEV"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "not",
+   [
+    "=",
+    "environment",
+    "null"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "extract",
+   "type",
+   [
+    "=",
+    "environment",
+    "DEV"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    [
+     "function",
+     "count"
+    ],
+    "type"
+   ],
+   [
+    "=",
+    "environment",
+    "DEV"
+   ],
+   [
+    "group_by",
+    "type"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "parameters.ensure"
+   ],
+   [
+    "=",
+    "type",
+    "File"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "=",
+   "type",
+   "Notify"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "<",
+   "line",
+   "22"
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "extract",
+   "nothing",
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ },
+ {
+  "source": "test/puppetlabs/puppetdb/http/resources_test.clj",
+  "path": "/pdb/query/v4/resources",
+  "method": "GET",
+  "query": [
+   "extract",
+   [
+    "certname",
+    "nothing",
+    "nothing2"
+   ],
+   [
+    "~",
+    "certname",
+    ".*"
+   ]
+  ],
+  "expects_error": false
+ }
+]

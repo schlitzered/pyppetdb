@@ -13,3 +13,5 @@ dist
 requests*
 ssl
 uniq_hosts.json
+tests/conformance/coverage.json
+.claude/worktrees/

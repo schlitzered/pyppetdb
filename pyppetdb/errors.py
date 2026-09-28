@@ -105,3 +105,12 @@ class MissingSecretReference(Exception):
     def __init__(self, secret_id: str):
         self.secret_id = secret_id
         super().__init__(f"unknown secret reference: {secret_id}")
+
+
+class IngestOverloaded(HTTPException):
+    def __init__(self, retry_after: int = 60):
+        super(IngestOverloaded, self).__init__(
+            status_code=503,
+            detail="write queue is full, command rejected",
+            headers={"Retry-After": str(retry_after)},
+        )

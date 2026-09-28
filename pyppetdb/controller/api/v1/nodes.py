@@ -24,6 +24,7 @@ from pyppetdb.authorize import PERM_NODES_CREATE
 from pyppetdb.authorize import PERM_NODES_UPDATE
 from pyppetdb.authorize import PERM_NODES_DELETE
 from pyppetdb.authorize import PERM_NODES_CATALOG_CACHE_DELETE
+from pyppetdb.errors import ResourceNotFound
 
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
@@ -205,12 +206,18 @@ class ControllerApiV1Nodes:
     async def delete(self, request: Request, node_id: str):
         await self.authorize.require_perm(request=request, permission=PERM_NODES_DELETE)
 
-        await self.ca_service.update_certificate_status(
-            space_id="puppet-ca",
-            cn=node_id,
-            payload=CACertificatePut(status="revoked"),
-            fields=[],
-        )
+        try:
+            await self.ca_service.update_certificate_status(
+                space_id="puppet-ca",
+                cn=node_id,
+                payload=CACertificatePut(status="revoked"),
+                fields=[],
+            )
+        except ResourceNotFound:
+            self.log.info(
+                f"No certificate to revoke for {node_id}, "
+                f"continuing node deletion"
+            )
 
         await self.crud_nodes_groups.delete_node_from_nodes_groups(node_id=node_id)
         placement = await self.crud_nodes.get_placement(_id=node_id)
@@ -222,6 +229,10 @@ class ControllerApiV1Nodes:
             node_id=node_id,
             placement=placement,
         )
+        node_db = self.crud_nodes.coll.database
+        await node_db["nodes_resources"].delete_many({"node_id": node_id})
+        await node_db["nodes_edges"].delete_many({"node_id": node_id})
+        await node_db["nodes_events"].delete_many({"node_id": node_id})
         await self.crud_jobs.remove_node_from_jobs(node_id=node_id)
         await self.crud_node_jobs.delete_by_node(node_id=node_id)
 
@@ -373,9 +384,22 @@ class ControllerApiV1Nodes:
         await self.authorize.require_perm(request=request, permission=PERM_NODES_UPDATE)
         data = NodePutInternal(**data.model_dump())
 
-        return await self.crud_nodes.update(
+        result = await self.crud_nodes.update(
             _id=node_id, payload=data, fields=list(fields)
         )
+        if data.disabled is not None:
+            disabled = bool(data.disabled)
+            await self.crud_nodes_reports.set_node_disabled(
+                node_id=node_id,
+                disabled=disabled,
+            )
+            node_db = self.crud_nodes.coll.database
+            for name in ("nodes_resources", "nodes_edges", "nodes_events"):
+                await node_db[name].update_many(
+                    {"node_id": node_id, "disabled": {"$ne": disabled}},
+                    {"$set": {"disabled": disabled}},
+                )
+        return result
 
     async def catalog_cache_wipe(
         self,

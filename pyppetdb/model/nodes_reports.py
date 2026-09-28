@@ -29,7 +29,6 @@ filter_literal = Literal[
     "id",
     "node_id",
     "report",
-    "placement",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -41,7 +40,6 @@ class NodeReportGet(BaseModel):
     id: Optional[datetime] = None
     node_id: Optional[StrictStr] = None
     report: Optional[NodeGetReport] = None
-    placement: Optional[Dict[str, str]] = None
 
 
 class NodeReportGetMulti(BaseModel):

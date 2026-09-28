@@ -23,6 +23,8 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
+from pyppetdb.helpers.puppetdb import CATALOG_CONTENT_FIELDS
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 
 from pyppetdb.model.common import sort_order_literal
@@ -57,16 +59,21 @@ class NodesCatalogsRedactor:
         return data
 
 
+CONTENT_FIELD = "catalog_content"
+
+
 class CrudNodesCatalogs(CrudMongo):
     def __init__(
         self,
         config: Config,
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
-        secret_manager: NodesCatalogsRedactor,
+        redactor: NodesCatalogsRedactor,
+        protector: NodesDataProtector,
     ):
         super(CrudNodesCatalogs, self).__init__(config=config, log=log, coll=coll)
-        self._secret_manager = secret_manager
+        self._redactor = redactor
+        self._protector = protector
         self._indices.extend(
             [
                 pymongo.IndexModel(
@@ -99,6 +106,14 @@ class CrudNodesCatalogs(CrudMongo):
             index_name="ttl_catalog_history",
         )
 
+    def encode_content(self, catalog: dict) -> bytes:
+        content = {
+            key: value
+            for key, value in catalog.items()
+            if key in CATALOG_CONTENT_FIELDS
+        }
+        return self._protector.encrypt_obj(content)
+
     async def create(
         self,
         _id: datetime,
@@ -106,17 +121,31 @@ class CrudNodesCatalogs(CrudMongo):
         payload: NodeCatalogPostInternal,
         fields: list,
         return_none: bool = False,
+        content: Optional[bytes] = None,
     ) -> NodeCatalogGet | None:
         data = payload.model_dump()
-        data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
+        if content is not None:
+            data[CONTENT_FIELD] = content
 
         if return_none:
             await self._create_base(payload=data)
             return None
         result = await self._create(fields=fields, payload=data)
-        return NodeCatalogGet(**result)
+        return NodeCatalogGet(**self._inflate(result))
+
+    def _inflate(self, document: dict) -> dict:
+        blob = document.pop(CONTENT_FIELD, None)
+        if blob is not None and isinstance(document.get("catalog"), dict):
+            document["catalog"].update(self._protector.decrypt_obj(blob))
+        return self._redactor.redact(document)
+
+    @staticmethod
+    def _fields_with_content(fields: Optional[list]) -> Optional[list]:
+        if fields and "catalog" in fields and CONTENT_FIELD not in fields:
+            return list(fields) + [CONTENT_FIELD]
+        return fields
 
     async def delete_all_from_node(
         self,
@@ -160,9 +189,9 @@ class CrudNodesCatalogs(CrudMongo):
             query["placement"] = placement
         result = await self._get(
             query=query,
-            fields=fields,
+            fields=self._fields_with_content(fields),
         )
-        return NodeCatalogGet(**result)
+        return NodeCatalogGet(**self._inflate(result))
 
     async def resource_exists(
         self,
@@ -200,12 +229,13 @@ class CrudNodesCatalogs(CrudMongo):
 
         result = await self._search(
             query=query,
-            fields=fields,
+            fields=self._fields_with_content(fields),
             sort=sort,
             sort_order=sort_order,
             page=page,
             limit=limit,
         )
+        result["result"] = [self._inflate(item) for item in result["result"]]
         return NodeCatalogGetMulti(**result)
 
     async def update_placement(

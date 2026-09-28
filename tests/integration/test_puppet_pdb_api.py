@@ -87,25 +87,67 @@ class PuppetPdbApiIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), {"status": "received"})
 
-    @patch("httpx.AsyncClient.get")
-    def test_pdb_query_v4_resources_forwarding(self, mock_get):
+    @patch("httpx.AsyncClient.request")
+    def test_pdb_query_v4_resources_forwarding(self, mock_request):
         from pyppetdb.main import settings
 
         settings.app.puppetdb.resourceQueryInternal = False
+        self.addCleanup(
+            setattr, settings.app.puppetdb, "resourceQueryInternal", True
+        )
 
         mock_response_data = [{"certname": "node1"}]
-        mock_response = httpx.Response(
+        mock_request.return_value = httpx.Response(
             200,
             content=json.dumps(mock_response_data).encode(),
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "X-Records": "1"},
         )
-        mock_get.return_value = mock_response
 
         resp = self.client.get('/pdb/query/v4/resources?query=["=", "type", "Class"]')
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), [{"certname": "node1"}])
-        mock_get.assert_called_once()
+        self.assertEqual(resp.headers["X-Records"], "1")
+        mock_request.assert_called_once()
+        self.assertEqual(
+            mock_request.call_args.kwargs["url"],
+            "http://puppetdb/pdb/query/v4/resources",
+        )
+
+    @patch("httpx.AsyncClient.request")
+    def test_pdb_query_source_upstream_forwards_every_entity(self, mock_request):
+        from pyppetdb.main import settings
+
+        settings.app.puppetdb.querySource = "upstream"
+        self.addCleanup(setattr, settings.app.puppetdb, "querySource", "internal")
+
+        mock_request.return_value = httpx.Response(
+            200,
+            content=b'[{"certname": "remote"}]',
+            headers={"Content-Type": "application/json"},
+        )
+
+        resp = self.client.get("/pdb/query/v4/nodes")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), [{"certname": "remote"}])
+        self.assertEqual(
+            mock_request.call_args.kwargs["url"], "http://puppetdb/pdb/query/v4/nodes"
+        )
+
+    @patch("httpx.AsyncClient.request")
+    def test_pdb_query_source_internal_does_not_forward(self, mock_request):
+        from pyppetdb.main import settings
+
+        settings.app.puppetdb.querySource = "internal"
+
+        resp = self.client.get("/pdb/query/v4/nodes?query=" + json.dumps(
+            ["=", "certname", "definitely-not-there"]
+        ))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), [])
+        mock_request.assert_not_called()
 
     def test_pdb_query_v4_resources_local(self):
         from pyppetdb.main import settings

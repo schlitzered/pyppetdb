@@ -44,6 +44,9 @@ from pyppetdb.crud.nodes_catalog_cache import CrudNodesCatalogCache
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 from pyppetdb.crud.nodes_groups import CrudNodesGroups
 from pyppetdb.crud.nodes_reports import CrudNodesReports
+from pyppetdb.crud.nodes_resources import CrudNodesResources
+from pyppetdb.crud.nodes_edges import CrudNodesEdges
+from pyppetdb.crud.nodes_events import CrudNodesEvents
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
 from pyppetdb.crud.nodes_secrets_redactor import CrudNodesSecretsRedactor
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
@@ -79,6 +82,9 @@ class Controller:
         crud_nodes_catalogs: CrudNodesCatalogs,
         crud_nodes_groups: CrudNodesGroups,
         crud_nodes_reports: CrudNodesReports,
+        crud_nodes_resources: CrudNodesResources,
+        crud_nodes_edges: CrudNodesEdges,
+        crud_nodes_events: CrudNodesEvents,
         crud_nodes_secrets_redactor: CrudNodesSecretsRedactor,
         crud_pyppetdb_nodes: CrudPyppetDBNodes,
         crud_oauth: dict[str, CrudOAuth],
@@ -95,6 +101,7 @@ class Controller:
         redactor: NodesSecretsRedactor,
         pyhiera,
         ws_hub,
+        ingest_queue,
     ):
         self._log = log
         self._router_main = APIRouter()
@@ -143,7 +150,7 @@ class Controller:
             http=http,
         ).router
 
-        router_pdb = ControllerPdb(
+        controller_pdb = ControllerPdb(
             log=log,
             config=config,
             crud_nodes=crud_nodes,
@@ -151,8 +158,13 @@ class Controller:
             crud_nodes_catalogs=crud_nodes_catalogs,
             crud_nodes_groups=crud_nodes_groups,
             crud_nodes_reports=crud_nodes_reports,
+            crud_nodes_resources=crud_nodes_resources,
+            crud_nodes_edges=crud_nodes_edges,
+            crud_nodes_events=crud_nodes_events,
             authorize_client_cert=authorize_client_cert_pdb,
-        ).router
+            ingest_queue=ingest_queue,
+        )
+        router_pdb = controller_pdb.router
 
         router_puppet = ControllerPuppet(
             log=log,
@@ -188,6 +200,10 @@ class Controller:
         self.router_puppetdb.include_router(
             router_pdb,
             prefix="/pdb",
+            responses={404: {"description": "Not found"}},
+        )
+        self.router_puppetdb.include_router(
+            controller_pdb.router_status,
             responses={404: {"description": "Not found"}},
         )
         self.router_puppet.include_router(

@@ -64,6 +64,54 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
                 fields=["id"],
             )
 
+    async def test_sync_index_replaces_every_conflicting_index(self):
+        index = pymongo.IndexModel([("a", 1), ("b", 1)], name="idx_a")
+        conflict = pymongo.errors.OperationFailure("conflict", code=86)
+        self.mock_coll.create_indexes = AsyncMock(side_effect=[conflict, None])
+        self.mock_coll.drop_index = AsyncMock()
+        self.mock_coll.list_indexes = MagicMock(
+            return_value=MagicMock(
+                to_list=AsyncMock(
+                    return_value=[
+                        {"name": "_id_", "key": {"_id": 1}},
+                        {"name": "idx_a", "key": {"a": 1}},
+                        {"name": "idx_other", "key": {"a": 1, "b": 1}},
+                    ]
+                )
+            )
+        )
+        await self.crud._sync_index(index)
+        dropped = [call.args[0] for call in self.mock_coll.drop_index.call_args_list]
+        self.assertEqual(dropped, ["idx_a", "idx_other"])
+        self.assertEqual(self.mock_coll.create_indexes.call_count, 2)
+
+    async def test_sync_index_compares_key_order(self):
+        index = pymongo.IndexModel([("a", 1), ("b", 1)], name="idx_a")
+        conflict = pymongo.errors.OperationFailure("conflict", code=86)
+        self.mock_coll.create_indexes = AsyncMock(side_effect=[conflict, None])
+        self.mock_coll.drop_index = AsyncMock()
+        self.mock_coll.list_indexes = MagicMock(
+            return_value=MagicMock(
+                to_list=AsyncMock(
+                    return_value=[
+                        {"name": "idx_a", "key": {"b": 1, "a": 1}},
+                        {"name": "idx_reversed", "key": {"b": 1, "a": 1}},
+                    ]
+                )
+            )
+        )
+        await self.crud._sync_index(index)
+        dropped = [call.args[0] for call in self.mock_coll.drop_index.call_args_list]
+        self.assertEqual(dropped, ["idx_a"])
+
+    async def test_sync_index_raises_other_failures(self):
+        index = pymongo.IndexModel([("a", 1)], name="idx_a")
+        self.mock_coll.create_indexes = AsyncMock(
+            side_effect=pymongo.errors.OperationFailure("nope", code=13)
+        )
+        with self.assertRaises(pymongo.errors.OperationFailure):
+            await self.crud._sync_index(index)
+
     async def test_delete_success(self):
         self.mock_coll.delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
         result = await self.crud._delete({"id": "r1"})
