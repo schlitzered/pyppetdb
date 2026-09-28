@@ -534,6 +534,18 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_reports.create_latest.assert_called_once()
         self.mock_catalogs.drop_created_no_report_ttl.assert_called_once()
 
+    async def test_store_report_that_is_not_latest_leaves_the_node_report_state(self):
+        self.mock_nodes.update = AsyncMock()
+        self.mock_reports.create_latest = AsyncMock(return_value=(False, STORED_REPORT))
+        self.mock_catalogs.drop_created_no_report_ttl = AsyncMock()
+
+        await self._post_report()
+
+        payload = self.mock_nodes.update.call_args.kwargs["payload"]
+        self.assertIsNone(payload.report)
+        self.assertIsNone(payload.change_report)
+        self.assertIsNotNone(payload.change_last)
+
     async def test_store_report_skips_an_already_stored_hash(self):
         self.mock_nodes.update = AsyncMock()
         self.mock_reports.hash_exists = AsyncMock(return_value=True)

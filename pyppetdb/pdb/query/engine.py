@@ -491,7 +491,11 @@ class QueryEngine:
         if not early_paging:
             pipeline.extend(_paging_stages(query, sorted_early=bool(early_sort)))
         if not query.functions:
-            pipeline.extend(_null_fill_stages(selected - filter_only))
+            pipeline.extend(
+                _null_fill_stages(
+                    set(query.columns) if query.columns else selected - filter_only
+                )
+            )
         if filter_only:
             pipeline.append({"$unset": sorted(filter_only)})
         if explain:

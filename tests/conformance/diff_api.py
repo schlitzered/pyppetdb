@@ -82,7 +82,7 @@ ORDER_KEYS = {
         "target_title",
         "relationship",
     ],
-    "reports": ["certname", "transaction_uuid"],
+    "reports": ["certname", "transaction_uuid", "configuration_version"],
     "events": [
         "certname",
         "timestamp",
@@ -90,6 +90,7 @@ ORDER_KEYS = {
         "resource_title",
         "property",
         "name",
+        "configuration_version",
     ],
 }
 LIST_SUBROUTES = {"facts", "resources"}

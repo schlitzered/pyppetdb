@@ -661,6 +661,16 @@ class TestExtraColumns(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("expires_facts", stage(nodes.pipelines[0], "$project"))
 
 
+class TestExtractNullFill(unittest.IsolatedAsyncioTestCase):
+    async def test_only_requested_columns_are_null_filled(self):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run(
+            "nodes", ["extract", ["certname"], ["=", "certname", "a"]], restrict_active=True
+        )
+        self.assertEqual(stage(nodes.pipelines[0], "$set"), {"certname": {"$ifNull": ["$certname", None]}})
+
+
 class TestGroup(unittest.IsolatedAsyncioTestCase):
     async def test_group_appends_the_stages_behind_the_match(self):
         events = FakeCollection(docs=[{"subject": {"title": "a"}}])

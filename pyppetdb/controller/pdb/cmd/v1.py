@@ -92,6 +92,19 @@ OLD_FORMAT_MSG = "Command was submitted without query parameters (old format)."
 BODY_NOT_A_MAP_MSG = "The request body must be a JSON map."
 
 
+REPORT_STATE_FIELDS = (
+    "report",
+    "change_report",
+    "environment",
+    "producer",
+    "producer_timestamp",
+)
+
+
+def _without_report_state(base: dict) -> dict:
+    return {key: value for key, value in base.items() if key not in REPORT_STATE_FIELDS}
+
+
 def _decode_command_body(body: bytes, is_gzip: bool) -> tuple:
     raw = gzip.decompress(body) if is_gzip else body
     return raw, json.loads(raw)
@@ -760,7 +773,6 @@ class ControllerPdbCmdV1:
         ):
             self.log.info(f"report {report_hash} for {node_id} is already stored")
             return
-        await self._job_update_node(node_id=node_id, base=base)
         placement = await self.crud_nodes.get_placement(_id=node_id)
         latest, stored = await self.crud_nodes_reports.create_latest(
             _id=received,
@@ -768,6 +780,10 @@ class ControllerPdbCmdV1:
             payload=NodeReportPostInternal(
                 **{"placement": placement, "report": base["report"]},
             ),
+        )
+        await self._job_update_node(
+            node_id=node_id,
+            base=base if latest else _without_report_state(base),
         )
         if latest:
             await self.crud_nodes_events.set_latest(node_id=node_id, latest=False)

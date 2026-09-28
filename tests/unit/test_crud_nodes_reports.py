@@ -214,6 +214,37 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
             self.mock_coll.insert_one.call_args.kwargs["session"], session
         )
 
+    async def test_create_latest_keeps_the_stored_report_on_equal_timestamps(self):
+        now = datetime.now(UTC)
+        self._report_coll(stored={"report": {"end_time": now, "producer_timestamp": now}})
+        session = FakeSession()
+        self.mock_coll.database.client.start_session = AsyncMock(return_value=session)
+        latest, _stored = await self.crud.create_latest(
+            _id=now,
+            node_id="node1",
+            payload=NodeReportPostInternal(
+                report={"status": "changed", "end_time": now, "producer_timestamp": now}
+            ),
+        )
+        self.assertFalse(latest)
+        self.mock_coll.update_many.assert_not_called()
+
+    async def test_create_latest_prefers_the_producer_timestamp(self):
+        now = datetime.now(UTC)
+        self._report_coll(
+            stored={"report": {"end_time": now, "producer_timestamp": now - timedelta(hours=1)}}
+        )
+        session = FakeSession()
+        self.mock_coll.database.client.start_session = AsyncMock(return_value=session)
+        latest, _stored = await self.crud.create_latest(
+            _id=now,
+            node_id="node1",
+            payload=NodeReportPostInternal(
+                report={"status": "changed", "end_time": now - timedelta(days=1), "producer_timestamp": now}
+            ),
+        )
+        self.assertTrue(latest)
+
     async def test_create_latest_keeps_a_newer_stored_report_as_latest(self):
         now = datetime.now(UTC)
         self._report_coll(

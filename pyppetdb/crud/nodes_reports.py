@@ -41,14 +41,22 @@ LATEST_TRANSACTION_ATTEMPTS = 3
 
 
 def report_end_time(report) -> Optional[datetime]:
+    return report_timestamp(report, "end_time")
+
+
+def report_timestamp(report, field: str) -> Optional[datetime]:
     if not isinstance(report, dict):
         return None
-    value = report.get("end_time")
+    value = report.get(field)
     if not isinstance(value, datetime):
         return None
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def report_order_time(report) -> Optional[datetime]:
+    return report_timestamp(report, "producer_timestamp") or report_end_time(report)
 
 
 class NodesReportsRedactor:
@@ -381,15 +389,13 @@ class CrudNodesReports(CrudMongo):
     ) -> bool:
         stored = await self.coll.find_one(
             filter={"node_id": node_id, "report.latest": True},
-            projection={"report.end_time": 1},
+            projection={"report.end_time": 1, "report.producer_timestamp": 1},
             sort=[("report.end_time", pymongo.DESCENDING)],
             session=session,
         )
-        stored_end_time = report_end_time((stored or {}).get("report"))
-        end_time = report_end_time(data.get("report"))
-        latest = (
-            stored_end_time is None or end_time is None or end_time >= stored_end_time
-        )
+        stored_time = report_order_time((stored or {}).get("report"))
+        new_time = report_order_time(data.get("report"))
+        latest = stored_time is None or (new_time is not None and new_time > stored_time)
         if isinstance(data.get("report"), dict):
             data["report"]["latest"] = latest
         if latest:
