@@ -129,6 +129,13 @@ ENTITY_ROUTES = (
     ("/edges", "edges", False, ()),
     ("/catalogs", "catalogs", False, ()),
     ("/catalogs/{certname}", "catalogs", True, (("certname", "certname"),)),
+    ("/catalogs/{certname}/edges", "edges", False, (("certname", "certname"),)),
+    (
+        "/catalogs/{certname}/resources",
+        "resources",
+        False,
+        (("certname", "certname"),),
+    ),
     ("/catalog-inputs", "catalog-inputs", False, ()),
     ("/catalog-input-contents", "catalog-input-contents", False, ()),
     ("/packages", "packages", False, ()),

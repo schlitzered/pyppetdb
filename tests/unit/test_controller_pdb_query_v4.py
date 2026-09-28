@@ -255,6 +255,21 @@ class TestQuerySourceSwitch(unittest.TestCase):
             ConfigAppPuppetdb(querySource="upstream")
 
 
+class TestCatalogChildRoutes(unittest.TestCase):
+    def setUp(self):
+        self.controller, self.client, _ = build()
+        self.controller.engine.run = AsyncMock(return_value=([{"certname": "a"}], 1))
+
+    def test_catalog_hrefs_resolve_to_the_flat_entities(self):
+        for child, entity in (("edges", "edges"), ("resources", "resources")):
+            self.controller.engine.run.reset_mock()
+            response = self.client.get(f"/pdb/query/v4/catalogs/a/{child}")
+            self.assertEqual(response.status_code, 200, msg=child)
+            kwargs = self.controller.engine.run.await_args.kwargs
+            self.assertEqual(kwargs["entity_name"], entity)
+            self.assertEqual(kwargs["implicit"], [["=", "certname", "a"]])
+
+
 class TestEventCountsEndpoints(unittest.TestCase):
     def setUp(self):
         self.controller, self.client, _ = build()

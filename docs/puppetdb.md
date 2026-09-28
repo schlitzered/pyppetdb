@@ -280,6 +280,9 @@ and a real OpenVoxDB holding identical data and compares the responses field by 
 - **`corrective_change` is populated.** Upstream gates it behind a flag that is off in the
   open-source build and returns `null`; pyppetdb returns the value the agent sent, on
   events and on `latest_report_corrective_change`.
+- **`/catalogs/<certname>/edges` is restricted to that certname.** Upstream forgets the
+  restriction on this one child route (its `/resources` sibling has it) and answers with
+  every edge of every node; pyppetdb answers with the edges the `href` refers to.
 - **`resource_events.data` is always `null`.** The `href` resolves to the full event list.
   Upstream inlines the data for small result sets; computing it on every report query cost
   roughly a factor of seven.
