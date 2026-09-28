@@ -1320,7 +1320,17 @@ class TestCountShortcut(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows, [{"count": 4}])
         self.assertEqual(
             nodes.counts_calls,
-            [({"$and": [{"catalog_inputs": {"$type": "object"}}, {"id": "a"}]}, {})],
+            [
+                (
+                    {
+                        "$and": [
+                            {"id": {"$type": "string"}, "catalog_inputs": {"$type": "object"}},
+                            {"id": "a"},
+                        ]
+                    },
+                    {},
+                )
+            ],
         )
 
     async def test_grouped_counts_use_the_pipeline(self):

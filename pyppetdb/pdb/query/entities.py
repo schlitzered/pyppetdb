@@ -510,7 +510,14 @@ CATALOGS = Entity(
 CATALOG_INPUTS = Entity(
     name="catalog-inputs",
     collection="nodes",
-    stages=[{"$match": {"catalog_inputs": {"$type": "object"}}}],
+    stages=[
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "catalog_inputs": {"$type": "object"},
+            }
+        }
+    ],
     columns=[
         Column("certname", "string", "$id"),
         Column("catalog_uuid", "string", "$catalog_inputs.catalog_uuid"),
@@ -528,7 +535,13 @@ CATALOG_INPUT_CONTENTS = Entity(
     name="catalog-input-contents",
     collection="nodes",
     stages=[
-        {"$match": {"catalog_inputs.inputs": {"$type": "array"}}},
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "catalog_inputs": {"$type": "object"},
+                "catalog_inputs.inputs": {"$type": "array"},
+            }
+        },
         {
             "$project": {
                 "id": 1,
@@ -557,7 +570,12 @@ PACKAGES = Entity(
     name="packages",
     collection="nodes",
     stages=[
-        {"$match": {"package_inventory": {"$type": "array"}}},
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "package_inventory": {"$type": "array"},
+            }
+        },
         {
             "$project": {
                 "id": 1,

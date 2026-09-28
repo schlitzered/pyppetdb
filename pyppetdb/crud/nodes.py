@@ -74,6 +74,16 @@ class CrudNodes(CrudMongo):
                     name="idx_disabled_report_status",
                 ),
                 pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING), ("disabled", pymongo.ASCENDING)],
+                    name="idx_package_inventory",
+                    partialFilterExpression={"package_inventory": {"$type": "array"}},
+                ),
+                pymongo.IndexModel(
+                    [("id", pymongo.ASCENDING), ("disabled", pymongo.ASCENDING)],
+                    name="idx_catalog_inputs",
+                    partialFilterExpression={"catalog_inputs": {"$type": "object"}},
+                ),
+                pymongo.IndexModel(
                     [("node_groups", pymongo.ASCENDING)], name="idx_node_groups"
                 ),
                 pymongo.IndexModel(
