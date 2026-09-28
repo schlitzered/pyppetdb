@@ -38,6 +38,7 @@ class CrudNodesResources(CrudMongo):
                         ("node_id", pymongo.ASCENDING),
                         ("type", pymongo.ASCENDING),
                         ("title", pymongo.ASCENDING),
+                        ("disabled", pymongo.ASCENDING),
                     ],
                     name="idx_node_id",
                 ),

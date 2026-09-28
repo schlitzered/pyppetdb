@@ -75,6 +75,7 @@ class QueryEngine:
         self._query_timeout = query_timeout
         self._query_timeout_max = query_timeout_max
         self._max_page_size = max_page_size
+        self._index_keys = {}
 
     @property
     def log(self):
@@ -577,9 +578,18 @@ class QueryEngine:
             and not distinct
         )
         pipeline = list(head)
-        if early_paging:
+        if early_paging and match and query.offset and not (
+            query.offset >= DEEP_OFFSET
+            and await self._skips_on_index_keys(collection, early_sort, prefilter)
+        ):
+            if query.limit:
+                pipeline.append({"$limit": query.offset + query.limit})
+            pipeline.extend(_skip_behind_match(tail, query.offset))
+        elif early_paging:
             pipeline.extend(_offset_limit_stages(query))
-        pipeline.extend(tail)
+            pipeline.extend(tail)
+        else:
+            pipeline.extend(tail)
         if not early_paging:
             pipeline.extend(_paging_stages(query, sorted_early=bool(early_sort)))
         if not query.functions:
@@ -607,6 +617,34 @@ class QueryEngine:
         if total is None:
             total = len(rows)
         return rows, total
+
+    async def _skips_on_index_keys(self, collection, sort: dict, prefilter: dict) -> bool:
+        fields = set()
+        _collect_filter_fields(prefilter, fields)
+        wanted = list(sort.items())
+        for keys in await self._collection_index_keys(collection):
+            prefix = keys[: len(wanted)]
+            if [field for field, _ in prefix] != [field for field, _ in wanted]:
+                continue
+            same = all(key == order for (_, key), (_, order) in zip(prefix, wanted))
+            flipped = all(key == -order for (_, key), (_, order) in zip(prefix, wanted))
+            if (same or flipped) and fields <= {field for field, _ in keys}:
+                return True
+        return False
+
+    async def _collection_index_keys(self, collection) -> list:
+        cached = self._index_keys.get(collection.name)
+        if cached is not None and time.monotonic() - cached[0] < INDEX_KEYS_TTL:
+            return cached[1]
+        keys = []
+        async for index in collection.list_indexes():
+            if index.get("partialFilterExpression"):
+                continue
+            spec = list(index["key"].items())
+            if all(isinstance(direction, int) for _, direction in spec):
+                keys.append(spec)
+        self._index_keys[collection.name] = (time.monotonic(), keys)
+        return keys
 
     async def _count(self, collection, count_filter: dict) -> int:
         options = {}
@@ -760,6 +798,8 @@ class QueryEngine:
 
 
 PYTHON_BATCH_SIZE = 200
+DEEP_OFFSET = 10000
+INDEX_KEYS_TTL = 300
 STREAM_BATCH_SIZE = 1000
 
 
@@ -1085,10 +1125,20 @@ def _document_level(entity, match: dict) -> bool:
     names = set()
     _collect_match_columns(match, names)
     for name in names:
-        path = _storage_path(entity, name.split(".", 1)[0])
+        head = name.split(".", 1)[0]
+        path = _storage_path(entity, head)
+        if path is None:
+            path = _document_prefilter_path(entity, head)
         if path is None or any(path.startswith(prefix) for prefix in prefixes):
             return False
     return True
+
+
+def _document_prefilter_path(entity, column_name: str) -> Optional[str]:
+    column = entity.by_name.get(column_name)
+    if column is None or column.virtual or column.prefilter_kind != "node_state":
+        return None
+    return column.prefilter
 
 
 def _storage_path(entity, column_name: str) -> Optional[str]:
@@ -1691,6 +1741,13 @@ def _paging_stages(query: Query, sorted_early: bool = False) -> list:
     if query.order_by and not sorted_early:
         stages.append({"$sort": {column: order for column, order in query.order_by}})
     stages.extend(_offset_limit_stages(query))
+    return stages
+
+
+def _skip_behind_match(tail: list, offset: int) -> list:
+    stages = list(tail)
+    at = next(index for index, stage in enumerate(stages) if "$match" in stage)
+    stages.insert(at + 1, {"$skip": offset})
     return stages
 
 

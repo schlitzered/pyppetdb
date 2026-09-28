@@ -26,7 +26,9 @@ class TestCrudNodesResourcesIndexes(unittest.TestCase):
             index.document["name"]: list(index.document["key"].items())
             for index in crud._indices
         }
-        self.assertEqual(keys["idx_node_id"], [("node_id", 1), ("type", 1), ("title", 1)])
+        self.assertEqual(
+            keys["idx_node_id"], [("node_id", 1), ("type", 1), ("title", 1), ("disabled", 1)]
+        )
         self.assertEqual(keys["idx_type"], [("type", 1), ("node_id", 1)])
         self.assertEqual(
             keys["idx_type_title"], [("type", 1), ("title", 1), ("node_id", 1)]

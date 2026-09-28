@@ -76,8 +76,11 @@ class FakeCursor:
 
 
 class FakeCollection:
-    def __init__(self, docs=None, counts=None, distinct_values=None):
+    name = "fake"
+
+    def __init__(self, docs=None, counts=None, distinct_values=None, indexes=None):
         self.docs = docs or []
+        self.indexes = indexes or []
         self.counts = counts
         self.distinct_values = distinct_values or []
         self.pipelines = []
@@ -109,6 +112,10 @@ class FakeCollection:
         if pipeline and pipeline[-1] == {"$count": "count"}:
             return FakeCursor([{"count": self.counts}] if self.counts else [])
         return FakeCursor(self.docs)
+
+    async def list_indexes(self):
+        for index in self.indexes:
+            yield index
 
     def find(self, query=None, projection=None):
         self.finds.append((query, projection))
@@ -2413,7 +2420,7 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pipeline[1], {"$skip": 2})
         self.assertEqual(pipeline[2], {"$limit": 5})
 
-    async def test_exact_filter_pages_before_the_projection(self):
+    async def test_exact_filter_limits_before_and_skips_behind_the_projection(self):
         reports = FakeCollection()
         engine = engine_with(reports=reports)
         await engine.run(
@@ -2424,7 +2431,23 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         pipeline = reports.pipelines[0]
         self.assertEqual(pipeline[0], {"$match": {"report.status": "changed"}})
         self.assertEqual(pipeline[1], {"$sort": {"report.end_time": -1}})
-        self.assertEqual(pipeline[2], {"$skip": 2})
+        self.assertEqual(pipeline[2], {"$limit": 7})
+        self.assertIn("$project", pipeline[3])
+        self.assertIn("$match", pipeline[4])
+        self.assertEqual(pipeline[5], {"$skip": 2})
+
+    async def test_deep_offsets_skip_on_index_keys_in_the_query_layer(self):
+        reports = FakeCollection(
+            indexes=[{"key": {"report.end_time": -1, "report.status": 1}}]
+        )
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        pipeline = reports.pipelines[0]
+        self.assertEqual(pipeline[2], {"$skip": 10000})
         self.assertEqual(pipeline[3], {"$limit": 5})
         self.assertIn("$project", pipeline[4])
 
@@ -2474,6 +2497,68 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         limit_at = next(i for i, s in enumerate(pipeline) if "$limit" in s)
         self.assertGreater(sort_at, project_at)
         self.assertGreater(limit_at, project_at)
+
+    async def test_active_restriction_still_pages_before_the_projection(self):
+        resources = FakeCollection(
+            indexes=[{"key": {"node_id": 1, "type": 1, "title": 1, "disabled": 1}}]
+        )
+        engine = engine_with(resources=resources)
+        await engine.run(
+            "resources",
+            ["=", "type", "File"],
+            paging=Paging(order_by=[("certname", 1), ("type", 1), ("title", 1)], limit=5, offset=20000),
+            restrict_active=True,
+        )
+        pipeline = resources.pipelines[0]
+        self.assertEqual(
+            pipeline[0], {"$match": {"$and": [{"disabled": {"$ne": True}}, {"type": "File"}]}}
+        )
+        self.assertEqual(pipeline[1], {"$sort": {"node_id": 1, "type": 1, "title": 1}})
+        self.assertEqual(pipeline[2], {"$skip": 20000})
+        self.assertEqual(pipeline[3], {"$limit": 5})
+        self.assertIn("$project", pipeline[4])
+
+    async def test_deep_offsets_without_a_covering_index_skip_behind_the_match(self):
+        reports = FakeCollection(indexes=[{"key": {"report.end_time": -1}}])
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        pipeline = reports.pipelines[0]
+        self.assertEqual(pipeline[2], {"$limit": 10005})
+        self.assertEqual(pipeline[5], {"$skip": 10000})
+
+    async def test_partial_indexes_never_count_as_covering(self):
+        reports = FakeCollection(
+            indexes=[
+                {
+                    "key": {"report.end_time": -1, "report.status": 1},
+                    "partialFilterExpression": {"report.status": "changed"},
+                }
+            ]
+        )
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        self.assertEqual(reports.pipelines[0][2], {"$limit": 10005})
+
+    async def test_negated_node_state_pages_late(self):
+        resources = FakeCollection()
+        engine = engine_with(resources=resources)
+        await engine.run(
+            "resources",
+            ["not", ["=", "node_state", "active"]],
+            paging=Paging(order_by=[("certname", 1)], limit=5, offset=10),
+        )
+        pipeline = resources.pipelines[0]
+        project_at = next(i for i, s in enumerate(pipeline) if "$project" in s)
+        skip_at = next(i for i, s in enumerate(pipeline) if "$skip" in s)
+        self.assertGreater(skip_at, project_at)
 
     async def test_paging_stays_late_when_a_filter_survives(self):
         reports = FakeCollection()
