@@ -823,6 +823,103 @@ class TestSelectFactDocuments(unittest.IsolatedAsyncioTestCase):
         await self.assert_falls_back(["name"], ["=", "name", "kernel"])
 
 
+class TestIncrementalSort(unittest.IsolatedAsyncioTestCase):
+    INDEX = [{"key": {"node_id": 1, "timestamp": 1}}]
+
+    def events(self):
+        rows = []
+        for node in ("a", "b"):
+            for ts in (1, 2):
+                for title in ("z", "m", "a"):
+                    rows.append(
+                        {
+                            "certname": node,
+                            "timestamp": datetime(2026, 1, 1, 0, 0, ts),
+                            "resource_title": title,
+                        }
+                    )
+        return rows
+
+    async def run_events(self, paging, stream=False, indexes=None, columns=None):
+        events = FakeCollection(docs=self.events(), indexes=indexes or self.INDEX)
+        engine = engine_with(events=events)
+        ast = ["extract", columns] if columns else None
+        rows, total = await engine.run("events", ast, paging=paging, stream=stream)
+        return events, rows, total
+
+    def order(self, *keys):
+        return [(key, direction) for key, direction in keys]
+
+    async def test_sorts_only_the_index_prefix_in_the_database(self):
+        events, rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4, offset=1)
+        )
+        pipeline = events.pipelines[0]
+        self.assertEqual(stages(pipeline, "$sort"), [{"node_id": 1, "timestamp": 1}])
+        self.assertFalse(any("$skip" in stage or "$limit" in stage for stage in pipeline))
+        self.assertEqual(
+            [(r["certname"], r["timestamp"].second, r["resource_title"]) for r in rows],
+            [("a", 1, "m"), ("a", 1, "z"), ("a", 2, "a"), ("a", 2, "m")],
+        )
+
+    async def test_descending_rest_keys_and_streaming(self):
+        _events, stream, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", -1))),
+            stream=True,
+        )
+        rows = [row async for batch in stream.batches() for row in batch]
+        self.assertEqual(len(rows), 12)
+        self.assertEqual([r["resource_title"] for r in rows[:3]], ["z", "m", "a"])
+        self.assertEqual(rows[3]["timestamp"].second, 2)
+
+    async def test_a_full_index_match_sorts_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "timestamp": 1}])
+        self.assertTrue(any("$limit" in stage for stage in events.pipelines[0]))
+
+    async def test_non_scalar_columns_sort_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("new_value", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "new_value": 1}])
+
+    async def test_order_columns_missing_from_the_extract_sort_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+            columns=["certname"],
+        )
+        self.assertEqual(
+            stages(events.pipelines[0], "$sort"),
+            [{"node_id": 1, "timestamp": 1, "resource_title": 1}],
+        )
+
+    def test_boundary_condition_selects_the_group_and_everything_after(self):
+        from pyppetdb.pdb.query.engine import _boundary_condition
+
+        self.assertEqual(
+            _boundary_condition(["node_id", "timestamp"], ("b", 5)),
+            {
+                "$or": [
+                    {"node_id": "b", "timestamp": 5},
+                    {"node_id": {"$gt": "b"}},
+                    {"node_id": "b", "timestamp": {"$gt": 5}},
+                ]
+            },
+        )
+        self.assertIsNone(_boundary_condition(["node_id", "timestamp"], ("b", None)))
+
+    def test_bson_type_order(self):
+        from pyppetdb.pdb.query.engine import _bson_order
+
+        values = [datetime(2026, 1, 1), True, "b", 2, None, "a", 1.5]
+        self.assertEqual(
+            sorted(values, key=_bson_order),
+            [None, 1.5, 2, "a", "b", True, datetime(2026, 1, 1)],
+        )
+
+
 class TestGroup(unittest.IsolatedAsyncioTestCase):
     async def test_group_appends_the_stages_behind_the_match(self):
         events = FakeCollection(docs=[{"subject": {"title": "a"}}])

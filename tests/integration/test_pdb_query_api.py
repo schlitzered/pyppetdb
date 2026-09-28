@@ -209,6 +209,74 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         empty = self._query("/pdb/query/v4/resources", ["=", "certname", "nope"])
         self.assertEqual(empty.content, b"[]")
 
+    def test_event_pages_follow_the_full_order_at_every_offset(self):
+        from datetime import datetime
+
+        prefix = f"inc-{uuid.uuid4().hex[:8]}"
+        docs = []
+        for node in range(3):
+            for second in (1, 2, None):
+                for title in ("z", "m", "a", None):
+                    docs.append(
+                        {
+                            "node_id": f"{prefix}-{node}",
+                            "timestamp": datetime(2026, 1, 1, 0, 0, second) if second else None,
+                            "resource_type": "File",
+                            "resource_title": title,
+                            "property": "ensure",
+                            "name": "ensure_changed",
+                            "status": "success",
+                            "report_hash": prefix,
+                            "latest": True,
+                        }
+                    )
+        self._db["nodes_events"].insert_many(docs)
+        self.addCleanup(self._db["nodes_events"].delete_many, {"report_hash": prefix})
+        query = ["~", "certname", f"^{prefix}"]
+        for directions in (("asc", "asc", "asc"), ("asc", "asc", "desc"), ("desc", "asc", "asc")):
+            order = json.dumps(
+                [
+                    {"field": field, "order": direction}
+                    for field, direction in zip(("certname", "timestamp", "resource_title"), directions)
+                ]
+            )
+            everything = self._query(
+                "/pdb/query/v4/events", query, order_by=order
+            ).json()
+            self.assertEqual(len(everything), len(docs))
+            identity = [(row["certname"], row["timestamp"], row["resource_title"]) for row in everything]
+            expected = [
+                (doc["node_id"], doc["timestamp"], doc["resource_title"]) for doc in docs
+            ]
+            for position, direction in reversed(list(enumerate(directions))):
+                expected.sort(
+                    key=lambda item: (item[position] is not None, item[position] or ""),
+                    reverse=direction == "desc",
+                )
+            self.assertEqual(
+                [
+                    (
+                        row["certname"],
+                        datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")).replace(tzinfo=None)
+                        if row["timestamp"]
+                        else None,
+                        row["resource_title"],
+                    )
+                    for row in everything
+                ],
+                expected,
+                directions,
+            )
+            for offset in range(0, len(docs) + 1):
+                page = self._query(
+                    "/pdb/query/v4/events", query, order_by=order, limit=5, offset=offset
+                ).json()
+                self.assertEqual(
+                    [(row["certname"], row["timestamp"], row["resource_title"]) for row in page],
+                    identity[offset:offset + 5],
+                    (directions, offset),
+                )
+
     def test_nodes_endpoint(self):
         rows = self._query(
             "/pdb/query/v4/nodes", ["=", "certname", self.certname]

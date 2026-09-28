@@ -535,10 +535,17 @@ class QueryEngine:
         early_sort = build_early_sort(entity, query)
         if early_sort is None and rows_exact and not query.functions and not distinct:
             early_sort = build_early_sort(entity, query, document_rows_only=False)
-        if early_sort:
+        collection = self.collection(entity.collection)
+        incremental = None
+        if early_sort and not distinct and distinct_window is None and not explain:
+            incremental = await self._incremental_prefix(
+                collection, entity, query, early_sort
+            )
+        if incremental:
+            head.append({"$sort": dict(list(early_sort.items())[:incremental])})
+        elif early_sort:
             head.append({"$sort": early_sort})
 
-        collection = self.collection(entity.collection)
         count_filter = None
         if exact and not distinct and not element_cond and not pinned:
             count_filter = _exact_count_filter(entity, prefilter)
@@ -576,9 +583,12 @@ class QueryEngine:
             and rows_exact
             and not query.functions
             and not distinct
+            and not incremental
         )
         pipeline = list(head)
-        if early_paging and match and query.offset and not (
+        if incremental:
+            pipeline.extend(tail)
+        elif early_paging and match and query.offset and not (
             query.offset >= DEEP_OFFSET
             and await self._skips_on_index_keys(collection, early_sort, prefilter)
         ):
@@ -590,7 +600,7 @@ class QueryEngine:
             pipeline.extend(tail)
         else:
             pipeline.extend(tail)
-        if not early_paging:
+        if not early_paging and not incremental:
             pipeline.extend(_paging_stages(query, sorted_early=bool(early_sort)))
         if not query.functions:
             pipeline.extend(
@@ -609,7 +619,28 @@ class QueryEngine:
             plan.pop("$clusterTime", None)
             plan.pop("operationTime", None)
             return [{"query plan": plan}], 1
-        cursor = collection.aggregate(pipeline, **self.aggregate_options)
+        if incremental and rows_exact and query.offset:
+            boundary = await self._incremental_boundary(
+                collection, early_sort, incremental, prefilter, query.offset
+            )
+            if boundary is not None:
+                condition, before = boundary
+                query = query.model_copy(update={"offset": query.offset - before})
+                pipeline = _with_head_condition(pipeline, condition)
+        options = self.aggregate_options
+        if incremental:
+            options["batchSize"] = STREAM_BATCH_SIZE
+        cursor = collection.aggregate(pipeline, **options)
+        if incremental:
+            ordered = _incremental_rows(cursor, query, incremental)
+            if stream:
+                first = await _take(ordered, STREAM_BATCH_SIZE)
+                return OrderedRowStream(cursor, ordered, first), total
+            rows = await _take(ordered, None)
+            await cursor.close()
+            if total is None:
+                total = len(rows)
+            return rows, total
         if stream:
             first = await cursor.to_list(length=STREAM_BATCH_SIZE)
             return RowStream(cursor, first), total
@@ -617,6 +648,72 @@ class QueryEngine:
         if total is None:
             total = len(rows)
         return rows, total
+
+    async def _incremental_prefix(self, collection, entity, query: Query, sort: dict):
+        if len(sort) < 2 or query.functions:
+            return None
+        if query.columns and not all(
+            column in query.columns for column, _ in query.order_by
+        ):
+            return None
+        for column_name, _ in query.order_by:
+            column = entity.by_name.get(column_name)
+            if column is None or column.type not in ORDERABLE_TYPES:
+                return None
+        wanted = list(sort.items())
+        best = 0
+        for keys in await self._collection_index_keys(collection):
+            for flip in (1, -1):
+                length = 0
+                for (field, direction), (want, order) in zip(keys, wanted):
+                    if field != want or direction != order * flip:
+                        break
+                    length += 1
+                best = max(best, length)
+        if best == 0 or best >= len(wanted):
+            return None
+        return best
+
+    async def _incremental_boundary(
+        self, collection, sort: dict, prefix: int, prefilter: dict, offset: int
+    ):
+        keys = list(sort.items())[:prefix]
+        if any(direction < 0 for _, direction in keys):
+            return None
+        fields = [field for field, _ in keys]
+        filter_fields = set()
+        _collect_filter_fields(prefilter, filter_fields)
+        if not filter_fields <= set(fields):
+            return None
+        pipeline = []
+        if prefilter:
+            pipeline.append({"$match": prefilter})
+        pipeline.append({"$sort": dict(keys)})
+        pipeline.append({"$project": {"_id": 0, **{field: 1 for field in fields}}})
+        cursor = collection.aggregate(
+            pipeline, batchSize=BOUNDARY_BATCH_SIZE, **self.aggregate_options
+        )
+        seen = 0
+        before = 0
+        current = None
+        try:
+            while True:
+                batch = await cursor.to_list(length=BOUNDARY_BATCH_SIZE)
+                for document in batch:
+                    key = tuple(document.get(field) for field in fields)
+                    if key != current:
+                        if seen > offset:
+                            return _boundary(fields, current, before)
+                        before = seen
+                        current = key
+                    seen += 1
+                if len(batch) < BOUNDARY_BATCH_SIZE:
+                    break
+        finally:
+            await cursor.close()
+        if current is None or seen <= offset:
+            return None
+        return _boundary(fields, current, before)
 
     async def _skips_on_index_keys(self, collection, sort: dict, prefilter: dict) -> bool:
         fields = set()
@@ -829,6 +926,118 @@ class RowStream:
     async def close(self) -> None:
         if self._cursor is not None:
             await self._cursor.close()
+
+
+class OrderedRowStream(RowStream):
+    def __init__(self, cursor, ordered, first: list):
+        super().__init__(cursor, first)
+        self._ordered = ordered
+
+    async def batches(self):
+        batch = self._first
+        while batch:
+            yield self._shape(batch)
+            if len(batch) < STREAM_BATCH_SIZE:
+                return
+            batch = await _take(self._ordered, STREAM_BATCH_SIZE)
+
+
+ORDERABLE_TYPES = ("string", "timestamp", "integer", "float", "boolean")
+BOUNDARY_BATCH_SIZE = 20000
+
+
+def _boundary_condition(fields: list, key: tuple):
+    if key is None or any(value is None for value in key):
+        return None
+    branches = [dict(zip(fields, key))]
+    for index in range(len(fields)):
+        branch = dict(zip(fields[:index], key[:index]))
+        branch[fields[index]] = {"$gt": key[index]}
+        branches.append(branch)
+    return {"$or": branches}
+
+
+def _boundary(fields: list, key: tuple, before: int):
+    condition = _boundary_condition(fields, key)
+    if condition is None:
+        return None
+    return condition, before
+
+
+def _with_head_condition(pipeline: list, condition) -> list:
+    stages = list(pipeline)
+    if stages and "$match" in stages[0]:
+        stages[0] = {"$match": _and_filters(stages[0]["$match"], condition)}
+    else:
+        stages.insert(0, {"$match": condition})
+    return stages
+
+
+async def _take(rows, count: Optional[int]) -> list:
+    taken = []
+    async for row in rows:
+        taken.append(row)
+        if count is not None and len(taken) >= count:
+            break
+    return taken
+
+
+async def _incremental_rows(cursor, query: Query, prefix: int):
+    order = query.order_by
+    prefix_columns = [column for column, _ in order[:prefix]]
+    rest = order[prefix:]
+    skip = query.offset or 0
+    remaining = query.limit
+    group = []
+    current = None
+    while True:
+        batch = await cursor.to_list(length=STREAM_BATCH_SIZE)
+        for row in batch:
+            key = tuple(row.get(column) for column in prefix_columns)
+            if group and key != current:
+                for item in _sorted_group(group, rest):
+                    if skip:
+                        skip -= 1
+                        continue
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        if remaining <= 0:
+                            return
+                group = []
+            current = key
+            group.append(row)
+        if len(batch) < STREAM_BATCH_SIZE:
+            break
+    for item in _sorted_group(group, rest):
+        if skip:
+            skip -= 1
+            continue
+        yield item
+        if remaining is not None:
+            remaining -= 1
+            if remaining <= 0:
+                return
+
+
+def _sorted_group(rows: list, order) -> list:
+    for column, direction in reversed(order):
+        rows.sort(key=lambda row: _bson_order(row.get(column)), reverse=direction < 0)
+    return rows
+
+
+def _bson_order(value):
+    if value is None:
+        return (1, 0)
+    if isinstance(value, bool):
+        return (8, value)
+    if isinstance(value, (int, float)):
+        return (2, value)
+    if isinstance(value, str):
+        return (3, value.encode("utf-8"))
+    if isinstance(value, datetime):
+        return (9, value.timestamp())
+    return (4, str(value))
 
 
 def _within_cap(rows: list, cap: Optional[int]) -> list:
