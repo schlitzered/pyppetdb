@@ -18,7 +18,7 @@ from fastapi import APIRouter
 
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.config import Config
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.controller.pdb.cmd import ControllerPdbCmd
 from pyppetdb.controller.pdb.meta.v1 import ControllerPdbMetaV1
 from pyppetdb.controller.pdb.query import ControllerPdbQuery

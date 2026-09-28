@@ -33,7 +33,7 @@ venv/bin/python tests/conformance/coverage.py
 ```
 
 Needs no MongoDB — it enumerates the routes `ControllerPdb` registers and runs every
-corpus query through the real query engine in `pyppetdb/pdbquery/`.
+corpus query through the real query engine in `pyppetdb/pdb/query/`.
 
 Verdicts:
 
@@ -88,7 +88,7 @@ already covers. Each case records where it came from in its `origin`:
 | origin | meaning |
 | --- | --- |
 | `integration` | mirrors a test in `tests/integration/test_pdb_query_api.py` |
-| `unit` | a query shape exercised in `tests/unit/test_pdbquery_*.py` |
+| `unit` | a query shape exercised in `tests/unit/test_pdb_query_*.py` |
 | `conformance` | a construct from the upstream corpus in `corpus/` |
 | `review` | a case added for a specific bug or divergence found in review |
 | `divergence` | a construct where pyppetdb and OpenVoxDB are known to disagree |

@@ -21,17 +21,17 @@ from typing import Optional
 from pydantic import BaseModel
 from pydantic import Field
 
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.errors import bad_arity
-from pyppetdb.pdbquery.errors import bad_operand
-from pyppetdb.pdbquery.errors import bad_timestamp
-from pyppetdb.pdbquery.errors import comparison_not_allowed
-from pyppetdb.pdbquery.errors import incompatible_numeric
-from pyppetdb.pdbquery.errors import incompatible_types
-from pyppetdb.pdbquery.errors import bad_operator_arity
-from pyppetdb.pdbquery.errors import bad_regex
-from pyppetdb.pdbquery.errors import unknown_field
-from pyppetdb.pdbquery.errors import unknown_operator
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.errors import bad_arity
+from pyppetdb.pdb.query.errors import bad_operand
+from pyppetdb.pdb.query.errors import bad_timestamp
+from pyppetdb.pdb.query.errors import comparison_not_allowed
+from pyppetdb.pdb.query.errors import incompatible_numeric
+from pyppetdb.pdb.query.errors import incompatible_types
+from pyppetdb.pdb.query.errors import bad_operator_arity
+from pyppetdb.pdb.query.errors import bad_regex
+from pyppetdb.pdb.query.errors import unknown_field
+from pyppetdb.pdb.query.errors import unknown_operator
 
 BINARY_OPS = ("=", "~", "~>", ">", "<", ">=", "<=")
 COMPARISON_OPS = {">": "$gt", "<": "$lt", ">=": "$gte", "<=": "$lte"}

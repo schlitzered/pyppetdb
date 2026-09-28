@@ -20,8 +20,8 @@ from typing import Optional
 from pydantic import BaseModel
 from pydantic import Field
 
-from pyppetdb.pdbquery.ast import Query
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.ast import Query
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 VALID_ORDERS = ("asc", "desc")
 

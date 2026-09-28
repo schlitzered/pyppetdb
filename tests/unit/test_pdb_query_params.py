@@ -15,8 +15,8 @@
 import unittest
 from datetime import datetime
 
-from pyppetdb.pdbquery import params
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query import params
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 
 class TestValidateParams(unittest.TestCase):

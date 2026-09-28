@@ -19,22 +19,22 @@ import pymongo.errors
 from datetime import UTC
 from datetime import datetime
 
-from pyppetdb.pdbquery.engine import NEVER_MATCH
-from pyppetdb.pdbquery.engine import QueryEngine
-from pyppetdb.pdbquery.engine import build_prefilter
-from pyppetdb.pdbquery.engine import build_prefilter_plan
-from pyppetdb.pdbquery.paging import parse_paging
-from pyppetdb.pdbquery.engine import expand_fact_contents
-from pyppetdb.pdbquery.engine import expand_fact_paths
-from pyppetdb.pdbquery import matcher
+from pyppetdb.pdb.query.engine import NEVER_MATCH
+from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import build_prefilter
+from pyppetdb.pdb.query.engine import build_prefilter_plan
+from pyppetdb.pdb.query.paging import parse_paging
+from pyppetdb.pdb.query.engine import expand_fact_contents
+from pyppetdb.pdb.query.engine import expand_fact_paths
+from pyppetdb.pdb.query import matcher
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import build_facts_index
-from pyppetdb.pdbquery.entities import ENTITIES
-from pyppetdb.pdbquery.entities import get_entity
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.paging import Paging
-from pyppetdb.pdbquery.ast import FilterCompiler
-from pyppetdb.pdbquery.ast import Query
+from pyppetdb.pdb.query.entities import ENTITIES
+from pyppetdb.pdb.query.entities import get_entity
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import Paging
+from pyppetdb.pdb.query.ast import FilterCompiler
+from pyppetdb.pdb.query.ast import Query
 
 
 class FakeCursor:
@@ -779,7 +779,7 @@ class TestElementFilter(unittest.IsolatedAsyncioTestCase):
         entity = get_entity(entity_name)
         compiler = FilterCompiler(entity, engine=engine_with())
         match = await compiler.compile(ast)
-        from pyppetdb.pdbquery.engine import build_element_filter
+        from pyppetdb.pdb.query.engine import build_element_filter
 
         return build_element_filter(entity, match)
 
@@ -842,7 +842,7 @@ class TestElementFilter(unittest.IsolatedAsyncioTestCase):
 
 class TestPinnedFactKeys(unittest.IsolatedAsyncioTestCase):
     async def pinned(self, entity_name, ast):
-        from pyppetdb.pdbquery.engine import build_pinned_keys
+        from pyppetdb.pdb.query.engine import build_pinned_keys
 
         entity = get_entity(entity_name)
         match = await FilterCompiler(entity, engine=engine_with()).compile(ast)
@@ -1353,7 +1353,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
                 )
 
     async def test_prefilter_never_narrows_the_result(self):
-        from pyppetdb.pdbquery import matcher
+        from pyppetdb.pdb.query import matcher
 
         resources = [
             {
@@ -1420,7 +1420,7 @@ class TestPrefilter(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_node_prefilter_never_narrows_the_result(self):
-        from pyppetdb.pdbquery import matcher
+        from pyppetdb.pdb.query import matcher
 
         documents = [
             {
@@ -1773,7 +1773,7 @@ def _entry_matches(entry, condition) -> bool:
 
 
 def document_matches(document, condition) -> bool:
-    from pyppetdb.pdbquery import matcher
+    from pyppetdb.pdb.query import matcher
 
     if not condition:
         return True
@@ -2546,7 +2546,7 @@ class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
         return [{"id": f"h{index}", "facts": {"a": 1, "b": 2}} for index in range(count)]
 
     async def test_stops_reading_once_the_page_is_full(self):
-        from pyppetdb.pdbquery import engine as module
+        from pyppetdb.pdb.query import engine as module
 
         nodes = FakeCollection(docs=self.docs(10))
         engine = engine_with(nodes)
@@ -2571,7 +2571,7 @@ class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(total, 20)
 
     async def test_fact_paths_stay_distinct_across_batches(self):
-        from pyppetdb.pdbquery import engine as module
+        from pyppetdb.pdb.query import engine as module
 
         nodes = FakeCollection(docs=self.docs(5))
         engine = engine_with(nodes)
@@ -2585,8 +2585,8 @@ class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sorted(row["name"] for row in rows), ["a", "b"])
 
     def test_an_expired_deadline_aborts_the_expansion(self):
-        from pyppetdb.pdbquery.engine import _expand_batch
-        from pyppetdb.pdbquery.engine import expand_fact_contents
+        from pyppetdb.pdb.query.engine import _expand_batch
+        from pyppetdb.pdb.query.engine import expand_fact_contents
 
         with self.assertRaises(PuppetDBQueryError) as ctx:
             _expand_batch(expand_fact_contents, self.docs(1), {}, None, 0.0)

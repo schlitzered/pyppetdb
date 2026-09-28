@@ -17,7 +17,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.controller.pdb.meta.v1 import PUPPETDB_COMPAT_VERSION
 
 

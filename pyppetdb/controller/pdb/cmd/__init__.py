@@ -17,7 +17,7 @@ import logging
 from fastapi import APIRouter
 
 from pyppetdb.config import Config
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes

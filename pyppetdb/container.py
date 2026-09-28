@@ -50,7 +50,7 @@ from pyppetdb.ca.service import CAService
 from pyppetdb.jobs.service import JobService
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.ws.hub import WsHub
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 from pyppetdb.hiera import PyHiera
 from pyppetdb.crud.hiera_key_models_dynamic import CrudHieraKeyModelsDynamic
 from pyppetdb.crud.hiera_keys import CrudHieraKeys

@@ -14,8 +14,8 @@
 
 import unittest
 
-from pyppetdb.pdbquery import event_counts
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query import event_counts
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 
 class TestParams(unittest.TestCase):

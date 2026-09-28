@@ -15,11 +15,11 @@
 import unittest
 from datetime import datetime
 
-from pyppetdb.pdbquery.ast import FilterCompiler
-from pyppetdb.pdbquery.ast import parse_query
-from pyppetdb.pdbquery.entities import ENTITIES
-from pyppetdb.pdbquery.entities import get_entity
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.ast import FilterCompiler
+from pyppetdb.pdb.query.ast import parse_query
+from pyppetdb.pdb.query.entities import ENTITIES
+from pyppetdb.pdb.query.entities import get_entity
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 
 class TestParseQuery(unittest.TestCase):
@@ -424,8 +424,8 @@ if __name__ == "__main__":
 
 class TestOperandTypeRules(unittest.IsolatedAsyncioTestCase):
     def compiler(self, entity_name):
-        from pyppetdb.pdbquery.entities import get_entity
-        from tests.unit.test_pdbquery_engine import engine_with
+        from pyppetdb.pdb.query.entities import get_entity
+        from tests.unit.test_pdb_query_engine import engine_with
 
         return FilterCompiler(get_entity(entity_name), engine=engine_with())
 

@@ -57,7 +57,7 @@ from pyppetdb.helpers.puppetdb import report_payload
 from pyppetdb.helpers.puppetdb import stable_hash
 from pyppetdb.errors import IngestOverloaded
 from pyppetdb.errors import ResourceNotFound
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 
 from pyppetdb.model.pdb_facts import PuppetDBFacts
 from pyppetdb.model.nodes import NodePutInternal

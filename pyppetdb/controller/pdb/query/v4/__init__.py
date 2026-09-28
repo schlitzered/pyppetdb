@@ -33,18 +33,18 @@ from pyppetdb.config import Config
 from pyppetdb.crud.nodes import CrudNodes
 from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
-from pyppetdb.pdbquery import event_counts
-from pyppetdb.pdbquery.engine import QueryEngine
-from pyppetdb.pdbquery.engine import _sort_key
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.paging import Paging
-from pyppetdb.pdbquery.paging import parse_paging
-from pyppetdb.pdbquery.params import parse_bool
-from pyppetdb.pdbquery.params import parse_distinct
-from pyppetdb.pdbquery.params import parse_explain
-from pyppetdb.pdbquery.params import parse_timeout
-from pyppetdb.pdbquery.params import root_entity_restricted
-from pyppetdb.pdbquery.params import validate_params
+from pyppetdb.pdb.query import event_counts
+from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import _sort_key
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import Paging
+from pyppetdb.pdb.query.paging import parse_paging
+from pyppetdb.pdb.query.params import parse_bool
+from pyppetdb.pdb.query.params import parse_distinct
+from pyppetdb.pdb.query.params import parse_explain
+from pyppetdb.pdb.query.params import parse_timeout
+from pyppetdb.pdb.query.params import root_entity_restricted
+from pyppetdb.pdb.query.params import validate_params
 
 
 def _encode(value):

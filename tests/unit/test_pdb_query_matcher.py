@@ -14,7 +14,7 @@
 
 import unittest
 
-from pyppetdb.pdbquery import matcher
+from pyppetdb.pdb.query import matcher
 
 
 class TestNeverMatch(unittest.TestCase):

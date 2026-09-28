@@ -17,8 +17,8 @@ import logging
 import os
 import unittest
 
-from pyppetdb.pdbquery.engine import QueryEngine
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 CORPUS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

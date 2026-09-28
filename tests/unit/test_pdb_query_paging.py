@@ -14,9 +14,9 @@
 
 import unittest
 
-from pyppetdb.pdbquery.ast import Query
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.paging import parse_paging
+from pyppetdb.pdb.query.ast import Query
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import parse_paging
 
 
 class TestParsePaging(unittest.TestCase):

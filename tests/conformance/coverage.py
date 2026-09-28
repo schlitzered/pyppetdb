@@ -27,10 +27,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("APP_SECRETKEY", "ci-test-secret")
 
 from pyppetdb.controller.pdb import ControllerPdb  # noqa: E402
-from pyppetdb.pdbquery.engine import QueryEngine  # noqa: E402
-from pyppetdb.pdbquery.entities import get_entity  # noqa: E402
-from pyppetdb.pdbquery.errors import PuppetDBQueryError  # noqa: E402
-from pyppetdb.pdbquery.event_counts import COUNT_FIELDS  # noqa: E402
+from pyppetdb.pdb.query.engine import QueryEngine  # noqa: E402
+from pyppetdb.pdb.query.entities import get_entity  # noqa: E402
+from pyppetdb.pdb.query.errors import PuppetDBQueryError  # noqa: E402
+from pyppetdb.pdb.query.event_counts import COUNT_FIELDS  # noqa: E402
 
 PATH_ENTITY = {
     "/pdb/query/v4/nodes": "nodes",

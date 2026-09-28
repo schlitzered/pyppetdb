@@ -21,7 +21,7 @@ import gzip
 from pyppetdb.config import ConfigAppFacts
 from pyppetdb.controller.pdb.cmd.v1 import ControllerPdbCmdV1
 from pyppetdb.crud.nodes import CrudNodes
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 
 
 def ingest_state(catalog_uuid=None, has_facts=True, has_catalog=True, content_hash=None):

@@ -28,9 +28,9 @@ from pyppetdb.config import ConfigAppFacts
 from pyppetdb.config import ConfigAppPuppetdb
 from pyppetdb.controller.pdb.query.v4 import ControllerPdbQueryV4
 from pyppetdb.controller.pdb.query.v4 import apply_local_paging
-from pyppetdb.pdbquery import event_counts
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.paging import Paging
+from pyppetdb.pdb.query import event_counts
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import Paging
 
 
 def build(config_kwargs=None):

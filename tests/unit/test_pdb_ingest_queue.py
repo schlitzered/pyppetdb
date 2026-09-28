@@ -16,7 +16,7 @@ import asyncio
 import logging
 import unittest
 
-from pyppetdb.ingest import IngestQueue
+from pyppetdb.pdb.ingest.queue import IngestQueue
 
 
 class TestIngestQueue(unittest.IsolatedAsyncioTestCase):

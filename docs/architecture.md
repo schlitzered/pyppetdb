@@ -82,7 +82,7 @@ OpenVoxDB is configured. Queries are answered locally or proxied upstream depend
 graph LR
     C[PuppetDB client]
     P["pyppetdb /pdb"]
-    E["Query engine<br/>pyppetdb/pdbquery"]
+    E["Query engine<br/>pyppetdb/pdb/query"]
     DB[(MongoDB)]
     UPS[Upstream OpenVoxDB]
 
@@ -95,7 +95,7 @@ graph LR
     P -- "querySource = upstream" --> UPS
 ```
 
-`pyppetdb/pdbquery/` holds the query engine: `entities.py` maps each PuppetDB entity onto the
+`pyppetdb/pdb/query/` holds the query engine: `entities.py` maps each PuppetDB entity onto the
 MongoDB documents (as a projection whose keys are the PuppetDB column names), `ast.py` parses and
 compiles the AST query language into a `$match` document, `engine.py` assembles and runs the
 aggregation pipeline, and `paging.py` and `event_counts.py` cover the remaining query parameters.

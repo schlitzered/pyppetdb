@@ -26,21 +26,21 @@ import pymongo.errors
 from pyppetdb.helpers.puppetdb import FACTS_INDEX_FIELD
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.helpers.puppetdb import RESOURCE_PARAM_MAX_VALUE_LEN
-from pyppetdb.pdbquery import matcher
-from pyppetdb.pdbquery.ast import FilterCompiler
-from pyppetdb.pdbquery.ast import TUPLE_IN
-from pyppetdb.pdbquery.params import ACTIVE_CLAUSE
-from pyppetdb.pdbquery.params import has_active_criterion
-from pyppetdb.pdbquery.ast import check_depth
-from pyppetdb.pdbquery.ast import Query
-from pyppetdb.pdbquery.ast import parse_query
-from pyppetdb.pdbquery.entities import ENTITIES
-from pyppetdb.pdbquery.entities import get_entity
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.errors import subquery_too_large
-from pyppetdb.pdbquery.errors import unknown_entity
-from pyppetdb.pdbquery.errors import unknown_field
-from pyppetdb.pdbquery.entities import _UNSET
+from pyppetdb.pdb.query import matcher
+from pyppetdb.pdb.query.ast import FilterCompiler
+from pyppetdb.pdb.query.ast import TUPLE_IN
+from pyppetdb.pdb.query.params import ACTIVE_CLAUSE
+from pyppetdb.pdb.query.params import has_active_criterion
+from pyppetdb.pdb.query.ast import check_depth
+from pyppetdb.pdb.query.ast import Query
+from pyppetdb.pdb.query.ast import parse_query
+from pyppetdb.pdb.query.entities import ENTITIES
+from pyppetdb.pdb.query.entities import get_entity
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.errors import subquery_too_large
+from pyppetdb.pdb.query.errors import unknown_entity
+from pyppetdb.pdb.query.errors import unknown_field
+from pyppetdb.pdb.query.entities import _UNSET
 
 SUBQUERY_LIMIT = 100000
 DISTINCT_TYPES = ("string", "integer", "boolean", "timestamp")

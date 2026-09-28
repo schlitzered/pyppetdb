@@ -15,8 +15,8 @@
 import re
 from typing import Optional
 
-from pyppetdb.pdbquery.ast import parse_timestamp
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.ast import parse_timestamp
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
 
 GLOBAL_PARAMS = frozenset(
     {

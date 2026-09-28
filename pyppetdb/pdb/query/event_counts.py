@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyppetdb.pdbquery.errors import PuppetDBQueryError
-from pyppetdb.pdbquery.errors import bad_arity
-from pyppetdb.pdbquery.errors import bad_operand
+from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.errors import bad_arity
+from pyppetdb.pdb.query.errors import bad_operand
 
 SUMMARIZE_BY = {
     "certname": ("certname",),
