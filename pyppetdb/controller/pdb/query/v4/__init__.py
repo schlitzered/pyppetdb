@@ -82,13 +82,13 @@ def json_response(content, pretty: bool, status_code: int = 200, headers=None):
     return cls(content=content, status_code=status_code, headers=headers)
 
 
-def _dump_row(row, pretty: bool) -> bytes:
+def _dump_batch(batch: list, pretty: bool) -> bytes:
     if not pretty:
-        return orjson.dumps(row, default=_encode, option=JSON_OPTIONS)
+        return orjson.dumps(batch, default=_encode, option=JSON_OPTIONS)[1:-1]
     text = orjson.dumps(
-        row, default=_encode, option=JSON_OPTIONS | orjson.OPT_INDENT_2
+        batch, default=_encode, option=JSON_OPTIONS | orjson.OPT_INDENT_2
     )
-    return b"  " + text.replace(b"\n", b"\n  ")
+    return text[2:-2]
 
 
 async def _stream_body(stream: RowStream, pretty: bool, log, request=None):
@@ -100,7 +100,7 @@ async def _stream_body(stream: RowStream, pretty: bool, log, request=None):
                 return
             if not batch:
                 continue
-            chunk = separator.join(_dump_row(row, pretty) for row in batch)
+            chunk = _dump_batch(batch, pretty)
             if written:
                 yield separator + chunk
             else:
