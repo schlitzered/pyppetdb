@@ -22,6 +22,7 @@ from datetime import datetime
 
 from pyppetdb.pdb.query.engine import NEVER_MATCH
 from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import SUBQUERY_LIMIT
 from pyppetdb.pdb.query.engine import build_prefilter
 from pyppetdb.pdb.query.engine import build_prefilter_plan
 from pyppetdb.pdb.query.paging import parse_paging
@@ -692,6 +693,69 @@ class TestExtractNullFill(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stage(nodes.pipelines[0], "$set"), {"certname": {"$ifNull": ["$certname", None]}})
 
 
+class TestSelectFactDocuments(unittest.IsolatedAsyncioTestCase):
+    async def pipeline(self, columns, ast):
+        nodes = FakeCollection(docs=[{"_id": "host1"}])
+        engine = engine_with(nodes)
+        rows = await engine.select("facts", columns, ast)
+        return nodes.pipelines[0], rows
+
+    async def test_pinned_name_selects_documents_that_carry_the_fact(self):
+        pipeline, rows = await self.pipeline(["certname"], ["=", "name", "kernel"])
+        self.assertEqual(
+            pipeline,
+            [
+                {"$match": {"$and": [{"facts_index.p": "kernel"}, {"facts.kernel": {"$exists": True}}]}},
+                {"$group": {"_id": "$id"}},
+                {"$match": {"_id": {"$ne": None}}},
+                {"$limit": SUBQUERY_LIMIT},
+            ],
+        )
+        self.assertEqual(rows, [("host1",)])
+
+    async def test_document_level_clauses_become_the_prefilter(self):
+        pipeline, _rows = await self.pipeline(
+            ["environment"],
+            ["and", ["in", "name", ["array", ["kernel", "os"]]], ["in", "certname", ["array", ["a", "b"]]]],
+        )
+        self.assertEqual(
+            pipeline[0],
+            {
+                "$match": {
+                    "$and": [
+                        {"id": {"$in": ["a", "b"]}},
+                        {
+                            "$or": [
+                                {"$and": [{"facts_index.p": "kernel"}, {"facts.kernel": {"$exists": True}}]},
+                                {"$and": [{"facts_index.p": "os"}, {"facts.os": {"$exists": True}}]},
+                            ]
+                        },
+                    ]
+                }
+            },
+        )
+        self.assertEqual(pipeline[1], {"$group": {"_id": "$environment"}})
+
+    async def test_disjoint_name_pins_select_nothing(self):
+        nodes = FakeCollection(docs=[{"_id": "host1"}])
+        rows = await engine_with(nodes).select(
+            "facts", ["certname"], ["and", ["=", "name", "kernel"], ["=", "name", "os"]]
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(nodes.pipelines, [])
+
+    async def assert_falls_back(self, columns, ast):
+        pipeline, _rows = await self.pipeline(columns, ast)
+        self.assertNotEqual(pipeline[1], {"$group": {"_id": "$id"}}, ast)
+
+    async def test_row_level_or_unpinned_filters_fall_back_to_the_expansion(self):
+        await self.assert_falls_back(["certname"], ["and", ["=", "name", "kernel"], ["=", "value", "Linux"]])
+        await self.assert_falls_back(["certname"], ["~", "name", "^ker"])
+        await self.assert_falls_back(["certname"], ["or", ["=", "name", "kernel"], ["=", "certname", "a"]])
+        await self.assert_falls_back(["certname"], ["=", "name", "os.family"])
+        await self.assert_falls_back(["name"], ["=", "name", "kernel"])
+
+
 class TestGroup(unittest.IsolatedAsyncioTestCase):
     async def test_group_appends_the_stages_behind_the_match(self):
         events = FakeCollection(docs=[{"subject": {"title": "a"}}])
@@ -726,6 +790,62 @@ class TestGroup(unittest.IsolatedAsyncioTestCase):
                 {"$group": {"_id": {"certname": "$node_id"}, "n": {"$sum": {"$cond": [{"$eq": ["$status", "failure"]}, 1, 0]}}}},
             ],
         )
+
+    async def group_pipeline(self, ast):
+        events = FakeCollection()
+        engine = engine_with(events=events)
+        await engine.group(
+            "events",
+            ["extract", ["certname"], ast] if ast is not None else ["extract", ["certname"]],
+            [{"$group": {"_id": {"certname": "$certname", "status": "$status"}}}],
+        )
+        return events.pipelines[0]
+
+    async def test_unpinned_latest_is_spelled_out_for_the_covering_index(self):
+        pipeline = await self.group_pipeline(
+            ["or", ["=", "status", "success"], ["=", "status", "skipped"]]
+        )
+        self.assertEqual(
+            pipeline[0],
+            {
+                "$match": {
+                    "$and": [
+                        {"$or": [{"status": "success"}, {"status": "skipped"}]},
+                        {"latest": {"$in": [True, False]}},
+                    ]
+                }
+            },
+        )
+        self.assertEqual(
+            pipeline[1], {"$group": {"_id": {"certname": "$node_id", "status": "$status"}}}
+        )
+
+    async def test_an_unfiltered_group_also_uses_the_covering_index(self):
+        pipeline = await self.group_pipeline(None)
+        self.assertEqual(pipeline[0], {"$match": {"latest": {"$in": [True, False]}}})
+        self.assertEqual(len(pipeline), 2)
+
+    async def test_pinned_latest_is_left_alone(self):
+        pipeline = await self.group_pipeline(["=", "latest_report?", True])
+        self.assertEqual(pipeline[0], {"$match": {"latest": True}})
+
+    async def test_fields_outside_the_covering_index_skip_the_prefix(self):
+        pipeline = await self.group_pipeline(["=", "property", "ensure"])
+        self.assertEqual(pipeline[0], {"$match": {"property": "ensure"}})
+
+    def test_the_covering_index_matches_the_events_crud(self):
+        from pyppetdb.crud.nodes_events import CrudNodesEvents
+        from unittest.mock import MagicMock
+
+        crud = CrudNodesEvents(
+            config=MagicMock(), log=logging.getLogger("test"), coll=MagicMock()
+        )
+        model = next(
+            index for index in crud._indices if index.document["name"] == "idx_latest_counts"
+        )
+        spec = get_entity("events").covering_index
+        self.assertEqual(list(model.document["key"]), spec["fields"])
+        self.assertEqual(spec["fields"][0], spec["prefix"])
 
     async def test_computed_columns_keep_the_projection(self):
         events = FakeCollection()

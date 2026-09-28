@@ -326,6 +326,9 @@ class QueryEngine:
         )
         rewritten = _rewrite_to_storage(target, stages) if rows_exact else None
         if rewritten is not None:
+            covered = _covering_prefilter(target, _prefilter)
+            if covered is not None:
+                pipeline = [{"$match": covered}] + pipeline[1 if _prefilter else 0:]
             pipeline.extend(rewritten)
         else:
             selected, _filter_only = projection_plan(target, query, match)
@@ -375,7 +378,9 @@ class QueryEngine:
         if target.python_expand:
             rows, _total = await self._run_python(target, query, match)
         else:
-            rows = await self._select_distinct(target, query, match)
+            rows = await self._select_fact_documents(target, query, match)
+            if rows is None:
+                rows = await self._select_distinct(target, query, match)
             if rows is None:
                 rows, _total = await self._run_mongo(
                     target, query, match, distinct=True
@@ -388,6 +393,61 @@ class QueryEngine:
         return _distinct_tuples(
             [tuple(row.get(column) for column in columns) for row in rows]
         )
+
+    async def _select_fact_documents(self, entity, query: Query, match: dict):
+        spec = entity.fact_pair
+        if not spec or not match or len(query.columns) != 1:
+            return None
+        name = query.columns[0]
+        path = _storage_path(entity, name)
+        if path is None or not _document_level(entity, {name: 1}):
+            return None
+        names = None
+        rest = []
+        for clause in _top_conjuncts(match):
+            if set(clause) == {spec["name"]}:
+                found = _pinned_leaf(clause[spec["name"]])
+                if found is None:
+                    return None
+                names = found if names is None else names & found
+            else:
+                rest.append(clause)
+        if names is None:
+            return None
+        if not names:
+            return []
+        if len(names) > MAX_PINNED_KEYS or any(not SAFE_KEY.match(key) for key in names):
+            return None
+        remainder = rest[0] if len(rest) == 1 else ({"$and": rest} if rest else {})
+        if remainder and not _document_level(entity, remainder):
+            return None
+        prefilter, exact = (
+            build_prefilter_plan(entity, remainder, self._facts_index)
+            if remainder
+            else ({}, True)
+        )
+        if not exact:
+            return None
+        present = [
+            {
+                "$and": [
+                    {f"{FACTS_INDEX_FIELD}.p": key},
+                    {f"{spec['path']}.{key}": {"$exists": True}},
+                ]
+            }
+            for key in sorted(names)
+        ]
+        condition = present[0] if len(present) == 1 else {"$or": present}
+        pipeline = [
+            {"$match": _and_filters(prefilter, condition)},
+            {"$group": {"_id": f"${path}"}},
+            {"$match": {"_id": {"$ne": None}}},
+            {"$limit": query.limit},
+        ]
+        rows = await self.collection(entity.collection).aggregate(
+            pipeline, **self.aggregate_options
+        ).to_list(length=None)
+        return [{name: row["_id"]} for row in rows]
 
     async def _select_distinct(self, entity, query: Query, match: dict):
         if not entity.document_rows or len(query.columns) != 1:
@@ -700,6 +760,39 @@ def _path_node(node, columns: tuple):
     if not parts:
         return None
     return parts[0] if len(parts) == 1 else {"$and": parts}
+
+
+def _top_conjuncts(match: dict) -> list:
+    clauses = []
+    for key, value in match.items():
+        if key == "$and":
+            for child in value:
+                clauses.extend(_top_conjuncts(child))
+        else:
+            clauses.append({key: value})
+    return clauses
+
+
+def _covering_prefilter(entity, prefilter: dict):
+    spec = entity.covering_index
+    if not spec:
+        return None
+    fields = set()
+    _collect_filter_fields(prefilter, fields)
+    if spec["prefix"] in fields or not fields <= set(spec["fields"]):
+        return None
+    return _and_filters(prefilter, {spec["prefix"]: {"$in": list(spec["values"])}})
+
+
+def _collect_filter_fields(node, fields: set) -> None:
+    if not isinstance(node, dict):
+        return
+    for key, value in node.items():
+        if key in ("$and", "$or", "$nor") and isinstance(value, list):
+            for child in value:
+                _collect_filter_fields(child, fields)
+        else:
+            fields.add(key)
 
 
 def _and_filters(left: dict, right: dict) -> dict:

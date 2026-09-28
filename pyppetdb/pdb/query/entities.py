@@ -62,6 +62,7 @@ class Entity(BaseModel):
     distinct_field: Optional[str] = None
     distinct_source: Optional[str] = None
     path_source: Optional[str] = None
+    covering_index: Optional[Dict[str, Any]] = None
     distinct_top_level: bool = False
     fact_pair: Optional[Dict[str, str]] = None
 
@@ -699,6 +700,19 @@ REPORTS = Entity(
 EVENTS = Entity(
     name="events",
     collection="nodes_events",
+    covering_index={
+        "prefix": "latest",
+        "values": [True, False],
+        "fields": [
+            "latest",
+            "status",
+            "node_id",
+            "resource_type",
+            "resource_title",
+            "containing_class",
+            "corrective_change",
+        ],
+    },
     columns=[
         Column("certname", "string", "$node_id"),
         Column("report", "string", "$report_hash"),
