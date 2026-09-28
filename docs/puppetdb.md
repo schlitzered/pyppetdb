@@ -29,15 +29,74 @@ process refuses to start.
 
 `POST /pdb/cmd/v1?certname=&command=&version=&producer-timestamp=`
 
-| Command | Stored as |
-|---------|-----------|
-| `replace_facts` | node facts, `producer`, `producer_timestamp`, `package_inventory` |
-| `replace_catalog` | catalog resources (with per-resource hash, `file`, `line`), edges, `version`, `transaction_uuid`, `code_id`, catalog hash |
-| `replace_catalog_inputs` | `catalog_inputs` on the node |
-| `store_report` | report history entry, marked as the node's latest report |
-| `deactivate_node` | sets the node inactive |
+| Command | Minimum version | Stored as |
+|---------|-----------------|-----------|
+| `replace_facts` | 4 | node facts, `producer`, `producer_timestamp`, `package_inventory` |
+| `replace_catalog` | 6 | catalog resources (with per-resource hash, `file`, `line`), edges, `version`, `transaction_uuid`, `code_id`, catalog hash |
+| `replace_catalog_inputs` | 1 | `catalog_inputs` on the node |
+| `store_report` | 5 | report history entry, marked as the node's latest report |
+| `deactivate_node` | 3 | sets the node inactive |
+| `configure_expiration` | 1 | `facts_expiration` (`expire`, `updated`) on the node, also visible on the management API |
 
 The response is `200` with `{"uuid": "..."}`, matching PuppetDB.
+
+### Request validation
+
+The endpoint validates a command the way OpenVoxDB's `http/command.clj` does, before
+anything is queued, and answers `400` with `{"error": "Command \"<command>\" for certname
+\"<certname>\" is invalid. <reason>"}`:
+
+- The only query parameters accepted are `certname`, `command`, `version`,
+  `producer-timestamp`, `checksum` (accepted and ignored, as upstream) and
+  `secondsToWaitForCompletion`; anything else is `Command has invalid parameters: <names>.`
+- `certname`, `version` and `command` are required (`Command is missing required
+  parameters: <names>.`), and the certname must not be blank.
+- Command names are normalised by replacing `_` with a space, so `replace_facts` and
+  `replace facts` are the same command; an unknown name gets `Command must be one of:
+  configure expiration, deactivate node, replace catalog, replace catalog inputs,
+  replace facts, store report.`
+- `version` must be an integer, and at least the minimum in the table above; an older
+  one gets `Version <v> of command "<command>" is retired. The minimum supported version
+  is <min>.`
+
+`Content-Type` must be `application/json` (parameters such as `charset=utf-8` are fine);
+anything else is `415` with `{"kind": "unsupported-type", "msg": ...}`. `Content-Encoding`
+may be `gzip` or `identity` (or absent); any other encoding is `415` with the plain-text
+body `content encoding <enc> not supported`. A gzipped body without the header is still
+detected by its magic bytes.
+
+### Old request format
+
+A POST without a `command` query parameter is the pre-PuppetDB-3 format: the body is
+`{"command": ..., "version": ..., "payload": {...}}`, the certname is read from
+`payload.certname`, and `payload` is processed as the command body. A body without all
+three keys answers `400` with `... Command was submitted without query parameters (old
+format). The request body must be a JSON map with required keys: command, version,
+payload.`; a payload that is not a map with `... The payload value must be a JSON map.`
+Every other key of the body is treated as a query parameter and validated as above.
+
+### Waiting for completion
+
+`secondsToWaitForCompletion=<seconds>` makes the request block until the command's write
+has run, up to that many seconds, and reports what happened instead of only *accepted*:
+
+| Outcome | Status | Body |
+|---------|--------|------|
+| written | `200` | `{"uuid": ..., "processed": true, "timed_out": false}` |
+| still queued or running when the time is up | `503` | `{"uuid": ..., "processed": false, "timed_out": true}` |
+| the worker raised | `503` | `{"uuid": ..., "processed": true, "timed_out": false, "error": "<message>"}` |
+
+A timed-out command is not withdrawn — it stays queued and is written when its turn
+comes. The wait covers the local write only; the forward to `app_puppetdb_serverurl`
+runs on its own and its result is never reported. Without the parameter (or with `0`)
+the endpoint answers as soon as the command is queued, as before.
+
+### Size limit
+
+`app_puppetdb_maxCommandSize` (bytes, `0` = unlimited) rejects oversized commands with
+`413` and the plain-text body `Command size exceeds max-command-size`. The size is the
+uncompressed payload: the `X-Uncompressed-Length` header when the client sends it (the
+Puppet agent does for gzipped commands), else `Content-Length`, else the decoded body.
 
 Commands for one node must arrive in the order of a Puppet run: `replace_facts` first,
 then `replace_catalog`, then `store_report`. A catalog for a node that has no facts yet

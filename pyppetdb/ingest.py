@@ -22,6 +22,9 @@ from typing import Sequence
 
 DEFAULT_DRAIN_TIMEOUT = 30.0
 
+Job = Callable[[], Awaitable[None]]
+Completion = Optional[asyncio.Future]
+
 
 class IngestQueue:
     def __init__(
@@ -114,10 +117,17 @@ class IngestQueue:
                 f"discarding {queue.qsize()} queued jobs"
             )
 
-    def submit(self, job: Callable[[], Awaitable[None]]) -> bool:
-        return self.submit_all([job])
+    def completion(self) -> asyncio.Future:
+        return asyncio.get_running_loop().create_future()
 
-    def submit_all(self, jobs: Sequence[Callable[[], Awaitable[None]]]) -> bool:
+    def submit(self, job: Job, completion: Completion = None) -> bool:
+        return self.submit_all([job], [completion])
+
+    def submit_all(
+        self,
+        jobs: Sequence[Job],
+        completions: Optional[Sequence[Completion]] = None,
+    ) -> bool:
         if not jobs:
             return True
         if self._stopping:
@@ -127,20 +137,19 @@ class IngestQueue:
         if self._queue.qsize() + len(jobs) > self._queue.maxsize:
             self._reject(count=len(jobs), reason=f"full (size={self._size})")
             return False
-        for job in jobs:
-            self._queue.put_nowait(job)
-        self._accepted += len(jobs)
+        self._put(jobs, completions)
         return True
 
     async def enqueue(
         self,
-        jobs: Sequence[Callable[[], Awaitable[None]]],
+        jobs: Sequence[Job],
         wait_timeout: float = 0.0,
+        completions: Optional[Sequence[Completion]] = None,
     ) -> bool:
         if not jobs:
             return True
         if wait_timeout <= 0:
-            return self.submit_all(jobs)
+            return self.submit_all(jobs, completions)
         if self._stopping:
             self._reject(count=len(jobs), reason="stopping")
             return False
@@ -153,9 +162,7 @@ class IngestQueue:
                 return False
             self._room.clear()
             if self._queue.qsize() + len(jobs) <= self._queue.maxsize:
-                for job in jobs:
-                    self._queue.put_nowait(job)
-                self._accepted += len(jobs)
+                self._put(jobs, completions)
                 if waited:
                     self._waited += 1
                 return True
@@ -172,6 +179,31 @@ class IngestQueue:
             except asyncio.TimeoutError:
                 continue
 
+    def _put(
+        self,
+        jobs: Sequence[Job],
+        completions: Optional[Sequence[Completion]],
+    ) -> None:
+        if completions is None:
+            completions = [None] * len(jobs)
+        for job, completion in zip(jobs, completions):
+            self._queue.put_nowait((job, completion))
+        self._accepted += len(jobs)
+
+    @staticmethod
+    def _without_worker_frame(err: BaseException) -> BaseException:
+        traceback = err.__traceback__
+        return err.with_traceback(traceback.tb_next if traceback else None)
+
+    @classmethod
+    def _settle(cls, completion: Completion, err: Optional[BaseException]) -> None:
+        if completion is None or completion.done():
+            return
+        if err is None:
+            completion.set_result(None)
+        else:
+            completion.set_exception(cls._without_worker_frame(err))
+
     def _reject(self, count: int, reason: str) -> None:
         previous = self._dropped
         self._dropped += count
@@ -184,15 +216,20 @@ class IngestQueue:
     async def _worker(self, number: int) -> None:
         while True:
             queue = self._queue
-            job = await queue.get()
+            job, completion = await queue.get()
             if self._room is not None:
                 self._room.set()
             try:
                 await job()
             except asyncio.CancelledError:
+                if completion is not None:
+                    completion.cancel()
                 raise
             except Exception as err:
                 self._failed += 1
                 self.log.error(f"Ingest job failed: {err}")
+                self._settle(completion, err)
+            else:
+                self._settle(completion, None)
             finally:
                 queue.task_done()

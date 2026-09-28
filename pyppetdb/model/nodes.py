@@ -39,6 +39,7 @@ filter_literal = Literal[
     "disabled",
     "environment",
     "facts",
+    "facts_expiration.expire",
     "facts_inject",
     "report",
     "report.catalog_uuid",
@@ -114,6 +115,11 @@ class NodeGetCatalogInputs(BaseModel):
     catalog_uuid: Optional[str] = None
     producer_timestamp: Optional[datetime] = None
     inputs: Optional[List[List[str]]] = None
+
+
+class NodeFactsExpiration(BaseModel):
+    expire: bool
+    updated: Optional[datetime] = None
 
 
 class NodeGetReportLogs(BaseModel):
@@ -207,6 +213,7 @@ class NodeGet(BaseModel):
     disabled: Optional[bool] = None
     environment: Optional[str] = None
     facts: Optional[Dict] = None
+    facts_expiration: Optional[NodeFactsExpiration] = None
     facts_hash: Optional[str] = None
     package_inventory: Optional[List[List[str]]] = None
     producer: Optional[str] = None
@@ -245,6 +252,7 @@ class NodePutInternal(BaseModel):
     disabled: Optional[bool] = False
     environment: Optional[str] = None
     facts: Optional[Dict] = None
+    facts_expiration: Optional[NodeFactsExpiration] = None
     facts_index: Optional[List[Dict[str, Any]]] = None
     facts_hash: Optional[str] = None
     package_inventory: Optional[List[List[str]]] = None

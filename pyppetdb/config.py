@@ -115,6 +115,7 @@ class ConfigAppPuppetdb(BaseModel):
     queryTimeout: int = 600
     queryTimeoutMax: int = 0
     maxPageSize: int = 10000
+    maxCommandSize: int = 0
 
     @field_validator("trustedCns", mode="before")
     @classmethod

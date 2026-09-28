@@ -20,12 +20,15 @@ import gzip
 import logging
 import ssl
 import time
+from typing import Annotated
 from typing import Optional
 import uuid
 
 from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.responses import PlainTextResponse
 import httpx
 import json
 
@@ -62,11 +65,139 @@ from pyppetdb.model.nodes_catalogs import NodeCatalogPostInternal
 from pyppetdb.model.nodes_reports import NodeReportPostInternal
 
 GZIP_MAGIC = b"\x1f\x8b"
+COMMAND_PATH = "/pdb/cmd/v1"
+SUPPORTED_CONTENT_ENCODINGS = ("gzip", "identity")
+VALID_PARAMS = frozenset(
+    {
+        "checksum",
+        "secondsToWaitForCompletion",
+        "certname",
+        "command",
+        "version",
+        "producer-timestamp",
+    }
+)
+REQUIRED_PARAMS = ("certname", "version", "command")
+PROXIED_PARAMS = ("certname", "command", "version", "producer-timestamp")
+MIN_SUPPORTED_COMMANDS = {
+    "configure expiration": 1,
+    "replace catalog": 6,
+    "replace catalog inputs": 1,
+    "replace facts": 4,
+    "store report": 5,
+    "deactivate node": 3,
+}
+VALID_COMMANDS_STR = ", ".join(sorted(MIN_SUPPORTED_COMMANDS))
+OLD_FORMAT_MSG = "Command was submitted without query parameters (old format)."
+BODY_NOT_A_MAP_MSG = "The request body must be a JSON map."
 
 
 def _decode_command_body(body: bytes, is_gzip: bool) -> tuple:
     raw = gzip.decompress(body) if is_gzip else body
     return raw, json.loads(raw)
+
+
+def _pr_str(value) -> str:
+    if value is None:
+        return "nil"
+    if isinstance(value, str):
+        return json.dumps(value)
+    return str(value)
+
+
+def _normalize_command_name(command):
+    if isinstance(command, str):
+        return command.replace("_", " ")
+    return command
+
+
+def _parse_version(version):
+    if isinstance(version, str):
+        try:
+            return int(version.strip())
+        except ValueError:
+            return version
+    return version
+
+
+def _invalid_message(command, certname, *reasons: str) -> str:
+    return " ".join(
+        [
+            f"Command {_pr_str(command)} for certname {_pr_str(certname)} is invalid.",
+            *reasons,
+        ]
+    )
+
+
+def _validate_params(params: dict) -> Optional[str]:
+    command = params.get("command")
+    certname = params.get("certname")
+    version = params.get("version")
+    missing = [name for name in REQUIRED_PARAMS if name not in params]
+    if missing:
+        return _invalid_message(
+            command,
+            certname,
+            f"Command is missing required parameters: {', '.join(missing)}.",
+        )
+    invalid = sorted(set(params) - VALID_PARAMS)
+    if invalid:
+        return _invalid_message(
+            command,
+            certname,
+            f"Command has invalid parameters: {', '.join(invalid)}.",
+        )
+    if not isinstance(certname, str) or not certname.strip():
+        return _invalid_message(
+            command, certname, "Certname must be a non-empty string."
+        )
+    minimum = MIN_SUPPORTED_COMMANDS.get(command)
+    if minimum is None:
+        return _invalid_message(
+            command, certname, f"Command must be one of: {VALID_COMMANDS_STR}."
+        )
+    if isinstance(version, bool) or not isinstance(version, int):
+        return _invalid_message(command, certname, "Version must be a valid integer.")
+    if version < minimum:
+        return _invalid_message(
+            command,
+            certname,
+            f"Version {version} of command {_pr_str(command)} is retired.",
+            f"The minimum supported version is {minimum}.",
+        )
+    return None
+
+
+def _bad_request(message: str) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"error": message})
+
+
+def _too_large() -> PlainTextResponse:
+    return PlainTextResponse(
+        status_code=413, content="Command size exceeds max-command-size"
+    )
+
+
+def _declared_length(headers, log: logging.Logger) -> Optional[int]:
+    uncompressed = headers.get("x-uncompressed-length")
+    if uncompressed is not None:
+        try:
+            return int(uncompressed)
+        except ValueError:
+            log.warning(
+                f"The X-Uncompressed-Length value {uncompressed} cannot be converted to an integer."
+            )
+    content_length = headers.get("content-length")
+    if content_length is not None:
+        try:
+            return int(content_length)
+        except ValueError:
+            return None
+    return None
+
+
+def _query_param_names(request: Request) -> set:
+    return set(request.query_params.keys())
 
 
 def _catalog_documents(
@@ -211,19 +342,100 @@ class ControllerPdbCmdV1:
     async def create(
         self,
         request: Request,
-        certname=Query(),
-        command=Query(),
-        producer_timestamp=Query(default=None, alias="producer-timestamp"),
-        version=Query(),
+        certname: Annotated[Optional[str], Query()] = None,
+        command: Annotated[Optional[str], Query()] = None,
+        producer_timestamp: Annotated[
+            Optional[str], Query(alias="producer-timestamp")
+        ] = None,
+        version: Annotated[Optional[str], Query()] = None,
+        checksum: Annotated[Optional[str], Query()] = None,
+        seconds_to_wait: Annotated[
+            Optional[str], Query(alias="secondsToWaitForCompletion")
+        ] = None,
     ):
         await self.authorize_client_cert.require_cn_trusted(request)
+        headers = request.headers
+        max_size = self.config.app.puppetdb.maxCommandSize or 0
+        declared = _declared_length(headers, self.log) if max_size else None
+        if declared is not None and declared > max_size:
+            return _too_large()
+
+        encoding = headers.get("content-encoding", "").strip().lower()
+        if encoding and encoding not in SUPPORTED_CONTENT_ENCODINGS:
+            return PlainTextResponse(
+                status_code=415,
+                content=f"content encoding {encoding} not supported",
+            )
+
+        content_type = headers.get("content-type")
+        media_type = (content_type or "").split(";", 1)[0].strip().lower()
+        if media_type != "application/json":
+            shown = "null" if content_type is None else content_type
+            return JSONResponse(
+                status_code=415,
+                content={
+                    "kind": "unsupported-type",
+                    "msg": (
+                        f"content-type {shown} is not a supported type "
+                        f"for request of type :post at {COMMAND_PATH}"
+                    ),
+                },
+            )
+
         body = await request.body()
-        is_gzip = request.headers.get(
-            "content-encoding", ""
-        ).lower() == "gzip" or body.startswith(GZIP_MAGIC)
-        body_json_bytes, data_decomp = await asyncio.to_thread(
-            _decode_command_body, body, is_gzip
-        )
+        is_gzip = encoding == "gzip" or body.startswith(GZIP_MAGIC)
+        try:
+            body_json_bytes, data_decomp = await asyncio.to_thread(
+                _decode_command_body, body, is_gzip
+            )
+        except (ValueError, OSError, EOFError):
+            body_json_bytes, data_decomp = body, None
+
+        if max_size and declared is None and len(body_json_bytes) > max_size:
+            return _too_large()
+
+        if command is None:
+            normalized = self._normalize_old_format(data_decomp)
+            if isinstance(normalized, JSONResponse):
+                return normalized
+            params, data_decomp = normalized
+            body_json_bytes = json.dumps(data_decomp).encode()
+        else:
+            params = {
+                "certname": certname,
+                "command": command,
+                "version": version,
+                "producer-timestamp": producer_timestamp,
+                "checksum": checksum,
+                "secondsToWaitForCompletion": seconds_to_wait,
+            }
+            params = {k: v for k, v in params.items() if v is not None}
+            for name in _query_param_names(request) - VALID_PARAMS:
+                params[name] = request.query_params[name]
+
+        params["command"] = _normalize_command_name(params.get("command"))
+        if "version" in params:
+            params["version"] = _parse_version(params["version"])
+        error = _validate_params(params)
+        if error is not None:
+            return _bad_request(error)
+        certname = params["certname"]
+        command = params["command"]
+        if not isinstance(data_decomp, dict):
+            return _bad_request(_invalid_message(command, certname, BODY_NOT_A_MAP_MSG))
+
+        wait_seconds = None
+        if params.get("secondsToWaitForCompletion") is not None:
+            try:
+                wait_seconds = float(params["secondsToWaitForCompletion"])
+            except (TypeError, ValueError):
+                return _bad_request(
+                    _invalid_message(
+                        command,
+                        certname,
+                        "secondsToWaitForCompletion must be a valid number.",
+                    )
+                )
 
         _datetime = datetime.now(UTC)
         start_time_ns = time.perf_counter_ns()
@@ -233,7 +445,7 @@ class ControllerPdbCmdV1:
             "environment": data_decomp.get("environment"),
         }
         producer_timestamp = parse_wire_timestamp(
-            data_decomp.get("producer_timestamp") or producer_timestamp
+            data_decomp.get("producer_timestamp") or params.get("producer-timestamp")
         )
         if producer_timestamp:
             result["producer_timestamp"] = producer_timestamp
@@ -241,7 +453,7 @@ class ControllerPdbCmdV1:
             result["producer"] = data_decomp["producer"]
 
         job = None
-        if command == "replace_facts":
+        if command == "replace facts":
             result["change_facts"] = _datetime
             facts = PuppetDBFacts(**data_decomp)
             result["facts"] = facts.values
@@ -257,7 +469,7 @@ class ControllerPdbCmdV1:
                 facts=facts,
                 base=result,
             )
-        elif command == "replace_catalog":
+        elif command == "replace catalog":
             result["change_catalog"] = _datetime
             catalog = await asyncio.to_thread(catalog_payload, data_decomp)
             job = functools.partial(
@@ -268,7 +480,7 @@ class ControllerPdbCmdV1:
                 base=result,
                 created=_datetime,
             )
-        elif command == "replace_catalog_inputs":
+        elif command == "replace catalog inputs":
             result["catalog_inputs"] = {
                 "catalog_uuid": data_decomp.get("catalog_uuid"),
                 "producer_timestamp": producer_timestamp,
@@ -277,12 +489,26 @@ class ControllerPdbCmdV1:
             job = functools.partial(
                 self._job_update_node, node_id=certname, base=result
             )
-        elif command == "deactivate_node":
+        elif command == "deactivate node":
             result["disabled"] = True
             job = functools.partial(
                 self._job_update_node, node_id=certname, base=result
             )
-        elif command == "store_report":
+        elif command == "configure expiration":
+            expire = data_decomp.get("expire")
+            expire = expire if isinstance(expire, dict) else {}
+            result = {
+                "change_last": _datetime,
+                "disabled": None,
+                "facts_expiration": {
+                    "expire": bool(expire.get("facts", False)),
+                    "updated": _datetime,
+                },
+            }
+            job = functools.partial(
+                self._job_update_node, node_id=certname, base=result
+            )
+        elif command == "store report":
             result["change_report"] = _datetime
             result["report"] = await asyncio.to_thread(
                 report_payload, {**data_decomp, "certname": certname}
@@ -296,20 +522,28 @@ class ControllerPdbCmdV1:
             )
 
         jobs = []
+        completions = []
+        completion = None
         if job is not None:
+            if wait_seconds is not None and wait_seconds > 0:
+                completion = self.ingest_queue.completion()
             jobs.append(job)
+            completions.append(completion)
         if self.config.app.puppetdb.serverurl:
             jobs.append(
                 functools.partial(
                     self._job_proxy_to_puppetdb,
-                    params=dict(request.query_params),
+                    params=self._proxy_params(params),
                     headers=self._proxy_headers(request),
                     body=body_json_bytes,
                 )
             )
+            completions.append(None)
 
         if not await self.ingest_queue.enqueue(
-            jobs, wait_timeout=self.config.app.puppetdb.writeQueueWaitTimeout
+            jobs,
+            wait_timeout=self.config.app.puppetdb.writeQueueWaitTimeout,
+            completions=completions,
         ):
             raise IngestOverloaded()
 
@@ -317,7 +551,84 @@ class ControllerPdbCmdV1:
         duration_ms = (stop_time_ns - start_time_ns) / 1_000_000
         self.log.info(f"create {command} took {duration_ms:.2f} ms")
 
-        return {"uuid": str(uuid.uuid4())}
+        command_uuid = str(uuid.uuid4())
+        if completion is not None:
+            return await self._await_completion(
+                completion=completion,
+                command_uuid=command_uuid,
+                timeout=wait_seconds,
+            )
+        return {"uuid": command_uuid}
+
+    def _normalize_old_format(self, decoded):
+        self.log.warning(
+            "Unable to stream command posted without parameters (loading into RAM)"
+        )
+        decoded = decoded if isinstance(decoded, dict) else {}
+        command = decoded.get("command")
+        version = decoded.get("version")
+        payload = decoded.get("payload")
+        certname = payload.get("certname") if isinstance(payload, dict) else None
+        if command is None or version is None or payload is None:
+            return _bad_request(
+                _invalid_message(
+                    command,
+                    certname,
+                    OLD_FORMAT_MSG,
+                    "The request body must be a JSON map with required keys: command, version, payload.",
+                )
+            )
+        if not isinstance(payload, dict):
+            return _bad_request(
+                _invalid_message(
+                    command,
+                    certname,
+                    OLD_FORMAT_MSG,
+                    "The payload value must be a JSON map.",
+                )
+            )
+        params = {k: v for k, v in decoded.items() if k != "payload"}
+        params["certname"] = certname
+        params = {k: v for k, v in params.items() if v is not None}
+        return params, payload
+
+    @staticmethod
+    async def _await_completion(
+        completion: asyncio.Future,
+        command_uuid: str,
+        timeout: float,
+    ) -> JSONResponse:
+        try:
+            await asyncio.wait_for(asyncio.shield(completion), timeout=timeout)
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "uuid": command_uuid,
+                    "processed": False,
+                    "timed_out": True,
+                },
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "uuid": command_uuid,
+                    "processed": True,
+                    "timed_out": False,
+                    "error": str(err),
+                },
+            )
+        return JSONResponse(
+            status_code=200,
+            content={
+                "uuid": command_uuid,
+                "processed": True,
+                "timed_out": False,
+            },
+        )
 
     async def _job_update_node(self, node_id: str, base: dict) -> None:
         await self.crud_nodes.update(
@@ -330,7 +641,7 @@ class ControllerPdbCmdV1:
         await self._propagate_node_state(node_id=node_id, base=base)
 
     async def _propagate_node_state(self, node_id: str, base: dict) -> None:
-        if "disabled" not in base:
+        if base.get("disabled") is None:
             return
         disabled = bool(base["disabled"])
         await self.crud_nodes_reports.set_node_disabled(
@@ -509,6 +820,12 @@ class ControllerPdbCmdV1:
             catalog=catalog_metadata(catalog),
         )
         return payload, self.crud_nodes_catalogs.encode_content(catalog)
+
+    @staticmethod
+    def _proxy_params(params: dict) -> dict:
+        forwarded = {k: v for k, v in params.items() if k in PROXIED_PARAMS}
+        forwarded["version"] = str(forwarded["version"])
+        return forwarded
 
     @staticmethod
     def _proxy_headers(request: Request) -> dict:

@@ -295,6 +295,99 @@ class TestIngestQueue(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(await queue.enqueue([job], wait_timeout=5))
         self.assertEqual(queue.stats["dropped"], 1)
 
+    async def test_completion_resolves_when_the_job_has_run(self):
+        queue = self.queue(workers=1)
+        seen = []
+
+        async def job():
+            seen.append(True)
+
+        completion = queue.completion()
+        self.assertTrue(await queue.enqueue([job], completions=[completion]))
+        await asyncio.wait_for(completion, timeout=2)
+        self.assertEqual(seen, [True])
+        await queue.stop()
+
+    async def test_completion_carries_the_job_exception(self):
+        queue = self.queue(workers=1)
+
+        async def boom():
+            raise RuntimeError("nope")
+
+        completion = queue.completion()
+        with self.assertLogs("test", level="ERROR"):
+            queue.submit(boom, completion)
+            with self.assertRaises(RuntimeError) as ctx:
+                await asyncio.wait_for(completion, timeout=2)
+        self.assertEqual(str(ctx.exception), "nope")
+        self.assertEqual(queue.stats["failed"], 1)
+        await queue.stop()
+
+    async def test_completions_are_per_job(self):
+        queue = self.queue(workers=1)
+        seen = []
+
+        def make(value):
+            async def job():
+                seen.append(value)
+
+            return job
+
+        second = queue.completion()
+        self.assertTrue(
+            await queue.enqueue([make(1), make(2), make(3)], completions=[None, second, None])
+        )
+        await asyncio.wait_for(second, timeout=2)
+        self.assertEqual(seen[:2], [1, 2])
+        await queue.stop()
+        self.assertEqual(seen, [1, 2, 3])
+
+    async def test_completion_waits_for_room_like_any_job(self):
+        queue = self.queue(size=1, workers=1)
+        release = asyncio.Event()
+        completion = queue.completion()
+
+        async def job():
+            pass
+
+        await self._fill(queue, release)
+        waiter = asyncio.create_task(
+            queue.enqueue([job], wait_timeout=5, completions=[completion])
+        )
+        await asyncio.sleep(0.05)
+        self.assertFalse(completion.done())
+        release.set()
+        self.assertTrue(await waiter)
+        await asyncio.wait_for(completion, timeout=2)
+        await queue.stop()
+
+    async def test_a_settled_completion_is_left_alone(self):
+        queue = self.queue(workers=1)
+        completion = queue.completion()
+        completion.cancel()
+
+        async def job():
+            pass
+
+        queue.submit(job, completion)
+        await queue.stop()
+        self.assertTrue(completion.cancelled())
+
+    async def test_completion_is_cancelled_when_the_running_job_is_cancelled(self):
+        queue = IngestQueue(
+            log=logging.getLogger("test"), size=10, workers=1, drain_timeout=0.05
+        )
+        hanging = asyncio.Event()
+        completion = queue.completion()
+
+        async def hang():
+            await hanging.wait()
+
+        queue.submit(hang, completion)
+        with self.assertLogs("test", level="ERROR"):
+            await queue.stop()
+        self.assertTrue(completion.cancelled())
+
 
 if __name__ == "__main__":
     unittest.main()
