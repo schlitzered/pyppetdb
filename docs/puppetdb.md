@@ -84,7 +84,10 @@ has run, up to that many seconds, and reports what happened instead of only *acc
 |---------|--------|------|
 | written | `200` | `{"uuid": ..., "processed": true, "timed_out": false}` |
 | still queued or running when the time is up | `503` | `{"uuid": ..., "processed": false, "timed_out": true}` |
-| the worker raised | `503` | `{"uuid": ..., "processed": true, "timed_out": false, "error": "<message>"}` |
+| the worker raised | `503` | `{"uuid": ..., "processed": true, "timed_out": false, "error": "Command processing failed, see the server log for details."}` |
+
+The error body is deliberately generic — the exception itself is logged with the command
+uuid, so internal details never reach the client.
 
 A timed-out command is not withdrawn — it stays queued and is written when its turn
 comes. The wait covers the local write only; the forward to `app_puppetdb_serverurl`
