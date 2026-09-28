@@ -54,6 +54,7 @@ from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
 from pyppetdb.helpers.puppetdb import normalise_package_inventory
 from pyppetdb.helpers.puppetdb import parse_wire_timestamp
 from pyppetdb.helpers.puppetdb import report_payload
+from pyppetdb.helpers.puppetdb import report_summary
 from pyppetdb.helpers.puppetdb import stable_hash
 from pyppetdb.errors import IngestOverloaded
 from pyppetdb.errors import ResourceNotFound
@@ -785,7 +786,11 @@ class ControllerPdbCmdV1:
         )
         await self._job_update_node(
             node_id=node_id,
-            base=base if latest else _without_report_state(base),
+            base=(
+                dict(base, report=report_summary(base["report"]))
+                if latest
+                else _without_report_state(base)
+            ),
         )
         if latest:
             await self.crud_nodes_events.set_latest(node_id=node_id, latest=False)

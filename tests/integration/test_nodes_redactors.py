@@ -118,6 +118,32 @@ class TestNodesRedactors(IntegrationTestBase):
         self.assertEqual(event["old_value"], "old_XXXXX")
         self.assertEqual(event["message"], "changed to XXXXX")
 
+        stored = self._db["nodes"].find_one({"id": node_id})
+        self.assertEqual(stored["report"]["status"], "changed")
+        self.assertIsNone(stored["report"].get("resources"))
+        self.assertIsNone(stored["report"].get("logs"))
+
+        for path, params in (
+            (f"/api/v1/nodes/{node_id}", {}),
+            ("/api/v1/nodes", {"node_id": f"^{node_id}$"}),
+            (f"/api/v1/nodes/{node_id}", {"fields": ["id", "report.resources"]}),
+        ):
+            response = self.client.get(path, params=params, headers=self._auth_headers())
+            self.assertEqual(response.status_code, 200, path)
+            body = response.json()
+            node = body["result"][0] if "result" in body else body
+            event = node["report"]["resources"][0]["events"][0]
+            self.assertEqual(event["new_value"], "new_XXXXX", path)
+            if "logs" in node["report"]:
+                self.assertEqual(node["report"]["logs"][0]["message"], "Applied secret XXXXX")
+
+        response = self.client.get(
+            f"/api/v1/nodes/{node_id}",
+            params={"fields": ["id", "report.status"]},
+            headers=self._auth_headers(),
+        )
+        self.assertEqual(response.json()["report"], {"status": "changed"})
+
     def test_catalog_redaction(self):
         node_id = "test-node-catalog-redactor"
         secret_value = "CATALOG_SECRET"

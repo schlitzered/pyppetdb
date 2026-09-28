@@ -42,7 +42,9 @@ from pyppetdb.model.common import filter_complex_search
 from pyppetdb.model.nodes import filter_list
 from pyppetdb.model.nodes import filter_literal
 from pyppetdb.model.nodes import sort_literal
+from pyppetdb.helpers.puppetdb import REPORT_DETAIL_FIELDS
 from pyppetdb.model.nodes import NodeGet
+from pyppetdb.model.nodes import NodeGetReport
 from pyppetdb.model.nodes import NodeGetMulti
 from pyppetdb.model.nodes import NodePut
 from pyppetdb.model.nodes import NodePutInternal
@@ -273,6 +275,8 @@ class ControllerApiV1Nodes:
             )
             node.catalog_cached = node_id in cached_node_ids
 
+        await self._attach_report_details([node], fields)
+
         return node
 
     async def distinct_fact_names(
@@ -400,7 +404,29 @@ class ControllerApiV1Nodes:
             for node in result.result:
                 node.catalog_cached = node.id in cached_node_ids
 
+        await self._attach_report_details(result.result, fields)
         return result
+
+    async def _attach_report_details(self, nodes: list, fields) -> None:
+        parts = tuple(
+            part
+            for part in REPORT_DETAIL_FIELDS
+            if "report" in fields or f"report.{part}" in fields
+        )
+        targets = [node for node in nodes if node.id and node.report is not None]
+        if not parts or not targets:
+            return
+        details = await self.crud_nodes_reports.latest_details(
+            node_ids=[node.id for node in targets], parts=parts
+        )
+        for node in targets:
+            found = details.get(node.id, {})
+            merged = node.report.model_dump(exclude_unset=True)
+            for part in parts:
+                merged.pop(part, None)
+                if part in found:
+                    merged[part] = found[part]
+            node.report = NodeGetReport(**merged)
 
     async def update(
         self,

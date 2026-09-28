@@ -578,3 +578,12 @@ def _as_string(value) -> Optional[str]:
     if value is None:
         return None
     return str(value)
+
+
+REPORT_DETAIL_FIELDS = ("logs", "resources")
+
+
+def report_summary(report: dict) -> dict:
+    return {
+        key: value for key, value in report.items() if key not in REPORT_DETAIL_FIELDS
+    }

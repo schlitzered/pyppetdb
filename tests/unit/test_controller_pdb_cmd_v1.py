@@ -534,6 +534,11 @@ class TestControllerPdbCmdV1Unit(unittest.IsolatedAsyncioTestCase):
         self.mock_nodes.update.assert_called_once()
         self.mock_reports.create_latest.assert_called_once()
         self.mock_catalogs.drop_created_no_report_ttl.assert_called_once()
+        node_report = self.mock_nodes.update.call_args.kwargs["payload"].report
+        self.assertIsNone(node_report.resources)
+        self.assertIsNone(node_report.logs)
+        report_payload = self.mock_reports.create_latest.call_args.kwargs["payload"]
+        self.assertEqual(len(report_payload.report.resources), 1)
 
     async def test_store_report_that_is_not_latest_leaves_the_node_report_state(self):
         self.mock_nodes.update = AsyncMock()
