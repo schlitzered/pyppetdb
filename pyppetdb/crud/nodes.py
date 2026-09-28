@@ -67,9 +67,7 @@ class CrudNodes(CrudMongo):
                     [("id", pymongo.ASCENDING)], unique=True, name="idx_id"
                 ),
                 pymongo.IndexModel(
-                    [("disabled", pymongo.ASCENDING)],
-                    name="idx_disabled",
-                    partialFilterExpression={"disabled": True},
+                    [("disabled", pymongo.ASCENDING)], name="idx_disabled"
                 ),
                 pymongo.IndexModel(
                     [("node_groups", pymongo.ASCENDING)], name="idx_node_groups"

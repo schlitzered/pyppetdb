@@ -432,11 +432,11 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         payload = self.crud._create.call_args.kwargs["payload"]
         self.assertIn({"p": "osfamily", "v": "Debian"}, payload["facts_index"])
 
-    def test_disabled_index_only_holds_disabled_nodes(self):
+    def test_disabled_index_covers_active_counts(self):
         model = next(
             index for index in self.crud._indices if index.document["name"] == "idx_disabled"
         )
-        self.assertEqual(model.document["partialFilterExpression"], {"disabled": True})
+        self.assertNotIn("partialFilterExpression", model.document)
 
     def test_facts_index_is_indexed(self):
         names = {index.document["name"] for index in self.crud._indices}
