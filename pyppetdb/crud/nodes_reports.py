@@ -206,6 +206,7 @@ class CrudNodesReports(CrudMongo):
         data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
+        data["created"] = _id
 
         if return_none:
             await self._create_base(payload=data)
@@ -317,6 +318,7 @@ class CrudNodesReports(CrudMongo):
         data = self._secret_manager.redact(data)
         data["id"] = _id
         data["node_id"] = node_id
+        data["created"] = _id
         data["disabled"] = False
         data["_version"] = 1
         try:

@@ -63,7 +63,7 @@ Controls how historical catalogs/reports are retained.
 | `app_main_storeHistory_catalog` | `true` | Store historical catalogs. |
 | `app_main_storeHistory_catalogUnchanged` | `false` | Also store catalogs that did not change. |
 | `app_main_storeHistory_catalogNoReportTtl` | `3600` | TTL (seconds) for a stored catalog that never received a matching report. |
-| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds) for stored history (default 90 days). |
+| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds) for stored history (default 90 days). Reports and their events expire by receive time; reports stored before the `created` field existed are never expired. |
 
 ## Puppet Proxy (`app_puppet_`)
 

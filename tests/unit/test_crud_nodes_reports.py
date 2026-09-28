@@ -178,6 +178,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(latest)
         self.assertEqual(session.transactions, 1)
+        self.assertEqual(self.mock_coll.insert_one.call_args.args[0]["created"], now)
         self.mock_coll.update_many.assert_called_once_with(
             filter={"node_id": "node1", "report.latest": True},
             update={"$set": {"report.latest": False}},
