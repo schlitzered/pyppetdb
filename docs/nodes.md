@@ -26,6 +26,7 @@ For each node pyppetdb stores:
 | `POST` | `/api/v1/nodes/{node_id}` | Create a node. |
 | `PUT` | `/api/v1/nodes/{node_id}` | Update a node. |
 | `DELETE` | `/api/v1/nodes/{node_id}` | Delete a node. |
+| `GET` | `/api/v1/nodes/_distinct_fact_names` | List the distinct fact names in dotted form (`os.release.major`), leaves only, array indices dropped; limited to the caller's node groups and filterable like the node search. |
 | `GET` | `/api/v1/nodes/_distinct_fact_values` | List the distinct values observed for a given fact. |
 | `GET` | `/api/v1/nodes/_exported_resources` | Query exported resources across nodes. |
 | `DELETE` | `/api/v1/nodes/_catalog_cache_wipe` | Invalidate cached catalogs (optionally scoped by facts). |

@@ -338,6 +338,79 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             [{"p": "x", "v": "ab"}],
         )
 
+    async def test_facts_write_carries_the_fact_paths(self):
+        self.crud._update = AsyncMock(return_value={"id": "node1"})
+        await self.crud.update(
+            _id="node1",
+            payload=NodePutInternal(facts={"os": {"family": "Debian"}, "cpus": [4]}),
+            fields=[],
+            return_none=True,
+        )
+        payload = self.crud._update.call_args.kwargs["payload"]
+        self.assertEqual(
+            payload["fact_paths"],
+            ['[["cpus",0],"integer"]', '[["os","family"],"string"]'],
+        )
+
+    async def test_a_write_without_facts_has_no_fact_paths(self):
+        self.crud._update = AsyncMock(return_value={"id": "node1"})
+        await self.crud.update(
+            _id="node1",
+            payload=NodePutInternal(disabled=True),
+            fields=[],
+            return_none=True,
+        )
+        payload = self.crud._update.call_args.kwargs["payload"]
+        self.assertIsNone(payload["fact_paths"])
+
+    def test_fact_paths_are_indexed(self):
+        model = next(
+            index
+            for index in self.crud._indices
+            if index.document["name"] == "idx_fact_paths"
+        )
+        self.assertEqual(list(model.document["key"].items()), [("fact_paths", 1)])
+
+    async def test_distinct_fact_names_unscoped_uses_distinct(self):
+        self.mock_coll.distinct = AsyncMock(
+            return_value=[
+                '[["os","release","major"],"string"]',
+                '[["processors","models",0],"string"]',
+                '[["processors","models",1],"string"]',
+                '[["uptime"],"integer"]',
+            ]
+        )
+        result = await self.crud.distinct_fact_names()
+        self.mock_coll.distinct.assert_awaited_once_with("fact_paths")
+        self.mock_coll.aggregate.assert_not_called()
+        self.assertEqual(
+            result.result, ["os.release.major", "processors.models", "uptime"]
+        )
+        self.assertEqual(result.meta.result_size, 3)
+
+    async def test_distinct_fact_names_scoped_to_node_groups(self):
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(
+            return_value=[{"_id": '[["kernel"],"string"]'}]
+        )
+        self.mock_coll.aggregate.return_value = mock_cursor
+        self.mock_coll.distinct = AsyncMock()
+        result = await self.crud.distinct_fact_names(
+            user_node_groups=["g1"], environment="prod"
+        )
+        self.mock_coll.distinct.assert_not_called()
+        pipeline = self.mock_coll.aggregate.call_args.args[0]
+        self.assertEqual(
+            pipeline,
+            [
+                {"$match": {"node_groups": {"$in": ["g1"]}, "environment": "prod"}},
+                {"$group": {"_id": "$fact_paths"}},
+                {"$unwind": "$_id"},
+                {"$group": {"_id": "$_id"}},
+            ],
+        )
+        self.assertEqual(result.result, ["kernel"])
+
     async def test_a_write_without_facts_has_no_facts_index(self):
         self.crud._update = AsyncMock(return_value={"id": "node1"})
         await self.crud.update(

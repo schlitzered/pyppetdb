@@ -151,6 +151,7 @@ def build_resource_params(resources, max_value_len: int = RESOURCE_PARAM_MAX_VAL
 
 
 FACTS_INDEX_FIELD = "facts_index"
+FACT_PATHS_FIELD = "fact_paths"
 FACTS_INDEX_MAX_VALUE_LEN = 256
 FACTS_INDEX_DEPTH = 3
 
@@ -277,6 +278,61 @@ def _add_fact_entry(entries: list, seen: set, spec: FactsIndexSpec, path: str, v
         return
     seen.add(key)
     entries.append({"p": path, "v": value})
+
+
+def walk_fact(value, path: list):
+    if isinstance(value, dict):
+        if not value:
+            yield list(path), value
+            return
+        for key, item in value.items():
+            yield from walk_fact(item, path + [key])
+        return
+    if isinstance(value, list):
+        if not value:
+            yield list(path), value
+            return
+        for index, item in enumerate(value):
+            yield from walk_fact(item, path + [index])
+        return
+    yield list(path), value
+
+
+def fact_value_type(value) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "string"
+    if value is None:
+        return "null"
+    return "json"
+
+
+def encode_fact_path(path: list, value_type: str) -> str:
+    return json.dumps([path, value_type], separators=(",", ":"), ensure_ascii=False)
+
+
+def decode_fact_path(entry: str) -> tuple:
+    path, value_type = json.loads(entry)
+    return path, value_type
+
+
+def build_fact_paths(facts) -> list:
+    if not isinstance(facts, dict):
+        return []
+    entries = set()
+    for name, value in facts.items():
+        for path, leaf in walk_fact(value, [name]):
+            entries.add(encode_fact_path(path, fact_value_type(leaf)))
+    return sorted(entries)
+
+
+def dotted_fact_name(path: list) -> str:
+    return ".".join(str(part) for part in path if not isinstance(part, int))
 
 
 def _param_index(params: dict, max_value_len: int) -> list:

@@ -101,6 +101,14 @@ compiles the AST query language into a `$match` document, `engine.py` assembles 
 aggregation pipeline, and `paging.py` and `event_counts.py` cover the remaining query parameters.
 Entities whose rows cannot be produced by an aggregation pipeline (`fact-paths`,
 `fact-contents`) are expanded in Python and filtered with the evaluator in `matcher.py`.
+`fact-contents` walks the facts of every matching node; `fact-paths` reads the few hundred
+distinct entries of the `fact_paths` array that every fact write stores on the node
+(`[path, type]` as compact JSON strings, indexed by `idx_fact_paths`), which MongoDB answers
+from the index alone. The same field serves `/api/v1/nodes/_distinct_fact_names`, and it
+narrows `fact-contents`: the `name`/`path` clauses of a query are evaluated against the
+distinct paths first, so only the facts that can contain a match are read and walked. A
+`fact-contents` page ordered by `certname` reads the nodes in `id` order and stops as soon as
+the page is complete instead of expanding every node.
 
 The compiled `$match` is written in PuppetDB column names and therefore has to sit behind
 the `$project` that renames storage paths into columns — which would leave MongoDB unable

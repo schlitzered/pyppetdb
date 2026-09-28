@@ -467,6 +467,12 @@ def _ms(value):
     return "–" if value is None else f"{value:,.0f} ms".replace(",", "\u202f")
 
 
+def _pace(mine, other):
+    if mine is None or other is None or round(mine) == round(other):
+        return ""
+    return "fast" if mine < other else "slow"
+
+
 def _verdict(report):
     if report.error:
         return "error", report.error
@@ -506,8 +512,8 @@ def render_html(reports, args) -> str:
         f'<div class="tile ok"><b>{counts["ok"]}</b><span>identisch</span></div>'
         f'<div class="tile diff"><b>{counts["diff"]}</b><span>abweichend</span></div>'
         f'<div class="tile error"><b>{counts["error"]}</b><span>Fehler</span></div>'
-        f'<div class="tile"><b>{_ms(sum_a)}</b><span>Summe A</span></div>'
-        f'<div class="tile"><b>{_ms(sum_b)}</b><span>Summe B</span></div>'
+        f'<div class="tile"><b class="{_pace(sum_a, sum_b)}">{_ms(sum_a)}</b><span>Summe A</span></div>'
+        f'<div class="tile"><b class="{_pace(sum_b, sum_a)}">{_ms(sum_b)}</b><span>Summe B</span></div>'
         f'<div class="tile"><b>{faster}/{timed}</b><span>A schneller</span></div>'
         '</div></header>'
     )
@@ -520,7 +526,8 @@ def render_html(reports, args) -> str:
             f'<tr class="{kind}"><td><a href="#case-{index}">{escape(report.name)}</a></td>'
             f'<td class="muted">{escape(report.group or "")}</td>'
             f'<td><span class="pill {kind}">{escape(text[:60])}</span></td>'
-            f'<td class="num">{rows}</td><td class="num">{_ms(report.ms_a)}</td><td class="num">{_ms(report.ms_b)}</td></tr>'
+            f'<td class="num">{rows}</td><td class="num {_pace(report.ms_a, report.ms_b)}">{_ms(report.ms_a)}</td>'
+            f'<td class="num {_pace(report.ms_b, report.ms_a)}">{_ms(report.ms_b)}</td></tr>'
         )
     parts.append('</tbody></table></div></nav><main>')
     for index, report in enumerate(reports):
@@ -547,8 +554,8 @@ def render_html(reports, args) -> str:
             f'<div class="query"><p class="label">GET {escape(report.path or "")}</p><pre>{escape(query)}</pre>'
             f'<p class="muted small">Parameter: {escape(params)}</p></div>'
             f'<details class="responses"{open_attr}><summary>Antworten '
-            f'<span class="a">A {report.status_a or "–"} · {report.rows_a} Zeilen · {_ms(report.ms_a)}</span>'
-            f'<span class="b">B {report.status_b or "–"} · {report.rows_b} Zeilen · {_ms(report.ms_b)}</span></summary>'
+            f'<span class="a">A {report.status_a or "–"} · {report.rows_a} Zeilen · <span class="{_pace(report.ms_a, report.ms_b)}">{_ms(report.ms_a)}</span></span>'
+            f'<span class="b">B {report.status_b or "–"} · {report.rows_b} Zeilen · <span class="{_pace(report.ms_b, report.ms_a)}">{_ms(report.ms_b)}</span></span></summary>'
             f'<div class="side"><div class="col a"><p class="label">pyppetdb</p><pre>{escape(text_a)}</pre><p class="muted small">{escape(note_a)}</p></div>'
             f'<div class="col b"><p class="label">OpenVoxDB</p><pre>{escape(text_b)}</pre><p class="muted small">{escape(note_b)}</p></div></div></details>'
             f'{detail}</section>'
@@ -587,6 +594,7 @@ th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:0}
 a{color:inherit}
+.fast,.tile b.fast{color:var(--ok);font-weight:600}.slow,.tile b.slow{color:var(--err)}
 .muted{color:var(--muted)}.small{font-size:12.5px;margin:6px 0 0}
 .pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:500;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
 .pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.diff{background:var(--diff-bg);color:var(--diff)}.pill.error{background:var(--err-bg);color:var(--err)}

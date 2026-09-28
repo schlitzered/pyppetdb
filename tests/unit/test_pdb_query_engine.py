@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import logging
 import unittest
 
@@ -28,6 +29,7 @@ from pyppetdb.pdb.query.engine import expand_fact_contents
 from pyppetdb.pdb.query.engine import expand_fact_paths
 from pyppetdb.pdb.query import matcher
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
+from pyppetdb.helpers.puppetdb import build_fact_paths
 from pyppetdb.helpers.puppetdb import build_facts_index
 from pyppetdb.pdb.query.entities import ENTITIES
 from pyppetdb.pdb.query.entities import get_entity
@@ -42,6 +44,16 @@ class FakeCursor:
         self._docs = docs
 
     def max_time_ms(self, _value):
+        return self
+
+    def sort(self, key, direction):
+        self.sorted_by = (key, direction)
+        self._docs = sorted(
+            self._docs, key=lambda doc: doc.get(key), reverse=direction < 0
+        )
+        return self
+
+    def allow_disk_use(self, _value):
         return self
 
     def __aiter__(self):
@@ -65,8 +77,16 @@ class FakeCollection:
         self.finds = []
         self.distincts = []
 
-    async def distinct(self, key, filter=None):
+    async def distinct(self, key, filter=None, **options):
         self.distincts.append((key, filter))
+        if not self.distinct_values and key == "fact_paths":
+            return sorted(
+                {
+                    entry
+                    for doc in self.docs
+                    for entry in build_fact_paths(doc.get("facts"))
+                }
+            )
         return list(self.distinct_values)
 
     async def count_documents(self, filter=None, **options):
@@ -84,7 +104,8 @@ class FakeCollection:
 
     def find(self, query=None, projection=None):
         self.finds.append((query, projection))
-        return FakeCursor(self.docs)
+        self.cursor = FakeCursor(list(self.docs))
+        return self.cursor
 
 
 def stage(pipeline, name):
@@ -2045,7 +2066,7 @@ class TestPythonEntities(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("uptime",), paths)
 
     async def test_array_indices_stay_integers(self):
-        rows = expand_fact_paths(self.document)
+        rows = expand_fact_paths(build_fact_paths(self.document["facts"]))
         indices = [row["path"][1] for row in rows if row["path"][0] == "tags"]
         self.assertEqual(sorted(indices), [0, 1])
         self.assertTrue(all(isinstance(item, int) for item in indices))
@@ -2077,7 +2098,7 @@ class TestPythonEntities(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_fact_paths_types(self):
-        rows = expand_fact_paths(self.document)
+        rows = expand_fact_paths(build_fact_paths(self.document["facts"]))
         types = {tuple(row["path"]): row["type"] for row in rows}
         self.assertEqual(types[("uptime",)], "integer")
         self.assertEqual(types[("os", "family")], "string")
@@ -2415,9 +2436,23 @@ class TestPythonEntityFetch(unittest.IsolatedAsyncioTestCase):
             {"_id": 0, "id": 1, "environment": 1, "disabled": 1, "facts": 1},
         )
 
-    async def test_fact_paths_projects_only_facts(self):
-        _query, projection = await self.run_query("fact-paths", None)
-        self.assertEqual(projection, {"_id": 0, "facts": 1})
+    async def test_fact_paths_read_the_distinct_fact_paths(self):
+        nodes = FakeCollection(
+            docs=[self.document],
+            distinct_values=build_fact_paths(self.document["facts"]),
+        )
+        engine = engine_with(nodes)
+        rows, total = await engine.run("fact-paths", None)
+        self.assertEqual(nodes.finds, [])
+        self.assertEqual(nodes.distincts, [("fact_paths", None)])
+        self.assertEqual(total, 2)
+        self.assertEqual(
+            sorted(rows, key=lambda row: row["name"]),
+            [
+                {"name": "osfamily", "path": ["osfamily"], "type": "string"},
+                {"name": "uptime", "path": ["uptime"], "type": "integer"},
+            ],
+        )
 
     async def test_unfiltered_query_has_an_empty_document_filter(self):
         query, _projection = await self.run_query("fact-contents", None)
@@ -2439,13 +2474,37 @@ class TestPythonEntityFetch(unittest.IsolatedAsyncioTestCase):
         query, _projection = await self.run_query(
             "fact-contents", ["=", "name", "osfamily"]
         )
-        self.assertEqual(query, {"facts.osfamily": {"$exists": True}})
-
-    async def test_fact_paths_name_becomes_a_key_existence_check(self):
-        query, _projection = await self.run_query(
-            "fact-paths", ["=", "name", "osfamily"]
+        self.assertEqual(
+            query,
+            {
+                "$and": [
+                    {"facts.osfamily": {"$exists": True}},
+                    {"fact_paths": {"$in": ['[["osfamily"],"string"]']}},
+                ]
+            },
         )
-        self.assertEqual(query, {"facts.osfamily": {"$exists": True}})
+
+    async def test_fact_paths_filter_the_distinct_entries(self):
+        nodes = FakeCollection(
+            distinct_values=build_fact_paths(
+                {"os": {"family": "Debian", "release": {"major": 12}}, "uptime": 500}
+            )
+        )
+        engine = engine_with(nodes)
+        rows, _total = await engine.run("fact-paths", ["=", "type", "integer"])
+        self.assertEqual(
+            sorted(row["path"] for row in rows),
+            [["os", "release", "major"], ["uptime"]],
+        )
+        rows, _total = await engine.run("fact-paths", ["=", "name", "os"])
+        self.assertEqual(
+            sorted(row["path"] for row in rows),
+            [["os", "family"], ["os", "release", "major"]],
+        )
+        rows, _total = await engine.run(
+            "fact-paths", ["~>", "path", ["os", "rel.*", "maj.*"]]
+        )
+        self.assertEqual([row["path"] for row in rows], [["os", "release", "major"]])
 
     async def test_node_state_becomes_a_document_filter(self):
         query, _projection = await self.run_query(
@@ -2463,13 +2522,50 @@ class TestPythonEntityFetch(unittest.IsolatedAsyncioTestCase):
              "facts.osfamily": 1, "facts.uptime": 1},
         )
         _query, projection = await self.run_query(
-            "fact-paths", ["=", "name", "osfamily"]
-        )
-        self.assertEqual(projection, {"_id": 0, "facts.osfamily": 1})
-        _query, projection = await self.run_query(
             "fact-contents", ["~", "name", "^os"]
         )
+        self.assertEqual(
+            projection,
+            {"_id": 0, "id": 1, "environment": 1, "disabled": 1, "facts.osfamily": 1},
+        )
+        _query, projection = await self.run_query(
+            "fact-contents", ["=", "value", "Debian"]
+        )
         self.assertIn("facts", projection)
+
+    async def test_path_filters_resolve_through_the_fact_paths(self):
+        query, projection = await self.run_query(
+            "fact-contents", ["~>", "path", ["upt.*"]]
+        )
+        self.assertEqual(query, {"fact_paths": {"$in": ['[["uptime"],"integer"]']}})
+        self.assertEqual(
+            projection,
+            {"_id": 0, "id": 1, "environment": 1, "disabled": 1, "facts.uptime": 1},
+        )
+
+    async def test_path_filters_matching_nothing_read_nothing(self):
+        nodes = FakeCollection(docs=[self.document])
+        engine = engine_with(nodes)
+        rows, total = await engine.run("fact-contents", ["~>", "path", ["nope"]])
+        self.assertEqual((rows, total), ([], 0))
+        self.assertEqual(nodes.finds, [])
+
+    async def test_clauses_on_other_columns_do_not_narrow_the_paths(self):
+        query, projection = await self.run_query(
+            "fact-contents",
+            ["or", ["=", "name", "uptime"], ["=", "value", "Debian"]],
+        )
+        self.assertNotIn("fact_paths", json.dumps(query))
+        self.assertIn("facts", projection)
+
+    async def test_negated_path_filters_do_not_narrow_the_paths(self):
+        nodes = FakeCollection(docs=[self.document])
+        engine = engine_with(nodes)
+        rows, _total = await engine.run(
+            "fact-contents", ["not", ["=", "name", "uptime"]]
+        )
+        self.assertEqual([row["name"] for row in rows], ["osfamily"])
+        self.assertIn("facts", nodes.finds[0][1])
 
 
     async def test_value_alone_is_not_derivable(self):
@@ -2571,6 +2667,48 @@ class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(total, 4)
 
+    async def test_certname_order_stops_reading_once_the_page_is_full(self):
+        from pyppetdb.pdb.query import engine as module
+
+        docs = list(reversed(self.docs(10)))
+        nodes = FakeCollection(docs=docs)
+        engine = engine_with(nodes)
+        original = module.PYTHON_BATCH_SIZE
+        module.PYTHON_BATCH_SIZE = 1
+        try:
+            rows, total = await engine.run(
+                "fact-contents",
+                None,
+                paging=Paging(
+                    limit=3,
+                    offset=2,
+                    order_by=[("certname", -1), ("name", 1)],
+                ),
+            )
+        finally:
+            module.PYTHON_BATCH_SIZE = original
+        self.assertEqual(nodes.cursor.sorted_by, ("id", -1))
+        self.assertEqual(
+            [(row["certname"], row["name"]) for row in rows],
+            [("h8", "a"), ("h8", "b"), ("h7", "a")],
+        )
+        self.assertEqual(total, 6)
+
+    async def test_other_orders_still_read_everything(self):
+        nodes = FakeCollection(docs=self.docs(10))
+        engine = engine_with(nodes)
+        rows, total = await engine.run(
+            "fact-contents",
+            None,
+            paging=Paging(limit=3, order_by=[("name", 1), ("certname", 1)]),
+        )
+        self.assertFalse(hasattr(nodes.cursor, "sorted_by"))
+        self.assertEqual(total, 20)
+        self.assertEqual(
+            [(row["name"], row["certname"]) for row in rows],
+            [("a", "h0"), ("a", "h1"), ("a", "h2")],
+        )
+
     async def test_include_total_reads_everything(self):
         nodes = FakeCollection(docs=self.docs(10))
         engine = engine_with(nodes)
@@ -2580,26 +2718,12 @@ class TestPythonExpansionBudget(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rows), 3)
         self.assertEqual(total, 20)
 
-    async def test_fact_paths_stay_distinct_across_batches(self):
-        from pyppetdb.pdb.query import engine as module
-
-        nodes = FakeCollection(docs=self.docs(5))
-        engine = engine_with(nodes)
-        original = module.PYTHON_BATCH_SIZE
-        module.PYTHON_BATCH_SIZE = 2
-        try:
-            rows, total = await engine.run("fact-paths", None)
-        finally:
-            module.PYTHON_BATCH_SIZE = original
-        self.assertEqual(total, 2)
-        self.assertEqual(sorted(row["name"] for row in rows), ["a", "b"])
-
     def test_an_expired_deadline_aborts_the_expansion(self):
         from pyppetdb.pdb.query.engine import _expand_batch
         from pyppetdb.pdb.query.engine import expand_fact_contents
 
         with self.assertRaises(PuppetDBQueryError) as ctx:
-            _expand_batch(expand_fact_contents, self.docs(1), {}, None, 0.0)
+            _expand_batch(expand_fact_contents, self.docs(1), {}, 0.0)
         self.assertEqual(ctx.exception.status_code, 500)
 
 

@@ -34,6 +34,7 @@ from pyppetdb.model.nodes import NodeGetMultiMeta
 from pyppetdb.model.nodes import NodePutInternal
 from pyppetdb.model.nodes import NodeDistinctFactValue
 from pyppetdb.model.nodes import NodeGetDistinctFactValues
+from pyppetdb.model.nodes import NodeGetDistinctFactNames
 from pyppetdb.model.nodes import NodeGetCatalogResource
 from pyppetdb.model.nodes import NodeGetCatalogResources
 
@@ -41,7 +42,11 @@ from pyppetdb.model.nodes import NodeGetCatalogResources
 from pyppetdb.errors import BackendError
 
 from pyppetdb.helpers.placement import calculate_placement
+from pyppetdb.helpers.puppetdb import FACT_PATHS_FIELD
+from pyppetdb.helpers.puppetdb import build_fact_paths
 from pyppetdb.helpers.puppetdb import build_facts_index
+from pyppetdb.helpers.puppetdb import decode_fact_path
+from pyppetdb.helpers.puppetdb import dotted_fact_name
 
 
 class CrudNodes(CrudMongo):
@@ -105,6 +110,10 @@ class CrudNodes(CrudMongo):
                         ("facts_index.v", pymongo.ASCENDING),
                     ],
                     name="idx_facts_index",
+                ),
+                pymongo.IndexModel(
+                    [(FACT_PATHS_FIELD, pymongo.ASCENDING)],
+                    name="idx_fact_paths",
                 ),
             ]
         )
@@ -339,6 +348,49 @@ class CrudNodes(CrudMongo):
             **{"result": result, "meta": {"result_size": len(result)}}
         )
 
+    async def distinct_fact_names(
+        self,
+        user_node_groups: Optional[list[str]] = None,
+        disabled: Optional[bool] = None,
+        fact: Optional[set] = None,
+        environment: Optional[str] = None,
+        report_status: Optional[str] = None,
+    ) -> NodeGetDistinctFactNames:
+        query = {}
+        self._filter_list(query, "node_groups", user_node_groups)
+        self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
+        self._filter_boolean(query, "disabled", disabled)
+        self._filter_literal(query, "environment", environment)
+        self._filter_literal(query, "report.status", report_status)
+
+        entries = await self._distinct_fact_paths(query)
+        names = set()
+        for entry in entries:
+            if isinstance(entry, str):
+                names.add(dotted_fact_name(decode_fact_path(entry)[0]))
+        result = sorted(names)
+        return NodeGetDistinctFactNames(
+            **{"result": result, "meta": {"result_size": len(result)}}
+        )
+
+    async def _distinct_fact_paths(self, query: dict) -> list:
+        try:
+            if not query:
+                return await self.coll.distinct(FACT_PATHS_FIELD)
+            pipeline = [
+                {"$match": query},
+                {"$group": {"_id": f"${FACT_PATHS_FIELD}"}},
+                {"$unwind": "$_id"},
+                {"$group": {"_id": "$_id"}},
+            ]
+            return [
+                item["_id"]
+                for item in await self.coll.aggregate(pipeline).to_list(length=None)
+            ]
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+
     async def count(
         self,
         user_node_groups: Optional[list[str]] = None,
@@ -570,6 +622,7 @@ class CrudNodes(CrudMongo):
             depth=settings.indexDepth,
             deny=settings.indexDeny,
         )
+        data[FACT_PATHS_FIELD] = build_fact_paths(facts)
         return data
 
     async def create(

@@ -288,6 +288,23 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         self.assertIn("osfamily", rows)
         self.assertTrue(all(isinstance(item, str) for item in rows))
 
+    def test_fact_paths_come_from_the_ingested_facts(self):
+        rows = self._query(
+            "/pdb/query/v4/fact-paths", ["=", "name", "os"]
+        ).json()
+        self.assertIn(
+            {"name": "os", "path": ["os", "release", "major"], "type": "string"},
+            rows,
+        )
+        rows = self._query(
+            "/pdb/query/v4/fact-paths",
+            ["and", ["=", "type", "integer"], ["=", "name", "uptime_seconds"]],
+        ).json()
+        self.assertEqual(
+            rows,
+            [{"name": "uptime_seconds", "path": ["uptime_seconds"], "type": "integer"}],
+        )
+
     def test_fact_contents_nested_paths(self):
         rows = self._query(
             "/pdb/query/v4/fact-contents",

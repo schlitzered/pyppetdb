@@ -20,7 +20,10 @@ from pyppetdb.helpers.puppetdb import build_event_documents
 from pyppetdb.helpers.puppetdb import containing_class
 from pyppetdb.helpers.puppetdb import catalog_payload
 from pyppetdb.helpers.puppetdb import normalise_catalog_inputs
+from pyppetdb.helpers.puppetdb import build_fact_paths
 from pyppetdb.helpers.puppetdb import build_facts_index
+from pyppetdb.helpers.puppetdb import decode_fact_path
+from pyppetdb.helpers.puppetdb import dotted_fact_name
 from pyppetdb.helpers.puppetdb import build_resource_params
 from pyppetdb.helpers.puppetdb import normalise_edges
 from pyppetdb.model.nodes import NodeGetCatalog
@@ -528,3 +531,45 @@ class TestEventDocuments(unittest.TestCase):
         self.assertEqual(containing_class(["Stage[main]", "Foo", "", "File[x]"]), "Foo")
         self.assertIsNone(containing_class(["Stage[main]"]))
         self.assertIsNone(containing_class(None))
+
+
+class TestFactPaths(unittest.TestCase):
+    def decoded(self, facts):
+        return [decode_fact_path(entry) for entry in build_fact_paths(facts)]
+
+    def test_every_leaf_yields_one_path_with_its_type(self):
+        self.assertEqual(
+            sorted(self.decoded({"os": {"release": {"major": "12"}}, "uptime": 5})),
+            [(["os", "release", "major"], "string"), (["uptime"], "integer")],
+        )
+
+    def test_array_indices_stay_integers(self):
+        self.assertEqual(
+            self.decoded({"tags": ["a", 1]}),
+            [(["tags", 0], "string"), (["tags", 1], "integer")],
+        )
+
+    def test_empty_containers_are_leaves(self):
+        self.assertEqual(
+            sorted(self.decoded({"a": {}, "b": [], "c": None, "d": 1.5, "e": True})),
+            [
+                (["a"], "json"),
+                (["b"], "json"),
+                (["c"], "null"),
+                (["d"], "float"),
+                (["e"], "boolean"),
+            ],
+        )
+
+    def test_entries_are_sorted_and_unique(self):
+        entries = build_fact_paths({"b": 1, "a": {"x": 1, "y": 2}})
+        self.assertEqual(entries, sorted(set(entries)))
+        self.assertEqual(len(entries), 3)
+
+    def test_non_dict_facts_have_no_paths(self):
+        self.assertEqual(build_fact_paths(None), [])
+
+    def test_dotted_name_drops_array_indices(self):
+        self.assertEqual(dotted_fact_name(["os", "release", "major"]), "os.release.major")
+        self.assertEqual(dotted_fact_name(["processors", "models", 3]), "processors.models")
+        self.assertEqual(dotted_fact_name(["disks", 0, "size"]), "disks.size")

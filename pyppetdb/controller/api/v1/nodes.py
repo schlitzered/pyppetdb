@@ -47,6 +47,7 @@ from pyppetdb.model.nodes import NodeGetMulti
 from pyppetdb.model.nodes import NodePut
 from pyppetdb.model.nodes import NodePutInternal
 from pyppetdb.model.nodes import NodeGetDistinctFactValues
+from pyppetdb.model.nodes import NodeGetDistinctFactNames
 from pyppetdb.model.nodes import NodeGetCatalogResources
 from pyppetdb.model.ca_certificates import CACertificatePut
 
@@ -87,6 +88,13 @@ class ControllerApiV1Nodes:
             "",
             self.search,
             response_model=NodeGetMulti,
+            response_model_exclude_unset=True,
+            methods=["GET"],
+        )
+        self.router.add_api_route(
+            "/_distinct_fact_names",
+            self.distinct_fact_names,
+            response_model=NodeGetDistinctFactNames,
             response_model_exclude_unset=True,
             methods=["GET"],
         )
@@ -266,6 +274,26 @@ class ControllerApiV1Nodes:
             node.catalog_cached = node_id in cached_node_ids
 
         return node
+
+    async def distinct_fact_names(
+        self,
+        request: Request,
+        disabled: bool = Query(default=None),
+        environment: str = Query(default=None),
+        fact: filter_complex_search = Query(default=None),
+        report_status: str = Query(default=None),
+    ):
+        user = await self.authorize.require_user(request=request)
+        user_node_groups = await self.authorize.get_user_node_groups(
+            request=request, user=user
+        )
+        return await self.crud_nodes.distinct_fact_names(
+            user_node_groups=user_node_groups,
+            disabled=disabled,
+            environment=environment,
+            fact=fact,
+            report_status=report_status,
+        )
 
     async def distinct_fact_values(
         self,

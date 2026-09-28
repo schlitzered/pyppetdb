@@ -59,8 +59,9 @@ class Entity(BaseModel):
     python_expand: Optional[str] = None
     scalar_result: Optional[str] = None
     element_filter: Optional[Dict[str, Any]] = None
-    distinct_rows: bool = False
     distinct_field: Optional[str] = None
+    distinct_source: Optional[str] = None
+    path_source: Optional[str] = None
     distinct_top_level: bool = False
     fact_pair: Optional[Dict[str, str]] = None
 
@@ -358,6 +359,7 @@ FACT_CONTENTS = Entity(
     name="fact-contents",
     collection="nodes",
     python_expand="fact_contents",
+    path_source="fact_paths",
     field_aliases={"node active": "node_state"},
     columns=[
         Column("certname", "string", None),
@@ -373,7 +375,7 @@ FACT_PATHS = Entity(
     name="fact-paths",
     collection="nodes",
     python_expand="fact_paths",
-    distinct_rows=True,
+    distinct_source="fact_paths",
     columns=[
         Column("name", "string", None),
         Column("path", "path", None),
