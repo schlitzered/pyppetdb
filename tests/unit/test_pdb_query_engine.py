@@ -65,7 +65,14 @@ class FakeCursor:
         return generate()
 
     async def to_list(self, length=None):
-        return list(self._docs)
+        if length is None:
+            batch, self._docs = list(self._docs), []
+        else:
+            batch, self._docs = list(self._docs[:length]), list(self._docs[length:])
+        return batch
+
+    async def close(self):
+        self.closed = True
 
 
 class FakeCollection:
@@ -451,16 +458,69 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             node = ["and", node]
         await engine.run("nodes", node)
 
-    async def test_page_cap_limits_unbounded_query(self):
-        nodes = FakeCollection()
-        engine = QueryEngine(
+    def capped_engine(self, resources):
+        return QueryEngine(
             log=logging.getLogger("test"),
-            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": nodes, "nodes_edges": FakeCollection()},
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": resources, "nodes_edges": FakeCollection()},
             max_page_size=5000,
         )
-        await engine.run("resources", ["=", "type", "File"])
+
+    async def test_page_cap_asks_for_one_row_more_than_it_allows(self):
+        nodes = FakeCollection()
+        await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
         limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
-        self.assertEqual(limits, [5000])
+        self.assertEqual(limits, [5001])
+
+    async def test_page_cap_refuses_instead_of_truncating(self):
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(5001)])
+        with self.assertRaises(PuppetDBQueryError) as ctx:
+            await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("more than 5000 rows", ctx.exception.message)
+
+    async def test_page_cap_passes_results_that_fit(self):
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(5000)])
+        rows, total = await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
+        self.assertEqual((len(rows), total), (5000, 5000))
+
+    async def test_streamed_results_are_not_capped(self):
+        from pyppetdb.pdb.query import engine as module
+        from pyppetdb.pdb.query.engine import RowStream
+
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(7)])
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = 3
+        try:
+            stream, total = await self.capped_engine(nodes).run(
+                "resources", ["=", "type", "File"], stream=True
+            )
+            self.assertIsInstance(stream, RowStream)
+            batches = [batch async for batch in stream.batches()]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        self.assertEqual([len(batch) for batch in batches], [3, 3, 1])
+        self.assertFalse(any("$limit" in stage for stage in nodes.pipelines[-1]))
+        self.assertIsNone(total)
+
+    async def test_streamed_include_total_counts_first(self):
+        nodes = FakeCollection(docs=[{"title": "a"}], counts=42)
+        stream, total = await self.capped_engine(nodes).run(
+            "resources", None, paging=Paging(include_total=True), stream=True
+        )
+        self.assertEqual(total, 42)
+
+    async def test_scalar_entities_stream_their_scalar(self):
+        nodes = FakeCollection(docs=[{"name": "kernel"}])
+        engine = engine_with(nodes)
+        stream, _total = await engine.run(
+            "fact-names", ["~", "name", "ker"], stream=True
+        )
+        self.assertEqual([batch async for batch in stream.batches()], [["kernel"]])
+
+    async def test_python_entities_never_stream(self):
+        nodes = FakeCollection(docs=[{"id": "h", "facts": {"a": 1}}])
+        rows, _total = await engine_with(nodes).run("fact-contents", None, stream=True)
+        self.assertIsInstance(rows, list)
 
     async def test_page_cap_shrinks_oversized_limit(self):
         nodes = FakeCollection()
@@ -473,7 +533,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             "resources", ["=", "type", "File"], paging=Paging(limit=99999)
         )
         limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
-        self.assertEqual(limits, [5000])
+        self.assertEqual(limits, [5001])
 
     async def test_page_cap_leaves_small_limit_and_aggregates_alone(self):
         nodes = FakeCollection()

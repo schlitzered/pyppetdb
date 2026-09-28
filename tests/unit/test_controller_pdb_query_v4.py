@@ -28,6 +28,9 @@ from pyppetdb.config import ConfigAppFacts
 from pyppetdb.config import ConfigAppPuppetdb
 from pyppetdb.controller.pdb.query.v4 import ControllerPdbQueryV4
 from pyppetdb.controller.pdb.query.v4 import apply_local_paging
+from pyppetdb.controller.pdb.query.v4 import json_response
+from pyppetdb.controller.pdb.query.v4 import stream_response
+from pyppetdb.pdb.query.engine import RowStream
 from pyppetdb.pdb.query import event_counts
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
 from pyppetdb.pdb.query.paging import Paging
@@ -603,3 +606,79 @@ class TestJsonRendering(unittest.TestCase):
             body,
             ('[{"t":"2026-03-01T12:00:00.123000Z","u":"2026-03-01T00:00:00Z","o":"%s","ü":"ä"}]' % oid).encode(),
         )
+
+
+class FakeStreamCursor:
+    def __init__(self, docs):
+        self.docs = list(docs)
+        self.closed = False
+
+    async def to_list(self, length=None):
+        batch, self.docs = self.docs[:length], self.docs[length:]
+        return batch
+
+    async def close(self):
+        self.closed = True
+
+
+class TestStreamResponse(unittest.IsolatedAsyncioTestCase):
+    async def body(self, rows, pretty, batch=2):
+        from pyppetdb.pdb.query import engine as module
+
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = batch
+        try:
+            cursor = FakeStreamCursor(rows[batch:])
+            response = stream_response(
+                RowStream(cursor, rows[:batch]), pretty, logging.getLogger("test")
+            )
+            chunks = [chunk async for chunk in response.body_iterator]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        return b"".join(chunks), cursor
+
+    async def test_streamed_bytes_equal_the_buffered_response(self):
+        from datetime import datetime
+
+        rows = [
+            {"certname": "a", "facts": {"os": {"family": "Debian"}}, "ts": datetime(2026, 1, 1)},
+            {"certname": "b", "facts": {}, "ts": None},
+            {"certname": "c", "list": [1, 2]},
+        ]
+        for pretty in (False, True):
+            body, cursor = await self.body(rows, pretty)
+            self.assertEqual(body, json_response(rows, pretty).body, pretty)
+            self.assertTrue(cursor.closed)
+
+    async def test_an_empty_stream_is_an_empty_array(self):
+        for pretty in (False, True):
+            body, _cursor = await self.body([], pretty)
+            self.assertEqual(body, json_response([], pretty).body)
+
+    async def test_a_disconnected_client_stops_the_cursor(self):
+        from pyppetdb.pdb.query import engine as module
+
+        class Request:
+            calls = 0
+
+            async def is_disconnected(self):
+                Request.calls += 1
+                return Request.calls > 1
+
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = 1
+        try:
+            cursor = FakeStreamCursor([{"a": 2}, {"a": 3}])
+            response = stream_response(
+                RowStream(cursor, [{"a": 1}]),
+                False,
+                logging.getLogger("test"),
+                request=Request(),
+            )
+            chunks = [chunk async for chunk in response.body_iterator]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        self.assertEqual(chunks, [b'[{"a":1}'])
+        self.assertTrue(cursor.closed)
+        self.assertEqual(cursor.docs, [{"a": 3}])
+

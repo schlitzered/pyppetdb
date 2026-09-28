@@ -71,9 +71,9 @@ at a time with a stable `order_by` on the entity's natural key, fetches up to `-
 (default 50000) rows and compares those. With `--totals` it also asks for `include_total`
 on the first page and compares the `X-Records` totals (`<total rows>`) — that is a
 `count(*)` per paged case on both targets and takes minutes on the ten-million-row
-subquery cases, so it is off by default. pyppetdb caps unpaged
-responses at `app_puppetdb_maxPageSize`, so without paging every broad case would silently
-compare the first 10000 rows against a complete upstream result. Cases that carry their own
+subquery cases, so it is off by default. Paging also keeps the compared result sets
+bounded: pyppetdb streams list responses without a limit, but refuses unpaged
+`fact-contents`/`fact-paths` results above `app_puppetdb_maxPageSize` with a 400. Cases that carry their own
 `limit`/`offset`/`order_by`, aggregates (`extract`/`function`/`group_by`) and the
 `event-counts` routes are fetched as written. A truncated case prints `rows von total`.
 

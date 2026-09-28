@@ -197,6 +197,18 @@ class PdbQueryApiIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200, resp.text)
         return resp
 
+    def test_list_responses_stream_with_totals_and_pretty_output(self):
+        query = ["=", "certname", self.certname]
+        resp = self._query("/pdb/query/v4/resources", query, include_total="true")
+        rows = resp.json()
+        self.assertEqual(resp.headers["x-records"], str(len(rows)))
+        self.assertEqual({row["type"] for row in rows}, {"File", "Notify"})
+        pretty = self._query("/pdb/query/v4/resources", query, pretty="true")
+        self.assertEqual(pretty.json(), self._query("/pdb/query/v4/resources", query).json())
+        self.assertIn(b"\n  {\n", pretty.content)
+        empty = self._query("/pdb/query/v4/resources", ["=", "certname", "nope"])
+        self.assertEqual(empty.content, b"[]")
+
     def test_nodes_endpoint(self):
         rows = self._query(
             "/pdb/query/v4/nodes", ["=", "certname", self.certname]

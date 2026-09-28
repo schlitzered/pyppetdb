@@ -25,6 +25,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
+from fastapi.responses import StreamingResponse
 
 from bson.objectid import ObjectId
 
@@ -35,6 +36,7 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.pdb.query import event_counts
 from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import RowStream
 from pyppetdb.pdb.query.engine import _sort_key
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
 from pyppetdb.pdb.query.paging import Paging
@@ -78,6 +80,49 @@ class PrettyJSONResponse(JSONResponse):
 def json_response(content, pretty: bool, status_code: int = 200, headers=None):
     cls = PrettyJSONResponse if pretty else PdbJSONResponse
     return cls(content=content, status_code=status_code, headers=headers)
+
+
+def _dump_row(row, pretty: bool) -> bytes:
+    if not pretty:
+        return orjson.dumps(row, default=_encode, option=JSON_OPTIONS)
+    text = orjson.dumps(
+        row, default=_encode, option=JSON_OPTIONS | orjson.OPT_INDENT_2
+    )
+    return b"  " + text.replace(b"\n", b"\n  ")
+
+
+async def _stream_body(stream: RowStream, pretty: bool, log, request=None):
+    separator = b",\n" if pretty else b","
+    written = False
+    try:
+        async for batch in stream.batches():
+            if request is not None and await request.is_disconnected():
+                return
+            if not batch:
+                continue
+            chunk = separator.join(_dump_row(row, pretty) for row in batch)
+            if written:
+                yield separator + chunk
+            else:
+                yield (b"[\n" if pretty else b"[") + chunk
+                written = True
+    except Exception as err:
+        log.error(f"streaming a /pdb/query/v4 response failed: {err}")
+        raise
+    finally:
+        await stream.close()
+    if not written:
+        yield b"[]"
+    else:
+        yield b"\n]" if pretty else b"]"
+
+
+def stream_response(stream: RowStream, pretty: bool, log, headers=None, request=None):
+    return StreamingResponse(
+        _stream_body(stream, pretty, log, request),
+        media_type="application/json",
+        headers=headers,
+    )
 
 
 def not_found(label: str, identifier: str, pretty: bool = False):
@@ -495,6 +540,7 @@ class ControllerPdbQueryV4:
             restrict_active=restrict,
             extra_columns=_extra_columns(entity, params, route.kind),
             distinct_window=distinct,
+            stream=route.kind != "single",
         )
         if route.kind == "single":
             if not rows:
@@ -502,6 +548,10 @@ class ControllerPdbQueryV4:
                 return not_found(label, request.path_params.get(route.implicit[0][0]), pretty)
             return json_response(rows[0], pretty)
         headers = {"X-Records": str(total)} if paging.include_total else None
+        if isinstance(rows, RowStream):
+            return stream_response(
+                rows, pretty, self.log, headers=headers, request=request
+            )
         return json_response(rows, pretty, headers=headers)
 
     async def _exists(self, entity: str, column: str, value) -> bool:

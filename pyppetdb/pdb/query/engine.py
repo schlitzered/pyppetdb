@@ -40,6 +40,7 @@ from pyppetdb.pdb.query.ast import parse_query
 from pyppetdb.pdb.query.entities import ENTITIES
 from pyppetdb.pdb.query.entities import get_entity
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.errors import page_too_large
 from pyppetdb.pdb.query.errors import subquery_too_large
 from pyppetdb.pdb.query.errors import unknown_entity
 from pyppetdb.pdb.query.errors import unknown_field
@@ -141,6 +142,7 @@ class QueryEngine:
         restrict_active: bool = False,
         extra_columns: Optional[list] = None,
         distinct_window=None,
+        stream: bool = False,
     ):
         return await self._guarded(
             ast,
@@ -153,6 +155,7 @@ class QueryEngine:
                 restrict_active=restrict_active,
                 extra_columns=extra_columns,
                 distinct_window=distinct_window,
+                stream=stream,
             ),
         )
 
@@ -213,11 +216,13 @@ class QueryEngine:
         finally:
             _query_timeout.reset(token)
 
-    def _apply_page_cap(self, query: Query) -> None:
+    def _apply_page_cap(self, query: Query) -> Optional[int]:
         if not self._max_page_size or query.functions:
-            return
+            return None
         if query.limit is None or query.limit > self._max_page_size:
-            query.limit = self._max_page_size
+            query.limit = self._max_page_size + 1
+            return self._max_page_size
+        return None
 
     def effective_timeout(self, requested):
         seconds = self._query_timeout if requested is None else requested
@@ -237,6 +242,7 @@ class QueryEngine:
         extra_columns: Optional[list] = None,
         distinct_window=None,
         explain: bool = False,
+        stream: bool = False,
     ):
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -254,10 +260,18 @@ class QueryEngine:
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
-        self._apply_page_cap(query)
+        stream = (
+            stream
+            and not explain
+            and not target.python_expand
+            and not query.functions
+            and not _is_distinct_query(target, query)
+        )
+        cap = None if stream else self._apply_page_cap(query)
 
         if _is_distinct_query(target, query) and not explain:
-            return await self._run_distinct(target, query)
+            rows, total = await self._run_distinct(target, query)
+            return _within_cap(rows, cap), total
 
         compiler = FilterCompiler(target, engine=self)
         match = await compiler.compile(query.filter)
@@ -278,14 +292,24 @@ class QueryEngine:
                 extra_columns=extra_columns,
                 distinct_window=distinct_window,
                 explain=explain,
+                stream=stream,
             )
             if explain:
                 return rows
 
+        scalar = (
+            target.scalar_result
+            if target.scalar_result and not query.columns and not query.functions
+            else None
+        )
+        if stream:
+            rows.scalar = scalar
+            return rows, total
+        rows = _within_cap(rows, cap)
         if query.functions and not query.group_by and not rows:
             rows, total = [_empty_aggregate_row(query)], 1
-        if target.scalar_result and not query.columns and not query.functions:
-            rows = [row.get(target.scalar_result) for row in rows]
+        if scalar:
+            rows = [row.get(scalar) for row in rows]
         return rows, total
 
     def _explain_python(self, entity, match: dict) -> list:
@@ -494,9 +518,10 @@ class QueryEngine:
         extra_columns: Optional[list] = None,
         distinct_window=None,
         explain: bool = False,
+        stream: bool = False,
     ):
         if _is_never(match):
-            return [], 0
+            return (RowStream.empty() if stream else []), 0
         head, prefilter, exact, element_cond, pinned = self._pipeline_head(
             entity, match, distinct_window
         )
@@ -537,7 +562,9 @@ class QueryEngine:
             tail.extend(_distinct_stages(query.columns))
 
         total = None
-        if include_total and (query.limit is not None or query.offset is not None):
+        if include_total and (
+            stream or query.limit is not None or query.offset is not None
+        ):
             if count_filter is not None:
                 total = await self._count(collection, count_filter)
             else:
@@ -572,9 +599,11 @@ class QueryEngine:
             plan.pop("$clusterTime", None)
             plan.pop("operationTime", None)
             return [{"query plan": plan}], 1
-        rows = await collection.aggregate(
-            pipeline, **self.aggregate_options
-        ).to_list(length=None)
+        cursor = collection.aggregate(pipeline, **self.aggregate_options)
+        if stream:
+            first = await cursor.to_list(length=STREAM_BATCH_SIZE)
+            return RowStream(cursor, first), total
+        rows = await cursor.to_list(length=None)
         if total is None:
             total = len(rows)
         return rows, total
@@ -731,6 +760,43 @@ class QueryEngine:
 
 
 PYTHON_BATCH_SIZE = 200
+STREAM_BATCH_SIZE = 1000
+
+
+class RowStream:
+    def __init__(self, cursor, first: list):
+        self._cursor = cursor
+        self._first = first
+        self.scalar = None
+
+    @classmethod
+    def empty(cls):
+        return cls(None, [])
+
+    async def batches(self):
+        batch = self._first
+        while batch:
+            yield self._shape(batch)
+            if self._cursor is None or len(batch) < STREAM_BATCH_SIZE:
+                return
+            batch = await self._cursor.to_list(length=STREAM_BATCH_SIZE)
+
+    def _shape(self, batch: list) -> list:
+        if self.scalar:
+            return [row.get(self.scalar) for row in batch]
+        return batch
+
+    async def close(self) -> None:
+        if self._cursor is not None:
+            await self._cursor.close()
+
+
+def _within_cap(rows: list, cap: Optional[int]) -> list:
+    if cap is not None and len(rows) > cap:
+        raise page_too_large(cap)
+    return rows
+
+
 MAX_PATH_PREFILTER = 100
 PATH_COLUMNS = ("name", "path")
 
