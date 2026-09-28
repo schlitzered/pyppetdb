@@ -93,6 +93,11 @@ already covers. Each case records where it came from in its `origin`:
 | `review` | a case added for a specific bug or divergence found in review |
 | `divergence` | a construct where pyppetdb and OpenVoxDB are known to disagree |
 
+Every case is timed once by default. `--repeat N` runs each case N times, alternating between
+the two targets, and reports the median; the rows compared are those of the last run. The console
+then ends with the number of cases A answered faster and lists the others, so single outliers no
+longer show up as regressions.
+
 Select subsets with `--group <group-or-origin>` (repeatable) and `--only <regex>`:
 
 ```bash
