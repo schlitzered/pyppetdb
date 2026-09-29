@@ -43,7 +43,7 @@ Each CA space carries a `validation_config` that governs which certificate reque
 * `key_usages` / `extended_key_usages` — enforced key usage constraints.
 * `san_validation` — bounds and checks on Subject Alternative Names: `max_san_count`, regex
   allow-lists, external HTTP checks, and external script checks.
-* `san_injection` — inject additional SANs based on a matching pattern.
+* `san_injection` — inject additional SANs when a pattern matches the whole CN.
 
 ## Puppet CA endpoints (agent-facing)
 

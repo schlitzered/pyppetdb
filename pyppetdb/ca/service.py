@@ -501,7 +501,7 @@ class CAService:
             if not config.san_injection:
                 continue
             for rule in config.san_injection:
-                m = re.match(rule.pattern, cn)
+                m = re.fullmatch(rule.pattern, cn)
                 if m:
                     groups = [m.group(0)] + list(m.groups())
                     group_dict = m.groupdict()
