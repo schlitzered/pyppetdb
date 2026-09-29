@@ -25,6 +25,7 @@ from pyhiera.errors import PyHieraError
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
@@ -46,6 +47,7 @@ class CrudHieraModelsDynamicAdapter:
         self._doc_to_model_id = {}
         self._log = log
         self._pyhiera = pyhiera
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -61,36 +63,24 @@ class CrudHieraModelsDynamicAdapter:
         return self._pyhiera
 
     async def _watch_changes(self):
-        try:
-            pipeline = [
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="hiera_key_models_dynamic",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
                 {
                     "$project": {
                         "fullDocument.id": 1,
+                        "fullDocument.model": 1,
+                        "fullDocument.description": 1,
                         "operationType": 1,
                         "documentKey._id": 1,
                     }
                 }
-            ]
-
-            async with self.coll.watch(
-                full_document="updateLookup",
-                pipeline=pipeline,
-            ) as change_stream:
-                self.log.info(
-                    "Change stream watcher started for hiera_key_models_dynamic"
-                )
-                async for change in change_stream:
-                    await self._handle_change(change)
-
-        except pymongo.errors.PyMongoError as err:
-            self.log.error(f"Error in hiera_key_models_dynamic change stream: {err}")
-        except Exception as err:
-            self.log.error(
-                f"Unexpected error in hiera_key_models_dynamic change stream: {err}"
-            )
-
-        await asyncio.sleep(5)
-        asyncio.create_task(self._watch_changes())
+            ],
+        )
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -118,22 +108,36 @@ class CrudHieraModelsDynamicAdapter:
             cursor = self.coll.find(
                 {}, {"id": 1, "_id": 1, "description": 1, "model": 1}
             )
-            count = 0
+            loaded = {}
             async for doc in cursor:
-                doc_id = doc["_id"]
-                model_id = doc.get("id")
-                if doc_id not in self._doc_to_model_id:
-                    self._doc_to_model_id[doc_id] = model_id
-                    self.model_register(model_id, doc["model"], doc.get("description"))
-                    count += 1
+                loaded[doc["_id"]] = doc
 
+            for doc_id, model_id in list(self._doc_to_model_id.items()):
+                if doc_id not in loaded:
+                    self._unregister_quietly(str(model_id))
+            for doc in loaded.values():
+                try:
+                    self.model_register(
+                        doc.get("id"), doc["model"], doc.get("description")
+                    )
+                except Exception as err:
+                    self.log.error(f"failed to register key model {doc.get('id')}: {err}")
+            self._doc_to_model_id = {
+                doc_id: doc.get("id") for doc_id, doc in loaded.items()
+            }
             self.log.info(
-                f"Loaded {count} initial documents for hiera_key_models_dynamic sync"
+                f"Loaded {len(loaded)} documents for hiera_key_models_dynamic sync"
             )
 
         except pymongo.errors.PyMongoError as err:
             self.log.error(f"Error loading initial data: {err}")
             raise
+
+    def _unregister_quietly(self, model_id: str):
+        try:
+            self.model_unregister(model_id)
+        except PyHieraError as err:
+            self.log.warning(f"failed to unregister key model {model_id}: {err}")
 
     def _build_key_model_class(
         self, model_id: str, schema: dict, description: str
@@ -190,8 +194,8 @@ class CrudHieraModelsDynamicAdapter:
     async def run(self):
         if self._initialized:
             return
-        asyncio.create_task(self._watch_changes())
         await self._load_initial_data()
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
         self.log.info("HieraKeyModelDynamicSync initialized successfully")
 

@@ -26,6 +26,7 @@ from pyppetdb.ca.secret_resolver import extract_references
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost
@@ -48,6 +49,7 @@ class CrudCASpacesCache:
         self._protector = protector
         self._cache = {}
         self._doc_to_id = {}
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -66,47 +68,54 @@ class CrudCASpacesCache:
         if self._initialized:
             return
         await self._load_initial_data()
-        asyncio.create_task(self._watch_changes())
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
 
     def _process_doc(self, doc: dict) -> CASpaceGet:
         return CASpaceGet(**doc)
 
+    async def _load(self):
+        doc_to_id = {}
+        async for doc in self.coll.find({}):
+            obj = self._process_doc(doc)
+            self._cache[obj.id] = obj
+            doc_to_id[doc["_id"]] = obj.id
+        for stale in set(self._cache) - set(doc_to_id.values()):
+            self._cache.pop(stale, None)
+        self._doc_to_id = doc_to_id
+        self.log.info(f"Loaded {len(self._cache)} CA spaces into cache")
+
     async def _load_initial_data(self):
         try:
-            cursor = self.coll.find({})
-            async for doc in cursor:
-                obj = self._process_doc(doc)
-                self._cache[obj.id] = obj
-                self._doc_to_id[doc["_id"]] = obj.id
-            self.log.info(f"Loaded {len(self._cache)} initial CA spaces into cache")
+            await self._load()
         except Exception as e:
             self.log.error(f"Failed to load initial CA spaces: {e}")
 
+    async def _handle_change(self, change: dict):
+        operation = change["operationType"]
+        doc_id = change["documentKey"]["_id"]
+        if operation in ("insert", "replace", "update"):
+            doc = change.get("fullDocument")
+            if doc:
+                obj = self._process_doc(doc)
+                self._cache[obj.id] = obj
+                self._doc_to_id[doc_id] = obj.id
+        elif operation == "delete":
+            custom_id = self._doc_to_id.pop(doc_id, None)
+            if custom_id:
+                self._cache.pop(custom_id, None)
+                self.log.info(f"Removed CA space {custom_id} from cache")
+            else:
+                await self._load()
+
     async def _watch_changes(self):
-        try:
-            async with self.coll.watch(full_document="updateLookup") as change_stream:
-                self.log.info("Change stream watcher started for CA spaces")
-                async for change in change_stream:
-                    operation = change["operationType"]
-                    doc_id = change["documentKey"]["_id"]
-                    if operation in ("insert", "replace", "update"):
-                        doc = change.get("fullDocument")
-                        if doc:
-                            obj = self._process_doc(doc)
-                            self._cache[obj.id] = obj
-                            self._doc_to_id[doc_id] = obj.id
-                    elif operation == "delete":
-                        custom_id = self._doc_to_id.pop(doc_id, None)
-                        if custom_id:
-                            self._cache.pop(custom_id, None)
-                            self.log.info(f"Removed CA space {custom_id} from cache")
-                        else:
-                            await self._load_initial_data()
-        except Exception as e:
-            self.log.error(f"Error in CA spaces change stream: {e}")
-            await asyncio.sleep(5)
-            asyncio.create_task(self._watch_changes())
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="CA spaces",
+            handle_change=self._handle_change,
+            resync=self._load,
+        )
 
 
 class CrudCASpaces(CrudMongo):

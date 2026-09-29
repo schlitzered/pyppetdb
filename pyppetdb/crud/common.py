@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import typing
 from typing import List, Optional, Type
@@ -33,6 +34,31 @@ from pyppetdb.crud.mixins import SortMixIn
 from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import BackendError
+
+
+WATCH_RETRY_DELAY = 5
+
+
+async def watch_collection(
+    coll: AsyncIOMotorCollection,
+    log: logging.Logger,
+    name: str,
+    handle_change: typing.Callable[[dict], typing.Awaitable[None]],
+    resync: typing.Callable[[], typing.Awaitable[None]],
+    pipeline: Optional[list] = None,
+) -> None:
+    while True:
+        try:
+            async with coll.watch(
+                full_document="updateLookup", pipeline=pipeline
+            ) as change_stream:
+                await resync()
+                log.info(f"Change stream watcher started for {name}")
+                async for change in change_stream:
+                    await handle_change(change)
+        except Exception as err:
+            log.error(f"Error in {name} change stream: {err}")
+        await asyncio.sleep(WATCH_RETRY_DELAY)
 
 
 class Crud:

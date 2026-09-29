@@ -23,6 +23,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_levels import HieraLevelGet
@@ -37,6 +38,7 @@ class CrudHieraLevelsCache:
         self._log = log
         self._cache = {}
         self._level_ids = []
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -56,8 +58,13 @@ class CrudHieraLevelsCache:
         return self._log
 
     async def _watch_changes(self):
-        try:
-            pipeline = [
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="hiera_levels",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
                 {
                     "$project": {
                         "fullDocument.id": 1,
@@ -65,23 +72,8 @@ class CrudHieraLevelsCache:
                         "documentKey._id": 1,
                     }
                 }
-            ]
-
-            async with self.coll.watch(
-                full_document="updateLookup",
-                pipeline=pipeline,
-            ) as change_stream:
-                self.log.info("Change stream watcher started for hiera_levels")
-                async for change in change_stream:
-                    await self._handle_change(change)
-
-        except pymongo.errors.PyMongoError as err:
-            self.log.error(f"Error in hiera_levels change stream: {err}")
-        except Exception as err:
-            self.log.error(f"Unexpected error in hiera_levels change stream: {err}")
-
-        await asyncio.sleep(5)
-        asyncio.create_task(self._watch_changes())
+            ],
+        )
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -114,19 +106,18 @@ class CrudHieraLevelsCache:
     async def _load_initial_data(self):
         try:
             cursor = self.coll.find({}, {"id": 1, "_id": 1})
-            count = 0
+            loaded = {}
             async for doc in cursor:
-                doc_id = doc["_id"]
-                level_id = doc.get("id")
-                if level_id is None:
+                if doc.get("id") is None:
                     continue
-                if doc_id not in self.cache:
-                    self.cache[doc_id] = HieraLevelGet(**doc)
-                    if level_id not in self._level_ids:
-                        self._level_ids.append(level_id)
-                    count += 1
-
-            self.log.info(f"Loaded {count} initial documents into hiera_levels cache")
+                loaded[doc["_id"]] = HieraLevelGet(**doc)
+            level_ids = [level.id for level in loaded.values()]
+            self.cache.clear()
+            self.cache.update(loaded)
+            self._level_ids[:] = [
+                level_id for level_id in self._level_ids if level_id in level_ids
+            ] + [level_id for level_id in level_ids if level_id not in self._level_ids]
+            self.log.info(f"Loaded {len(loaded)} documents into hiera_levels cache")
 
         except pymongo.errors.PyMongoError as err:
             self.log.error(f"Error loading initial data: {err}")
@@ -135,8 +126,8 @@ class CrudHieraLevelsCache:
     async def run(self):
         if self._initialized:
             return
-        asyncio.create_task(self._watch_changes())
         await self._load_initial_data()
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
         self.log.info("HieraLevelsCache initialized successfully")
 

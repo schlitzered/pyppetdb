@@ -23,6 +23,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_groups import NodeGroupGet
@@ -37,6 +38,7 @@ class CrudNodesGroupsCache:
         self._coll = coll
         self._log = log
         self._cache = {}
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -52,8 +54,13 @@ class CrudNodesGroupsCache:
         return self._log
 
     async def _watch_changes(self):
-        try:
-            pipeline = [
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="nodes_groups",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
                 {
                     "$project": {
                         "fullDocument.id": 1,
@@ -62,23 +69,8 @@ class CrudNodesGroupsCache:
                         "documentKey._id": 1,
                     }
                 }
-            ]
-
-            async with self.coll.watch(
-                full_document="updateLookup",
-                pipeline=pipeline,
-            ) as change_stream:
-                self.log.info("Change stream watcher started for nodes_groups")
-                async for change in change_stream:
-                    await self._handle_change(change)
-
-        except pymongo.errors.PyMongoError as err:
-            self.log.error(f"Error in nodes_groups change stream: {err}")
-        except Exception as err:
-            self.log.error(f"Unexpected error in nodes_groups change stream: {err}")
-
-        await asyncio.sleep(5)
-        asyncio.create_task(self._watch_changes())
+            ],
+        )
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -100,14 +92,12 @@ class CrudNodesGroupsCache:
     async def _load_initial_data(self):
         try:
             cursor = self.coll.find({}, {"id": 1, "_id": 1, "filters": 1})
-            count = 0
+            loaded = {}
             async for doc in cursor:
-                doc_id = doc["_id"]
-                if doc_id not in self.cache:
-                    self.cache[doc_id] = NodeGroupGet(**doc)
-                    count += 1
-
-            self.log.info(f"Loaded {count} initial documents into nodes_groups cache")
+                loaded[doc["_id"]] = NodeGroupGet(**doc)
+            self.cache.clear()
+            self.cache.update(loaded)
+            self.log.info(f"Loaded {len(loaded)} documents into nodes_groups cache")
 
         except pymongo.errors.PyMongoError as err:
             self.log.error(f"Error loading initial data: {err}")
@@ -116,8 +106,8 @@ class CrudNodesGroupsCache:
     async def run(self):
         if self._initialized:
             return
-        asyncio.create_task(self._watch_changes())
         await self._load_initial_data()
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
         self.log.info("NodeGroupsCache initialized successfully")
 

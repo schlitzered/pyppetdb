@@ -26,6 +26,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGet
@@ -141,6 +142,7 @@ class CrudNodesSecretsRedactorCache:
         self._log = log
         self._redactor = redactor
         self._cache: dict[str, str] = {}
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -152,8 +154,13 @@ class CrudNodesSecretsRedactorCache:
         return self._log
 
     async def _watch_changes(self):
-        try:
-            pipeline = [
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="nodes_secrets_redactor",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
                 {
                     "$project": {
                         "fullDocument.id": 1,
@@ -162,27 +169,8 @@ class CrudNodesSecretsRedactorCache:
                         "documentKey._id": 1,
                     }
                 }
-            ]
-
-            async with self.coll.watch(
-                full_document="updateLookup",
-                pipeline=pipeline,
-            ) as change_stream:
-                self.log.info(
-                    "Change stream watcher started for nodes_secrets_redactor"
-                )
-                async for change in change_stream:
-                    await self._handle_change(change)
-
-        except pymongo.errors.PyMongoError as err:
-            self.log.error(f"Error in nodes_secrets_redactor change stream: {err}")
-        except Exception as err:
-            self.log.error(
-                f"Unexpected error in nodes_secrets_redactor change stream: {err}"
-            )
-
-        await asyncio.sleep(5)
-        asyncio.create_task(self._watch_changes())
+            ],
+        )
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -214,20 +202,18 @@ class CrudNodesSecretsRedactorCache:
     async def _load_initial_data(self):
         try:
             cursor = self.coll.find({}, {"id": 1, "_id": 1, "value_encrypted": 1})
+            loaded = {}
             async for doc in cursor:
                 doc_id = doc["_id"]
                 try:
-                    clear = self._redactor.decrypt(doc["value_encrypted"])
-                    self._cache[doc_id] = clear
+                    loaded[doc_id] = self._redactor.decrypt(doc["value_encrypted"])
                 except Exception:
-                    self.log.error(
-                        f"Failed to decrypt secret during initial load: {doc_id}"
-                    )
+                    self.log.error(f"Failed to decrypt secret during load: {doc_id}")
 
+            self._cache.clear()
+            self._cache.update(loaded)
             self._redactor.rebuild(list(self._cache.values()))
-            self.log.info(
-                f"Loaded {len(self._cache)} initial secrets into redaction cache"
-            )
+            self.log.info(f"Loaded {len(self._cache)} secrets into redaction cache")
 
         except pymongo.errors.PyMongoError as err:
             self.log.error(f"Error loading initial secrets data: {err}")
@@ -236,8 +222,8 @@ class CrudNodesSecretsRedactorCache:
     async def run(self):
         if self._initialized:
             return
-        asyncio.create_task(self._watch_changes())
         await self._load_initial_data()
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
 
 

@@ -184,6 +184,9 @@ class AuthorizeClientCert:
         for serial in stale:
             self._cert_serial_cache.pop(serial, None)
 
+    def invalidate_all(self) -> None:
+        self._cert_serial_cache.clear()
+
     async def _verify_certificate_registration(self, cert_info):
         if not self.config.ca.verifyCertificateRegistration:
             return

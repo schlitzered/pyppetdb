@@ -23,6 +23,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSessio
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.ca_authorities import (
     CAAuthorityGet,
@@ -53,6 +54,7 @@ class CrudCAAuthoritiesCache:
         self._cache = {}
         self._key_cache = {}
         self._doc_to_id = {}
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -75,7 +77,7 @@ class CrudCAAuthoritiesCache:
         if self._initialized:
             return
         await self._load_initial_data()
-        asyncio.create_task(self._watch_changes())
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
 
     def _process_doc(self, doc: dict) -> CAAuthorityGet:
@@ -88,47 +90,50 @@ class CrudCAAuthoritiesCache:
                 self.log.error(f"Failed to decrypt private key for CA {obj.id}: {e}")
         return obj
 
+    async def _load(self):
+        doc_to_id = {}
+        async for doc in self.coll.find({}):
+            obj = self._process_doc(doc)
+            self._cache[obj.id] = obj
+            doc_to_id[doc["_id"]] = obj.id
+        for stale in set(self._cache) - set(doc_to_id.values()):
+            self._cache.pop(stale, None)
+            self._key_cache.pop(stale, None)
+        self._doc_to_id = doc_to_id
+        self.log.info(f"Loaded {len(self._cache)} CA authorities into cache")
+
     async def _load_initial_data(self):
         try:
-            cursor = self.coll.find({})
-            async for doc in cursor:
-                obj = self._process_doc(doc)
-                self._cache[obj.id] = obj
-                self._doc_to_id[doc["_id"]] = obj.id
-            self.log.info(
-                f"Loaded {len(self._cache)} initial CA authorities into cache"
-            )
+            await self._load()
         except Exception as e:
             self.log.error(f"Failed to load initial CA authorities: {e}")
 
-    async def _watch_changes(self):
-        try:
-            async with self.coll.watch(full_document="updateLookup") as change_stream:
-                self.log.info("Change stream watcher started for CA authorities")
-                async for change in change_stream:
-                    operation = change["operationType"]
-                    doc_id = change["documentKey"]["_id"]
-                    if operation in ("insert", "replace", "update"):
-                        doc = change.get("fullDocument")
-                        if doc:
-                            obj = self._process_doc(doc)
-                            self._cache[obj.id] = obj
-                            self._doc_to_id[doc_id] = obj.id
-                    elif operation == "delete":
-                        custom_id = self._doc_to_id.pop(doc_id, None)
-                        if custom_id:
-                            self._cache.pop(custom_id, None)
-                            self._key_cache.pop(custom_id, None)
-                            self.log.info(
-                                f"Removed CA authority {custom_id} from cache"
-                            )
-                        else:
-                            await self._load_initial_data()
+    async def _handle_change(self, change: dict):
+        operation = change["operationType"]
+        doc_id = change["documentKey"]["_id"]
+        if operation in ("insert", "replace", "update"):
+            doc = change.get("fullDocument")
+            if doc:
+                obj = self._process_doc(doc)
+                self._cache[obj.id] = obj
+                self._doc_to_id[doc_id] = obj.id
+        elif operation == "delete":
+            custom_id = self._doc_to_id.pop(doc_id, None)
+            if custom_id:
+                self._cache.pop(custom_id, None)
+                self._key_cache.pop(custom_id, None)
+                self.log.info(f"Removed CA authority {custom_id} from cache")
+            else:
+                await self._load()
 
-        except Exception as e:
-            self.log.error(f"Error in CA authorities change stream: {e}")
-            await asyncio.sleep(5)
-            asyncio.create_task(self._watch_changes())
+    async def _watch_changes(self):
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="CA authorities",
+            handle_change=self._handle_change,
+            resync=self._load,
+        )
 
 
 class CrudCAAuthorities(CrudMongo):
