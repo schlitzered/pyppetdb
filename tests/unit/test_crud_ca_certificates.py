@@ -60,6 +60,54 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(listener.serials, ["serial-9"])
 
+    async def test_get_active_by_cn_uses_uniqueness_constraint(self):
+        self.mock_coll.find_one = AsyncMock(
+            return_value={"id": "serial-1", "status": "signed"}
+        )
+
+        result = await self.crud.get_active_by_cn(
+            space_id="puppet-ca", cn="node1", fields=[]
+        )
+
+        self.assertEqual(result.id, "serial-1")
+        query = self.mock_coll.find_one.call_args.kwargs["filter"]
+        self.assertEqual(
+            query, {"space_id": "puppet-ca", "cert_uniqueness": "puppet-ca:node1"}
+        )
+
+    async def test_revoke_skips_already_revoked_certs(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        self.mock_coll.find_one_and_update = AsyncMock(
+            return_value={"id": "serial-1", "status": "revoked"}
+        )
+
+        await self.crud.revoke(_id="serial-1", revocation_date=now, fields=[])
+
+        kwargs = self.mock_coll.find_one_and_update.call_args.kwargs
+        self.assertEqual(
+            kwargs["filter"], {"id": "serial-1", "status": {"$ne": "revoked"}}
+        )
+        self.assertEqual(
+            kwargs["update"]["$set"],
+            {
+                "status": "revoked",
+                "revocation_date": now,
+                "cert_uniqueness": "revoked:serial-1",
+            },
+        )
+
+    async def test_revoke_already_revoked_raises_not_found(self):
+        from datetime import datetime, timezone
+
+        self.mock_coll.find_one_and_update = AsyncMock(return_value=None)
+
+        with self.assertRaises(ResourceNotFound):
+            await self.crud.revoke(
+                _id="serial-1", revocation_date=datetime.now(timezone.utc), fields=[]
+            )
+
     async def test_get_internal_object_id_returns_stringified_id(self):
         oid = MagicMock()
         oid.__str__ = lambda self: "64f0c0ffee"

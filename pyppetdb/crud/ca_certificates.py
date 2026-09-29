@@ -261,16 +261,31 @@ class CrudCACertificates(CrudMongo):
         result = await self._get(query=query, fields=fields)
         return CACertificateGet(**result)
 
-    async def delete_by_cn(
+    async def get_active_by_cn(
         self,
         space_id: str,
         cn: str,
-        status: Optional[CAStatus] = None,
-    ) -> None:
-        query = {"space_id": space_id, "cn": cn}
-        if status:
-            query["status"] = status
-        await self._delete_many(query=query)
+        fields: list,
+    ) -> CACertificateGet:
+        result = await self._get(
+            query={"space_id": space_id, "cert_uniqueness": f"{space_id}:{cn}"},
+            fields=fields,
+        )
+        return CACertificateGet(**result)
+
+    async def revoke(
+        self, _id: str, revocation_date: datetime.datetime, fields: list
+    ) -> CACertificateGet:
+        result = await self._update(
+            query={"id": _id, "status": {"$ne": "revoked"}},
+            payload={
+                "status": "revoked",
+                "revocation_date": revocation_date,
+                "cert_uniqueness": f"revoked:{_id}",
+            },
+            fields=fields,
+        )
+        return CACertificateGet(**result)
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)

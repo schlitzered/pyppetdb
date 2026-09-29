@@ -834,21 +834,10 @@ class CAService:
     async def revoke_certificate(self, _id: str) -> CACertificateGet:
         now = datetime.datetime.now(datetime.timezone.utc)
         try:
-            # Note: CrudCACertificates.update now strictly uses _id, but we need the status check for safety.
-            # We can check the status first or just let the update fail if not found (though _get by _id is standard).
-            # The previous code used: query={"id": _id, "status": {"$ne": "revoked"}}
-            # For simplicity and sticking to the standard pattern:
-            result = await self._crud_certificates.update(
-                _id=_id,
-                payload=CACertificatePutInternal(
-                    status="revoked",
-                    revocation_date=now,
-                    cert_uniqueness=f"revoked:{_id}",
-                ),
-                fields=[],
+            result = await self._crud_certificates.revoke(
+                _id=_id, revocation_date=now, fields=[]
             )
         except ResourceNotFound:
-            # If not found with the $ne filter, it might already be revoked
             result = await self._crud_certificates.get(_id, fields=[])
         self._notify_revocation(_id)
         return result
@@ -989,26 +978,24 @@ class CAService:
     async def update_certificate_status(
         self, space_id: str, cn: str, payload: CACertificatePut, fields: list
     ) -> CACertificateGet:
-        try:
-            cert = await self._crud_certificates.get_by_cn(
-                space_id=space_id, cn=cn, fields=["id"]
+        if payload.status not in ("signed", "revoked"):
+            raise QueryParamValidationError(
+                msg=f"Invalid transition to {payload.status} for certificate {cn}"
             )
-            cert_id = str(cert.id)
+        try:
+            cert = await self._crud_certificates.get_active_by_cn(
+                space_id=space_id, cn=cn, fields=[]
+            )
         except ResourceNotFound:
             raise ResourceNotFound(
                 details=f"Certificate for {cn} in space {space_id} not found"
             )
 
-        if payload.status == "signed":
-            if cert.status == "signed":
-                return cert
-            return await self.process_requested_certificate(_id=cert_id)
-        elif payload.status == "revoked":
-            return await self.revoke_certificate(_id=cert_id)
-        else:
-            raise QueryParamValidationError(
-                msg=f"Invalid transition to {payload.status} for certificate in status {cert.status}"
-            )
+        if payload.status == "revoked":
+            return await self.revoke_certificate(_id=str(cert.id))
+        if cert.status == "signed":
+            return cert
+        return await self.process_requested_certificate(_id=str(cert.id))
 
     async def update_certificate_status_by_ca(
         self, ca_id: str, cert_id: str, payload: CACertificatePut, fields: list
@@ -1028,9 +1015,6 @@ class CAService:
                 details=f"Certificate '{cert_id}' not found for CA '{ca_id}'"
             )
         return await self.revoke_certificate(_id=cert_id)
-
-    async def delete_certificate(self, space_id: str, cn: str) -> None:
-        await self._crud_certificates.delete_by_cn(space_id=space_id, cn=cn)
 
     async def get_crl_chain(self, space_id: str) -> bytes:
         space = await self._crud_spaces.get(space_id, fields=[], use_cache=True)

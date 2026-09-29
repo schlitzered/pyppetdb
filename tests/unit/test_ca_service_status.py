@@ -44,7 +44,7 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         cert_req = CACertificateGet(
             id="123", status="requested", cn="node1", space_id="space1"
         )
-        self.crud_certificates.get_by_cn.side_effect = [cert_req]
+        self.crud_certificates.get_active_by_cn.side_effect = [cert_req]
 
         # Mock processing the request
         self.service.process_requested_certificate = AsyncMock(return_value=cert_req)
@@ -64,7 +64,7 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         cert_signed = CACertificateGet(
             id="123", status="signed", cn="node1", space_id="space1"
         )
-        self.crud_certificates.get_by_cn.return_value = cert_signed
+        self.crud_certificates.get_active_by_cn.return_value = cert_signed
 
         # Mock processing should NOT be called
         self.service.process_requested_certificate = AsyncMock()
@@ -84,7 +84,7 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         cert_signed = CACertificateGet(
             id="123", status="signed", cn="node1", space_id="space1"
         )
-        self.crud_certificates.get_by_cn.return_value = cert_signed
+        self.crud_certificates.get_active_by_cn.return_value = cert_signed
 
         # Mock revocation
         self.service.revoke_certificate = AsyncMock(return_value=cert_signed)
@@ -101,7 +101,7 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
 
     async def test_update_certificate_status_not_found(self):
         # Mock finding nothing in one call
-        self.crud_certificates.get_by_cn.side_effect = ResourceNotFound()
+        self.crud_certificates.get_active_by_cn.side_effect = ResourceNotFound()
 
         with self.assertRaises(ResourceNotFound):
             await self.service.update_certificate_status(
@@ -110,3 +110,29 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
                 payload=CACertificatePut(status="signed"),
                 fields=[],
             )
+
+    async def test_revoke_without_active_cert_raises_not_found(self):
+        self.crud_certificates.get_active_by_cn.side_effect = ResourceNotFound()
+        self.service.revoke_certificate = AsyncMock()
+
+        with self.assertRaises(ResourceNotFound):
+            await self.service.update_certificate_status(
+                space_id="space1",
+                cn="node1",
+                payload=CACertificatePut(status="revoked"),
+                fields=[],
+            )
+        self.service.revoke_certificate.assert_not_called()
+
+    async def test_sign_without_active_cert_ignores_revoked_ones(self):
+        self.crud_certificates.get_active_by_cn.side_effect = ResourceNotFound()
+        self.service.process_requested_certificate = AsyncMock()
+
+        with self.assertRaises(ResourceNotFound):
+            await self.service.update_certificate_status(
+                space_id="space1",
+                cn="node1",
+                payload=CACertificatePut(status="signed"),
+                fields=[],
+            )
+        self.service.process_requested_certificate.assert_not_called()

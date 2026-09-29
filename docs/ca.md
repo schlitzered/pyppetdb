@@ -56,9 +56,15 @@ Served under `/puppet-ca/v1` (Puppet proxy router group, mTLS):
 | `PUT` | `/puppet-ca/v1/certificate_request/{nodename}` | Submit a CSR. |
 | `GET` | `/puppet-ca/v1/certificate_status/{nodename}` | Get certificate status. |
 | `PUT` | `/puppet-ca/v1/certificate_status/{nodename}` | Sign a pending request. |
-| `DELETE` | `/puppet-ca/v1/certificate_status/{nodename}` | Revoke / clean a certificate. |
+| `DELETE` | `/puppet-ca/v1/certificate_status/{nodename}` | Revoke the active certificate or pending request. |
 | `GET` | `/puppet-ca/v1/certificate_revocation_list/ca` | Retrieve the CRL. |
 | `POST` | `/puppet-ca/v1/certificate_renewal` | Renew the caller's certificate (the undocumented Puppet auto-refresh endpoint). |
+
+Certificates are never deleted, only revoked; revoked ones stay in the database until they
+expire. The Puppet CA endpoints only see the active certificate of a node — its pending request
+or its signed certificate, of which there is at most one — so a revoked certificate looks
+deleted to them: `certificate_status` answers 404, and `puppetserver ca clean` (the `DELETE`
+above) revokes the certificate and lets the node submit a new request.
 
 ## CA management API
 
