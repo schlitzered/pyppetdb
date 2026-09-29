@@ -239,6 +239,13 @@ class CrudCAAuthorities(CrudMongo):
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
+    async def revoke(self, _id: str, revocation_date: datetime.datetime) -> None:
+        await self._update(
+            query={"id": _id, "status": {"$ne": "revoked"}},
+            payload={"status": "revoked", "revocation_date": revocation_date},
+            fields=["id"],
+        )
+
     async def resource_exists(self, _id: str) -> ObjectId:
         query = {"id": _id}
         return await self._resource_exists(query=query)
@@ -269,9 +276,8 @@ class CrudCAAuthorities(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(ca["serial_number"]),
-                    "revocation_date": ca.get(
-                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
-                    ),
+                    "revocation_date": ca.get("revocation_date")
+                    or datetime.datetime.now(datetime.timezone.utc),
                 }
             )
         return revoked

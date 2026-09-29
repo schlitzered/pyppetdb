@@ -304,9 +304,8 @@ class CrudCACertificates(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(cert["serial_number"]),
-                    "revocation_date": cert.get(
-                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
-                    ),
+                    "revocation_date": cert.get("revocation_date")
+                    or datetime.datetime.now(datetime.timezone.utc),
                 }
             )
         return revoked

@@ -193,6 +193,21 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"status": "revoked"},
         )
+        revoked_at = self._db["ca_authorities"].find_one({"id": sub_ca_id})[
+            "revocation_date"
+        ]
+        self.assertIsNotNone(revoked_at)
+        resp = self.client.put(
+            f"/api/v1/ca/authorities/{sub_ca_id}",
+            headers=self._auth_headers(),
+            json={"status": "revoked"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "revoked")
+        self.assertEqual(
+            self._db["ca_authorities"].find_one({"id": sub_ca_id})["revocation_date"],
+            revoked_at,
+        )
 
         # 3. Create and Revoke a Certificate in the space
         from cryptography import x509

@@ -954,11 +954,22 @@ class CAService:
         self, ca_id: str, payload: CAAuthorityPut, fields: list
     ) -> CAAuthorityGet:
         data_internal = payload.model_dump(exclude_unset=True)
-        result = await self._crud_authorities.update(
+        if data_internal.pop("status", None) == "revoked":
+            try:
+                await self._crud_authorities.revoke(
+                    _id=ca_id,
+                    revocation_date=datetime.datetime.now(datetime.timezone.utc),
+                )
+            except ResourceNotFound:
+                await self._crud_authorities.get(ca_id, fields=["id"], use_cache=False)
+        self._cache.pop(ca_id, None)
+        if not data_internal:
+            return await self._crud_authorities.get(
+                ca_id, fields=fields, use_cache=False
+            )
+        return await self._crud_authorities.update(
             _id=ca_id, payload=CAAuthorityPutInternal(**data_internal), fields=fields
         )
-        self._cache.pop(ca_id, None)
-        return result
 
     async def delete_authority(self, ca_id: str) -> None:
         # Check if authority is in use by spaces

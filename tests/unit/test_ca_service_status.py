@@ -15,7 +15,9 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 from pyppetdb.ca.service import CAService
+from pyppetdb.model.ca_authorities import CAAuthorityGet, CAAuthorityPut
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
+from pyppetdb.model.ca_validation import CAValidationConfig
 from pyppetdb.errors import ResourceNotFound
 
 
@@ -136,3 +138,56 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
                 fields=[],
             )
         self.service.process_requested_certificate.assert_not_called()
+
+
+class TestCAServiceUpdateAuthority(unittest.IsolatedAsyncioTestCase):
+    setUp = TestCAServiceStatusUpdate.setUp
+
+    async def test_revoke_sets_revocation_date(self):
+        ca = CAAuthorityGet(id="sub", status="revoked")
+        self.crud_authorities.get.return_value = ca
+
+        result = await self.service.update_authority(
+            ca_id="sub", payload=CAAuthorityPut(status="revoked"), fields=[]
+        )
+
+        self.assertEqual(result, ca)
+        kwargs = self.crud_authorities.revoke.call_args.kwargs
+        self.assertEqual(kwargs["_id"], "sub")
+        self.assertIsNotNone(kwargs["revocation_date"].tzinfo)
+        self.crud_authorities.update.assert_not_called()
+
+    async def test_revoking_again_keeps_the_first_date(self):
+        self.crud_authorities.revoke.side_effect = ResourceNotFound()
+        self.crud_authorities.get.return_value = CAAuthorityGet(
+            id="sub", status="revoked"
+        )
+
+        await self.service.update_authority(
+            ca_id="sub", payload=CAAuthorityPut(status="revoked"), fields=[]
+        )
+
+        self.crud_authorities.update.assert_not_called()
+
+    async def test_revoking_unknown_authority_raises_not_found(self):
+        self.crud_authorities.revoke.side_effect = ResourceNotFound()
+        self.crud_authorities.get.side_effect = ResourceNotFound()
+
+        with self.assertRaises(ResourceNotFound):
+            await self.service.update_authority(
+                ca_id="nope", payload=CAAuthorityPut(status="revoked"), fields=[]
+            )
+
+    async def test_validation_config_update_does_not_revoke(self):
+        payload = CAAuthorityPut(validation_config=CAValidationConfig(max_san_count=3))
+
+        await self.service.update_authority(ca_id="sub", payload=payload, fields=[])
+
+        self.crud_authorities.revoke.assert_not_called()
+        self.crud_authorities.update.assert_called_once()
+        self.assertNotIn(
+            "status",
+            self.crud_authorities.update.call_args.kwargs["payload"].model_dump(
+                exclude_unset=True
+            ),
+        )
