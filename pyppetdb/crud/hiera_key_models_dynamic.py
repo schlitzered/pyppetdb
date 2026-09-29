@@ -98,7 +98,7 @@ class CrudHieraModelsDynamicAdapter:
         elif operation == "delete":
             model_id = self._doc_to_model_id.pop(doc_id, None)
             if model_id:
-                self.model_unregister(str(model_id))
+                self._unregister_quietly(str(model_id))
 
         else:
             self.log.warning(f"Unhandled operation type: {operation}")

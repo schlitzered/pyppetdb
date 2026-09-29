@@ -380,6 +380,20 @@ class TestHieraModelsDynamicAdapterResync(_WatcherTestCase):
         await adapter._load_initial_data()
         self.assertEqual(adapter.model_register.call_count, 2)
 
+    async def test_delete_event_for_locally_removed_model_is_ignored(self):
+        from pyhiera.errors import PyHieraError
+
+        adapter = self._adapter()
+        adapter.model_unregister.side_effect = PyHieraError("not found")
+        adapter._doc_to_model_id["d1"] = "dynamic:a"
+
+        await adapter._handle_change(
+            {"operationType": "delete", "documentKey": {"_id": "d1"}}
+        )
+
+        adapter.model_unregister.assert_called_once_with("dynamic:a")
+        self.assertEqual(adapter._doc_to_model_id, {})
+
     async def test_change_stream_delivers_the_model(self):
         adapter = self._adapter()
         self.coll.find.side_effect = _cursors([])
