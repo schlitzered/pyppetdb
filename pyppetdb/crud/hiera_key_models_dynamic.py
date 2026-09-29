@@ -97,8 +97,10 @@ class CrudHieraModelsDynamicAdapter:
 
         elif operation == "delete":
             model_id = self._doc_to_model_id.pop(doc_id, None)
-            if model_id:
-                self._unregister_quietly(str(model_id))
+            if model_id and not await self.coll.find_one(
+                {"id": model_id}, {"_id": 1}
+            ):
+                self.model_unregister_if_present(str(model_id))
 
         else:
             self.log.warning(f"Unhandled operation type: {operation}")
@@ -114,7 +116,7 @@ class CrudHieraModelsDynamicAdapter:
 
             for doc_id, model_id in list(self._doc_to_model_id.items()):
                 if doc_id not in loaded:
-                    self._unregister_quietly(str(model_id))
+                    self.model_unregister_if_present(str(model_id))
             for doc in loaded.values():
                 try:
                     self.model_register(
@@ -133,7 +135,7 @@ class CrudHieraModelsDynamicAdapter:
             self.log.error(f"Error loading initial data: {err}")
             raise
 
-    def _unregister_quietly(self, model_id: str):
+    def model_unregister_if_present(self, model_id: str):
         try:
             self.model_unregister(model_id)
         except PyHieraError as err:
@@ -265,7 +267,7 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
     ):
         query = {"id": _id}
         await self._delete(query=query)
-        self._key_model_adapter.model_unregister(_id)
+        self._key_model_adapter.model_unregister_if_present(_id)
         return {}
 
     async def search(

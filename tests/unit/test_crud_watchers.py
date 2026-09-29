@@ -16,6 +16,7 @@ import asyncio
 import logging
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -386,12 +387,26 @@ class TestHieraModelsDynamicAdapterResync(_WatcherTestCase):
         adapter = self._adapter()
         adapter.model_unregister.side_effect = PyHieraError("not found")
         adapter._doc_to_model_id["d1"] = "dynamic:a"
+        self.coll.find_one = AsyncMock(return_value=None)
 
         await adapter._handle_change(
             {"operationType": "delete", "documentKey": {"_id": "d1"}}
         )
 
         adapter.model_unregister.assert_called_once_with("dynamic:a")
+        self.assertEqual(adapter._doc_to_model_id, {})
+
+    async def test_stale_delete_event_keeps_recreated_model(self):
+        adapter = self._adapter()
+        adapter._doc_to_model_id["old"] = "dynamic:a"
+        self.coll.find_one = AsyncMock(return_value={"_id": "new"})
+
+        await adapter._handle_change(
+            {"operationType": "delete", "documentKey": {"_id": "old"}}
+        )
+
+        adapter.model_unregister.assert_not_called()
+        self.coll.find_one.assert_called_once_with({"id": "dynamic:a"}, {"_id": 1})
         self.assertEqual(adapter._doc_to_model_id, {})
 
     async def test_change_stream_delivers_the_model(self):
