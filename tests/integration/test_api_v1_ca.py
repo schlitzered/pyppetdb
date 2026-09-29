@@ -108,6 +108,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
                 "ca_id": ca_id,
                 "cn": "test-node",
                 "status": "requested",
+                "cert_uniqueness": f"{space_id}:test-node",
                 "csr": "DUMMY CSR",
                 "created": datetime.datetime.now(datetime.timezone.utc),
             }
@@ -220,6 +221,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
                 "ca_id": sub_ca_id,
                 "cn": cert_cn,
                 "status": "requested",
+                "cert_uniqueness": f"{space_id}:{cert_cn}",
                 "csr": csr_pem,
                 "created": datetime.datetime.now(datetime.timezone.utc),
             }
@@ -336,6 +338,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
                 "ca_id": ca_id,
                 "cn": cert_cn,
                 "status": "requested",
+                "cert_uniqueness": f"{space_id}:{cert_cn}",
                 "csr": csr_pem,
                 "created": datetime.datetime.now(datetime.timezone.utc),
             }
@@ -444,6 +447,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
                 "ca_id": ca_id,
                 "cn": cert_cn,
                 "status": "signed",
+                "cert_uniqueness": f"{space_id}:{cert_cn}",
                 "created": datetime.datetime.now(datetime.timezone.utc),
             }
         )
