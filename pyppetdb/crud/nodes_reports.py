@@ -265,6 +265,26 @@ class CrudNodesReports(CrudMongo):
         )
         return NodeReportGet(**self._redactor.redact(result))
 
+    async def latest_details(self, node_ids: list, parts: tuple) -> dict:
+        if not node_ids or not parts:
+            return {}
+        projection = {"_id": 0, "node_id": 1}
+        for part in parts:
+            projection[f"report.{part}"] = 1
+        details = {}
+        try:
+            cursor = self.coll.find(
+                {"node_id": {"$in": list(node_ids)}, "report.latest": True},
+                projection=projection,
+            )
+            async for document in cursor:
+                redacted = self._redactor.redact(document)
+                details[redacted["node_id"]] = redacted.get("report") or {}
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        return details
+
     async def resource_exists(
         self,
         _id: datetime,

@@ -432,6 +432,38 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         payload = self.crud._create.call_args.kwargs["payload"]
         self.assertIn({"p": "osfamily", "v": "Debian"}, payload["facts_index"])
 
+    def test_optional_node_data_has_partial_indexes_matching_the_entity_stages(self):
+        from pyppetdb.pdb.query.entities import get_entity
+
+        indexes = {index.document["name"]: index.document for index in self.crud._indices}
+        for index_name, entity_name in (
+            ("idx_package_inventory", "packages"),
+            ("idx_catalog_inputs", "catalog-inputs"),
+            ("idx_catalog_inputs", "catalog-input-contents"),
+        ):
+            partial = indexes[index_name]["partialFilterExpression"]
+            first_match = get_entity(entity_name).stages[0]["$match"]
+            for field, condition in partial.items():
+                self.assertEqual(first_match.get(field), condition, entity_name)
+            leading = next(iter(indexes[index_name]["key"]))
+            self.assertEqual(first_match.get(leading), {"$type": "string"}, entity_name)
+
+    def test_status_grouping_is_covered_by_an_index(self):
+        model = next(
+            index
+            for index in self.crud._indices
+            if index.document["name"] == "idx_disabled_report_status"
+        )
+        self.assertEqual(
+            list(model.document["key"].items()), [("disabled", 1), ("report.status", 1)]
+        )
+
+    def test_disabled_index_covers_active_counts(self):
+        model = next(
+            index for index in self.crud._indices if index.document["name"] == "idx_disabled"
+        )
+        self.assertNotIn("partialFilterExpression", model.document)
+
     def test_facts_index_is_indexed(self):
         names = {index.document["name"] for index in self.crud._indices}
         self.assertIn("idx_facts_index", names)

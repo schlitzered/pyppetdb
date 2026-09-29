@@ -269,6 +269,7 @@ class FilterCompiler:
         self._entity = entity
         self._engine = engine
         self._validate_only = validate_only
+        self._pins = {}
 
     @property
     def entity(self):
@@ -303,11 +304,17 @@ class FilterCompiler:
             return {"$nor": [inner]}
         if len(node) == 1:
             raise bad_operator_arity(operator, 0)
+        inherited = self._pins
+        if operator == "and":
+            self._pins = _merge_pins(inherited, _conjunct_pins(node[1:]))
         parts = []
-        for child in node[1:]:
-            compiled = await self.compile(child)
-            if compiled:
-                parts.append(compiled)
+        try:
+            for child in node[1:]:
+                compiled = await self.compile(child)
+                if compiled:
+                    parts.append(compiled)
+        finally:
+            self._pins = inherited
         if not parts:
             return {}
         if len(parts) == 1:
@@ -388,7 +395,8 @@ class FilterCompiler:
             ]
             return {path: {"$in": values}}
 
-        rows = await self._run_subquery(value, len(resolved))
+        pinned = self._pins.get(fields[0]) if len(fields) == 1 else None
+        rows = await self._run_subquery(value, len(resolved), pinned)
         if self._validate_only:
             return {}
         if not rows:
@@ -406,7 +414,7 @@ class FilterCompiler:
         )
         return {"$and": clauses}
 
-    async def _run_subquery(self, node, arity: int):
+    async def _run_subquery(self, node, arity: int, pinned=None):
         entity_name, column_spec, inner_ast = _subquery_parts(node)
         columns, _functions = _parse_extract_columns(column_spec)
         if len(columns) != arity:
@@ -418,7 +426,15 @@ class FilterCompiler:
                 entity_name, ["extract", column_spec, inner_ast]
             )
             return []
+        if pinned is not None and self._pinnable(entity_name, columns[0]):
+            inner_ast = _pinned_ast(inner_ast, columns[0], pinned)
         return await self._engine.select(entity_name, columns, inner_ast)
+
+    def _pinnable(self, entity_name: str, column_name) -> bool:
+        if not isinstance(column_name, str):
+            return False
+        column = self._engine.entity(entity_name).by_name.get(column_name)
+        return column is not None and column.type == "string" and not column.virtual
 
     async def _compile_subquery(self, node) -> dict:
         if len(node) not in (2, 3) or not isinstance(node[1], str):
@@ -436,6 +452,9 @@ class FilterCompiler:
                 entity_name, ["extract", [remote], inner_ast]
             )
             return {}
+        pinned = self._pins.get(local)
+        if pinned is not None and self._pinnable(entity_name, remote):
+            inner_ast = _pinned_ast(inner_ast, remote, pinned)
         rows = await self._engine.select(entity_name, [remote], inner_ast)
         if not rows:
             return {"__never__": True}
@@ -547,6 +566,56 @@ def _unique(values) -> list:
             pass
         unique.append(value)
     return unique
+
+
+MAX_PINNED_VALUES = 1000
+
+
+def _conjunct_pins(children) -> dict:
+    pins = {}
+    for child in children:
+        found = _clause_pin(child)
+        if found is None:
+            continue
+        field, values = found
+        pins[field] = values if field not in pins else pins[field] & values
+    return pins
+
+
+def _clause_pin(node):
+    if not isinstance(node, list) or len(node) != 3 or not isinstance(node[1], str):
+        return None
+    if node[0] == "=" and isinstance(node[2], str):
+        return node[1], frozenset([node[2]])
+    if node[0] == "in" and isinstance(node[2], list) and len(node[2]) == 2:
+        if node[2][0] != "array" or not isinstance(node[2][1], list):
+            return None
+        values = node[2][1]
+        if values and len(values) <= MAX_PINNED_VALUES and all(
+            isinstance(item, str) for item in values
+        ):
+            return node[1], frozenset(values)
+    return None
+
+
+def _merge_pins(inherited: dict, found: dict) -> dict:
+    if not found:
+        return inherited
+    merged = dict(inherited)
+    for field, values in found.items():
+        merged[field] = values if field not in merged else merged[field] & values
+    return merged
+
+
+def _pinned_ast(inner_ast, column: str, values) -> list:
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        pin = ["=", column, ordered[0]]
+    else:
+        pin = ["in", column, ["array", ordered]]
+    if inner_ast is None:
+        return pin
+    return ["and", inner_ast, pin]
 
 
 def _subquery_parts(node):

@@ -62,6 +62,7 @@ class Entity(BaseModel):
     distinct_field: Optional[str] = None
     distinct_source: Optional[str] = None
     path_source: Optional[str] = None
+    covering_index: Optional[Dict[str, Any]] = None
     distinct_top_level: bool = False
     fact_pair: Optional[Dict[str, str]] = None
 
@@ -509,7 +510,14 @@ CATALOGS = Entity(
 CATALOG_INPUTS = Entity(
     name="catalog-inputs",
     collection="nodes",
-    stages=[{"$match": {"catalog_inputs": {"$type": "object"}}}],
+    stages=[
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "catalog_inputs": {"$type": "object"},
+            }
+        }
+    ],
     columns=[
         Column("certname", "string", "$id"),
         Column("catalog_uuid", "string", "$catalog_inputs.catalog_uuid"),
@@ -527,7 +535,13 @@ CATALOG_INPUT_CONTENTS = Entity(
     name="catalog-input-contents",
     collection="nodes",
     stages=[
-        {"$match": {"catalog_inputs.inputs": {"$type": "array"}}},
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "catalog_inputs": {"$type": "object"},
+                "catalog_inputs.inputs": {"$type": "array"},
+            }
+        },
         {
             "$project": {
                 "id": 1,
@@ -556,7 +570,12 @@ PACKAGES = Entity(
     name="packages",
     collection="nodes",
     stages=[
-        {"$match": {"package_inventory": {"$type": "array"}}},
+        {
+            "$match": {
+                "id": {"$type": "string"},
+                "package_inventory": {"$type": "array"},
+            }
+        },
         {
             "$project": {
                 "id": 1,
@@ -699,6 +718,19 @@ REPORTS = Entity(
 EVENTS = Entity(
     name="events",
     collection="nodes_events",
+    covering_index={
+        "prefix": "latest",
+        "values": [True, False],
+        "fields": [
+            "latest",
+            "status",
+            "node_id",
+            "resource_type",
+            "resource_title",
+            "containing_class",
+            "corrective_change",
+        ],
+    },
     columns=[
         Column("certname", "string", "$node_id"),
         Column("report", "string", "$report_hash"),

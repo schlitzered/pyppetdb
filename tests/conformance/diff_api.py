@@ -19,6 +19,7 @@ import os
 import re
 import ssl
 import sys
+import statistics
 import time
 from html import escape
 from collections import Counter
@@ -507,7 +508,8 @@ def render_html(reports, args) -> str:
         '<h1>pyppetdb gegen OpenVoxDB</h1>'
         f'<p class="lede">{len(reports)} Fälle, gleiche Daten, gleiche Queries — '
         f'<span class="a">A = pyppetdb</span> {escape(args.a)} · '
-        f'<span class="b">B = OpenVoxDB</span> {escape(args.b)} · Node <code>{escape(args.node)}</code> · {stamp}</p>'
+        f'<span class="b">B = OpenVoxDB</span> {escape(args.b)} · Node <code>{escape(args.node)}</code> · {stamp}'
+        f'{" · Zeiten: Median aus %d Läufen" % args.repeat if args.repeat > 1 else ""}</p>'
         '<div class="tiles">'
         f'<div class="tile ok"><b>{counts["ok"]}</b><span>identisch</span></div>'
         f'<div class="tile diff"><b>{counts["diff"]}</b><span>abweichend</span></div>'
@@ -648,6 +650,12 @@ async def main() -> int:
     )
     parser.add_argument("--only", help="regex on the case name")
     parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="run every case N times against both targets and report the median time",
+    )
     parser.add_argument("--page-size", type=int, default=5000)
     parser.add_argument("--max-rows", type=int, default=50000)
     parser.add_argument(
@@ -717,18 +725,22 @@ async def main() -> int:
             a = b = None
             ms_a = ms_b = None
             try:
-                started = time.perf_counter()
-                a, headers_a, status_a, total_a = await fetch_all(
-                    client, args.a, path_a, resolved_query, params,
-                    entity, args.page_size, args.max_rows, args.totals,
-                )
-                ms_a = (time.perf_counter() - started) * 1000
-                started = time.perf_counter()
-                b, headers_b, status_b, total_b = await fetch_all(
-                    client, args.b, path_b, resolved_query, params,
-                    entity, args.page_size, args.max_rows, args.totals,
-                )
-                ms_b = (time.perf_counter() - started) * 1000
+                times_a, times_b = [], []
+                for _ in range(max(1, args.repeat)):
+                    started = time.perf_counter()
+                    a, headers_a, status_a, total_a = await fetch_all(
+                        client, args.a, path_a, resolved_query, params,
+                        entity, args.page_size, args.max_rows, args.totals,
+                    )
+                    times_a.append((time.perf_counter() - started) * 1000)
+                    started = time.perf_counter()
+                    b, headers_b, status_b, total_b = await fetch_all(
+                        client, args.b, path_b, resolved_query, params,
+                        entity, args.page_size, args.max_rows, args.totals,
+                    )
+                    times_b.append((time.perf_counter() - started) * 1000)
+                ms_a = statistics.median(times_a)
+                ms_b = statistics.median(times_b)
             except Exception as err:
                 report = Report(case.name)
                 report.error = f"{type(err).__name__}: {err}"[:120]
@@ -799,6 +811,14 @@ async def main() -> int:
                 and (report.status_a or 200) < 400)
     print(f"\n{clean}/{len(reports)} Faelle identisch"
           f" ({empty} davon ohne Daten, also ohne Aussagekraft)")
+    timed = [r for r in reports if r.ms_a is not None and r.ms_b is not None]
+    slower = sorted(
+        (r for r in timed if r.ms_a > r.ms_b), key=lambda r: r.ms_b - r.ms_a
+    )
+    label = "Median aus %d Laeufen" % args.repeat if args.repeat > 1 else "ein Lauf"
+    print(f"A schneller in {len(timed) - len(slower)}/{len(timed)} Faellen ({label})")
+    for r in slower:
+        print(f"  B schneller: {r.name:{width}}  {r.ms_a:9.1f} ms vs {r.ms_b:9.1f} ms")
     if args.html:
         with open(args.html, "w") as handle:
             handle.write(render_html(reports, args))

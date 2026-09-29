@@ -237,8 +237,10 @@ class CrudMongo(
                         f"Dropping index {ext_name} because it has same keys as {target_name} but different name"
                     )
                     await self.coll.drop_index(ext_name)
-                elif ext_name == target_name and ext_key != target_key:
-                    self.log.info(f"Dropping index {ext_name} because keys changed")
+                elif ext_name == target_name:
+                    self.log.info(
+                        f"Dropping index {ext_name} because its keys or options changed"
+                    )
                     await self.coll.drop_index(ext_name)
             await self.coll.create_indexes([index])
         except Exception as e:

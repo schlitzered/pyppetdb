@@ -15,6 +15,7 @@
 import json
 import logging
 import unittest
+from unittest.mock import AsyncMock
 
 import pymongo.errors
 from datetime import UTC
@@ -22,6 +23,7 @@ from datetime import datetime
 
 from pyppetdb.pdb.query.engine import NEVER_MATCH
 from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import SUBQUERY_LIMIT
 from pyppetdb.pdb.query.engine import build_prefilter
 from pyppetdb.pdb.query.engine import build_prefilter_plan
 from pyppetdb.pdb.query.paging import parse_paging
@@ -64,12 +66,22 @@ class FakeCursor:
         return generate()
 
     async def to_list(self, length=None):
-        return list(self._docs)
+        if length is None:
+            batch, self._docs = list(self._docs), []
+        else:
+            batch, self._docs = list(self._docs[:length]), list(self._docs[length:])
+        return batch
+
+    async def close(self):
+        self.closed = True
 
 
 class FakeCollection:
-    def __init__(self, docs=None, counts=None, distinct_values=None):
+    name = "fake"
+
+    def __init__(self, docs=None, counts=None, distinct_values=None, indexes=None):
         self.docs = docs or []
+        self.indexes = indexes or []
         self.counts = counts
         self.distinct_values = distinct_values or []
         self.pipelines = []
@@ -101,6 +113,10 @@ class FakeCollection:
         if pipeline and pipeline[-1] == {"$count": "count"}:
             return FakeCursor([{"count": self.counts}] if self.counts else [])
         return FakeCursor(self.docs)
+
+    async def list_indexes(self):
+        for index in self.indexes:
+            yield index
 
     def find(self, query=None, projection=None):
         self.finds.append((query, projection))
@@ -450,16 +466,69 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             node = ["and", node]
         await engine.run("nodes", node)
 
-    async def test_page_cap_limits_unbounded_query(self):
-        nodes = FakeCollection()
-        engine = QueryEngine(
+    def capped_engine(self, resources):
+        return QueryEngine(
             log=logging.getLogger("test"),
-            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": nodes, "nodes_edges": FakeCollection()},
+            collections={"nodes": FakeCollection(), "nodes_reports": FakeCollection(), "nodes_resources": resources, "nodes_edges": FakeCollection()},
             max_page_size=5000,
         )
-        await engine.run("resources", ["=", "type", "File"])
+
+    async def test_page_cap_asks_for_one_row_more_than_it_allows(self):
+        nodes = FakeCollection()
+        await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
         limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
-        self.assertEqual(limits, [5000])
+        self.assertEqual(limits, [5001])
+
+    async def test_page_cap_refuses_instead_of_truncating(self):
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(5001)])
+        with self.assertRaises(PuppetDBQueryError) as ctx:
+            await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("more than 5000 rows", ctx.exception.message)
+
+    async def test_page_cap_passes_results_that_fit(self):
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(5000)])
+        rows, total = await self.capped_engine(nodes).run("resources", ["=", "type", "File"])
+        self.assertEqual((len(rows), total), (5000, 5000))
+
+    async def test_streamed_results_are_not_capped(self):
+        from pyppetdb.pdb.query import engine as module
+        from pyppetdb.pdb.query.engine import RowStream
+
+        nodes = FakeCollection(docs=[{"title": str(index)} for index in range(7)])
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = 3
+        try:
+            stream, total = await self.capped_engine(nodes).run(
+                "resources", ["=", "type", "File"], stream=True
+            )
+            self.assertIsInstance(stream, RowStream)
+            batches = [batch async for batch in stream.batches()]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        self.assertEqual([len(batch) for batch in batches], [3, 3, 1])
+        self.assertFalse(any("$limit" in stage for stage in nodes.pipelines[-1]))
+        self.assertIsNone(total)
+
+    async def test_streamed_include_total_counts_first(self):
+        nodes = FakeCollection(docs=[{"title": "a"}], counts=42)
+        stream, total = await self.capped_engine(nodes).run(
+            "resources", None, paging=Paging(include_total=True), stream=True
+        )
+        self.assertEqual(total, 42)
+
+    async def test_scalar_entities_stream_their_scalar(self):
+        nodes = FakeCollection(docs=[{"name": "kernel"}])
+        engine = engine_with(nodes)
+        stream, _total = await engine.run(
+            "fact-names", ["~", "name", "ker"], stream=True
+        )
+        self.assertEqual([batch async for batch in stream.batches()], [["kernel"]])
+
+    async def test_python_entities_never_stream(self):
+        nodes = FakeCollection(docs=[{"id": "h", "facts": {"a": 1}}])
+        rows, _total = await engine_with(nodes).run("fact-contents", None, stream=True)
+        self.assertIsInstance(rows, list)
 
     async def test_page_cap_shrinks_oversized_limit(self):
         nodes = FakeCollection()
@@ -472,7 +541,7 @@ class TestQueryEngineMongo(unittest.IsolatedAsyncioTestCase):
             "resources", ["=", "type", "File"], paging=Paging(limit=99999)
         )
         limits = [s["$limit"] for s in nodes.pipelines[-1] if "$limit" in s]
-        self.assertEqual(limits, [5000])
+        self.assertEqual(limits, [5001])
 
     async def test_page_cap_leaves_small_limit_and_aggregates_alone(self):
         nodes = FakeCollection()
@@ -632,7 +701,7 @@ class TestActiveRestriction(unittest.IsolatedAsyncioTestCase):
         nodes = FakeCollection()
         engine = engine_with(nodes)
         await engine.run("environments", ["=", "name", "prod"], restrict_active=True)
-        self.assertFalse(any("disabled" in str(stage) for stage in nodes.pipelines[0]))
+        self.assertEqual(nodes.distincts, [("environment", {"environment": "prod"})])
 
 
 class TestDistinctWindow(unittest.IsolatedAsyncioTestCase):
@@ -692,6 +761,247 @@ class TestExtractNullFill(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stage(nodes.pipelines[0], "$set"), {"certname": {"$ifNull": ["$certname", None]}})
 
 
+class TestSelectFactDocuments(unittest.IsolatedAsyncioTestCase):
+    async def pipeline(self, columns, ast):
+        nodes = FakeCollection(docs=[{"_id": "host1"}])
+        engine = engine_with(nodes)
+        rows = await engine.select("facts", columns, ast)
+        return nodes.pipelines[0], rows
+
+    async def test_pinned_name_selects_documents_that_carry_the_fact(self):
+        pipeline, rows = await self.pipeline(["certname"], ["=", "name", "kernel"])
+        self.assertEqual(
+            pipeline,
+            [
+                {"$match": {"$and": [{"facts_index.p": "kernel"}, {"facts.kernel": {"$exists": True}}]}},
+                {"$group": {"_id": "$id"}},
+                {"$match": {"_id": {"$ne": None}}},
+                {"$limit": SUBQUERY_LIMIT},
+            ],
+        )
+        self.assertEqual(rows, [("host1",)])
+
+    async def test_document_level_clauses_become_the_prefilter(self):
+        pipeline, _rows = await self.pipeline(
+            ["environment"],
+            ["and", ["in", "name", ["array", ["kernel", "os"]]], ["in", "certname", ["array", ["a", "b"]]]],
+        )
+        self.assertEqual(
+            pipeline[0],
+            {
+                "$match": {
+                    "$and": [
+                        {"id": {"$in": ["a", "b"]}},
+                        {
+                            "$or": [
+                                {"$and": [{"facts_index.p": "kernel"}, {"facts.kernel": {"$exists": True}}]},
+                                {"$and": [{"facts_index.p": "os"}, {"facts.os": {"$exists": True}}]},
+                            ]
+                        },
+                    ]
+                }
+            },
+        )
+        self.assertEqual(pipeline[1], {"$group": {"_id": "$environment"}})
+
+    async def test_disjoint_name_pins_select_nothing(self):
+        nodes = FakeCollection(docs=[{"_id": "host1"}])
+        rows = await engine_with(nodes).select(
+            "facts", ["certname"], ["and", ["=", "name", "kernel"], ["=", "name", "os"]]
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(nodes.pipelines, [])
+
+    async def assert_falls_back(self, columns, ast):
+        pipeline, _rows = await self.pipeline(columns, ast)
+        self.assertNotEqual(pipeline[1], {"$group": {"_id": "$id"}}, ast)
+
+    async def test_row_level_or_unpinned_filters_fall_back_to_the_expansion(self):
+        await self.assert_falls_back(["certname"], ["and", ["=", "name", "kernel"], ["=", "value", "Linux"]])
+        await self.assert_falls_back(["certname"], ["~", "name", "^ker"])
+        await self.assert_falls_back(["certname"], ["or", ["=", "name", "kernel"], ["=", "certname", "a"]])
+        await self.assert_falls_back(["certname"], ["=", "name", "os.family"])
+        await self.assert_falls_back(["name"], ["=", "name", "kernel"])
+
+
+class TestIncrementalSort(unittest.IsolatedAsyncioTestCase):
+    INDEX = [{"key": {"node_id": 1, "timestamp": 1}}]
+
+    def events(self):
+        rows = []
+        for node in ("a", "b"):
+            for ts in (1, 2):
+                for title in ("z", "m", "a"):
+                    rows.append(
+                        {
+                            "certname": node,
+                            "timestamp": datetime(2026, 1, 1, 0, 0, ts),
+                            "resource_title": title,
+                        }
+                    )
+        return rows
+
+    async def run_events(self, paging, stream=False, indexes=None, columns=None):
+        events = FakeCollection(docs=self.events(), indexes=indexes or self.INDEX)
+        engine = engine_with(events=events)
+        ast = ["extract", columns] if columns else None
+        rows, total = await engine.run("events", ast, paging=paging, stream=stream)
+        return events, rows, total
+
+    def order(self, *keys):
+        return [(key, direction) for key, direction in keys]
+
+    async def test_sorts_only_the_index_prefix_in_the_database(self):
+        events, rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4, offset=1)
+        )
+        pipeline = events.pipelines[0]
+        self.assertEqual(stages(pipeline, "$sort"), [{"node_id": 1, "timestamp": 1}])
+        self.assertFalse(any("$skip" in stage or "$limit" in stage for stage in pipeline))
+        self.assertEqual(
+            [(r["certname"], r["timestamp"].second, r["resource_title"]) for r in rows],
+            [("a", 1, "m"), ("a", 1, "z"), ("a", 2, "a"), ("a", 2, "m")],
+        )
+
+    async def test_descending_rest_keys_and_streaming(self):
+        _events, stream, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", -1))),
+            stream=True,
+        )
+        rows = [row async for batch in stream.batches() for row in batch]
+        self.assertEqual(len(rows), 12)
+        self.assertEqual([r["resource_title"] for r in rows[:3]], ["z", "m", "a"])
+        self.assertEqual(rows[3]["timestamp"].second, 2)
+
+    async def test_a_full_index_match_sorts_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "timestamp": 1}])
+        self.assertTrue(any("$limit" in stage for stage in events.pipelines[0]))
+
+    async def test_non_scalar_columns_sort_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("new_value", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "new_value": 1}])
+
+    async def test_order_columns_missing_from_the_extract_sort_in_the_database(self):
+        events, _rows, _total = await self.run_events(
+            Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+            columns=["certname"],
+        )
+        self.assertEqual(
+            stages(events.pipelines[0], "$sort"),
+            [{"node_id": 1, "timestamp": 1, "resource_title": 1}],
+        )
+
+    async def test_a_single_value_on_a_leading_index_key_sorts_in_the_database(self):
+        events = FakeCollection(docs=self.events(), indexes=self.INDEX)
+        engine = engine_with(events=events)
+        await engine.run(
+            "events",
+            ["=", "certname", "a"],
+            paging=Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+        )
+        self.assertEqual(
+            stages(events.pipelines[0], "$sort"),
+            [{"node_id": 1, "timestamp": 1, "resource_title": 1}],
+        )
+
+    async def test_many_values_keep_the_incremental_sort(self):
+        events = FakeCollection(docs=self.events(), indexes=self.INDEX)
+        engine = engine_with(events=events)
+        await engine.run(
+            "events",
+            ["in", "certname", ["array", ["a", "b"]]],
+            paging=Paging(order_by=self.order(("certname", 1), ("timestamp", 1), ("resource_title", 1)), limit=4),
+        )
+        self.assertEqual(stages(events.pipelines[0], "$sort"), [{"node_id": 1, "timestamp": 1}])
+
+    def test_boundary_condition_selects_the_group_and_everything_after(self):
+        from pyppetdb.pdb.query.engine import _boundary_condition
+
+        self.assertEqual(
+            _boundary_condition(["node_id", "timestamp"], ("b", 5)),
+            {
+                "$or": [
+                    {"node_id": "b", "timestamp": 5},
+                    {"node_id": {"$gt": "b"}},
+                    {"node_id": "b", "timestamp": {"$gt": 5}},
+                ]
+            },
+        )
+        self.assertIsNone(_boundary_condition(["node_id", "timestamp"], ("b", None)))
+
+    def test_bson_type_order(self):
+        from pyppetdb.pdb.query.engine import _bson_order
+
+        values = [datetime(2026, 1, 1), True, "b", 2, None, "a", 1.5]
+        self.assertEqual(
+            sorted(values, key=_bson_order),
+            [None, 1.5, 2, "a", "b", True, datetime(2026, 1, 1)],
+        )
+
+
+class TestExists(unittest.IsolatedAsyncioTestCase):
+    async def test_document_entities_answer_with_find_one(self):
+        nodes = FakeCollection()
+        nodes.find_one = AsyncMock(return_value={"_id": 1})
+        engine = engine_with(nodes)
+        self.assertTrue(await engine.exists("nodes", "certname", "a"))
+        nodes.find_one.assert_awaited_once_with({"id": "a"}, projection={"_id": 1})
+        self.assertEqual(nodes.pipelines, [])
+
+    async def test_entity_stages_join_the_condition(self):
+        nodes = FakeCollection()
+        nodes.find_one = AsyncMock(return_value=None)
+        engine = engine_with(nodes)
+        self.assertFalse(await engine.exists("factsets", "certname", "a"))
+        condition = nodes.find_one.await_args.args[0]
+        self.assertIn({"id": "a"}, condition.get("$and", [condition]))
+
+    async def test_other_entities_fall_back_to_a_one_row_query(self):
+        nodes = FakeCollection(docs=[{"certname": "a"}])
+        engine = engine_with(nodes)
+        self.assertTrue(await engine.exists("catalogs", "certname", "a"))
+        self.assertEqual(len(nodes.pipelines), 1)
+
+
+class TestLookupPruning(unittest.IsolatedAsyncioTestCase):
+    async def lookups(self, ast):
+        nodes = FakeCollection()
+        engine = engine_with(nodes)
+        await engine.run("catalogs", ast)
+        return [stage["$lookup"]["as"] for stage in nodes.pipelines[0] if "$lookup" in stage]
+
+    async def test_catalog_columns_without_children_skip_both_lookups(self):
+        self.assertEqual(
+            await self.lookups(["extract", ["certname", "catalog_uuid"], ["=", "certname", "a"]]),
+            [],
+        )
+
+    async def test_full_catalogs_keep_both_lookups(self):
+        self.assertEqual(
+            await self.lookups(["=", "certname", "a"]), ["_edges", "_resources"]
+        )
+
+    async def test_only_the_requested_child_is_looked_up(self):
+        self.assertEqual(
+            await self.lookups(["extract", ["certname", "edges"], ["=", "certname", "a"]]),
+            ["_edges"],
+        )
+
+    def test_root_references_keep_every_lookup(self):
+        from pyppetdb.pdb.query.engine import _prune_lookups
+
+        pipeline = [
+            {"$lookup": {"from": "x", "as": "_x", "pipeline": []}},
+            {"$replaceRoot": {"newRoot": "$$ROOT"}},
+        ]
+        self.assertEqual(_prune_lookups(pipeline), pipeline)
+
+
 class TestGroup(unittest.IsolatedAsyncioTestCase):
     async def test_group_appends_the_stages_behind_the_match(self):
         events = FakeCollection(docs=[{"subject": {"title": "a"}}])
@@ -726,6 +1036,62 @@ class TestGroup(unittest.IsolatedAsyncioTestCase):
                 {"$group": {"_id": {"certname": "$node_id"}, "n": {"$sum": {"$cond": [{"$eq": ["$status", "failure"]}, 1, 0]}}}},
             ],
         )
+
+    async def group_pipeline(self, ast):
+        events = FakeCollection()
+        engine = engine_with(events=events)
+        await engine.group(
+            "events",
+            ["extract", ["certname"], ast] if ast is not None else ["extract", ["certname"]],
+            [{"$group": {"_id": {"certname": "$certname", "status": "$status"}}}],
+        )
+        return events.pipelines[0]
+
+    async def test_unpinned_latest_is_spelled_out_for_the_covering_index(self):
+        pipeline = await self.group_pipeline(
+            ["or", ["=", "status", "success"], ["=", "status", "skipped"]]
+        )
+        self.assertEqual(
+            pipeline[0],
+            {
+                "$match": {
+                    "$and": [
+                        {"$or": [{"status": "success"}, {"status": "skipped"}]},
+                        {"latest": {"$in": [True, False]}},
+                    ]
+                }
+            },
+        )
+        self.assertEqual(
+            pipeline[1], {"$group": {"_id": {"certname": "$node_id", "status": "$status"}}}
+        )
+
+    async def test_an_unfiltered_group_also_uses_the_covering_index(self):
+        pipeline = await self.group_pipeline(None)
+        self.assertEqual(pipeline[0], {"$match": {"latest": {"$in": [True, False]}}})
+        self.assertEqual(len(pipeline), 2)
+
+    async def test_pinned_latest_is_left_alone(self):
+        pipeline = await self.group_pipeline(["=", "latest_report?", True])
+        self.assertEqual(pipeline[0], {"$match": {"latest": True}})
+
+    async def test_fields_outside_the_covering_index_skip_the_prefix(self):
+        pipeline = await self.group_pipeline(["=", "property", "ensure"])
+        self.assertEqual(pipeline[0], {"$match": {"property": "ensure"}})
+
+    def test_the_covering_index_matches_the_events_crud(self):
+        from pyppetdb.crud.nodes_events import CrudNodesEvents
+        from unittest.mock import MagicMock
+
+        crud = CrudNodesEvents(
+            config=MagicMock(), log=logging.getLogger("test"), coll=MagicMock()
+        )
+        model = next(
+            index for index in crud._indices if index.document["name"] == "idx_latest_counts"
+        )
+        spec = get_entity("events").covering_index
+        self.assertEqual(list(model.document["key"]), spec["fields"])
+        self.assertEqual(spec["fields"][0], spec["prefix"])
 
     async def test_computed_columns_keep_the_projection(self):
         events = FakeCollection()
@@ -1133,7 +1499,17 @@ class TestCountShortcut(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows, [{"count": 4}])
         self.assertEqual(
             nodes.counts_calls,
-            [({"$and": [{"catalog_inputs": {"$type": "object"}}, {"id": "a"}]}, {})],
+            [
+                (
+                    {
+                        "$and": [
+                            {"id": {"$type": "string"}, "catalog_inputs": {"$type": "object"}},
+                            {"id": "a"},
+                        ]
+                    },
+                    {},
+                )
+            ],
         )
 
     async def test_grouped_counts_use_the_pipeline(self):
@@ -2030,19 +2406,33 @@ class TestDistinctEntities(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(rows, ["b", "a"])
 
-    async def test_a_filtered_query_still_aggregates(self):
-        nodes = FakeCollection(docs=[{"name": "prod"}])
+    async def test_an_exact_filter_is_passed_to_distinct(self):
+        nodes = FakeCollection(distinct_values=["prod"])
         engine = engine_with(nodes)
         rows, _total = await engine.run("environments", ["=", "name", "prod"])
-        self.assertEqual(nodes.distincts, [])
+        self.assertEqual(nodes.distincts, [("environment", {"environment": "prod"})])
+        self.assertEqual(nodes.pipelines, [])
         self.assertEqual(rows, [{"name": "prod"}])
 
-    async def test_an_extract_still_aggregates(self):
+    async def test_a_count_is_the_number_of_distinct_values(self):
+        nodes = FakeCollection(distinct_values=["os", "kernel", "os.family"])
+        engine = engine_with(nodes)
+        rows, total = await engine.run("fact-names", ["extract", [["function", "count"]]])
+        self.assertEqual(nodes.distincts, [("facts_index.p", None)])
+        self.assertEqual((rows, total), ([{"count": 2}], 1))
+
+    async def test_an_inexact_filter_still_aggregates(self):
         nodes = FakeCollection(docs=[{"name": "os"}])
         engine = engine_with(nodes)
-        await engine.run("fact-names", ["extract", [["function", "count"]]])
+        await engine.run("fact-names", ["~", "name", "^o"])
         self.assertEqual(nodes.distincts, [])
         self.assertTrue(nodes.pipelines)
+
+    async def test_grouped_or_multi_column_extracts_still_aggregate(self):
+        nodes = FakeCollection(docs=[{"count": 1}])
+        engine = engine_with(nodes)
+        await engine.run("environments", ["extract", [["function", "count"], "name"], ["group_by", "name"]])
+        self.assertEqual(nodes.distincts, [])
 
 
 class TestPythonEntities(unittest.IsolatedAsyncioTestCase):
@@ -2233,7 +2623,7 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pipeline[1], {"$skip": 2})
         self.assertEqual(pipeline[2], {"$limit": 5})
 
-    async def test_exact_filter_pages_before_the_projection(self):
+    async def test_exact_filter_limits_before_and_skips_behind_the_projection(self):
         reports = FakeCollection()
         engine = engine_with(reports=reports)
         await engine.run(
@@ -2244,7 +2634,23 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         pipeline = reports.pipelines[0]
         self.assertEqual(pipeline[0], {"$match": {"report.status": "changed"}})
         self.assertEqual(pipeline[1], {"$sort": {"report.end_time": -1}})
-        self.assertEqual(pipeline[2], {"$skip": 2})
+        self.assertEqual(pipeline[2], {"$limit": 7})
+        self.assertIn("$project", pipeline[3])
+        self.assertIn("$match", pipeline[4])
+        self.assertEqual(pipeline[5], {"$skip": 2})
+
+    async def test_deep_offsets_skip_on_index_keys_in_the_query_layer(self):
+        reports = FakeCollection(
+            indexes=[{"key": {"report.end_time": -1, "report.status": 1}}]
+        )
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        pipeline = reports.pipelines[0]
+        self.assertEqual(pipeline[2], {"$skip": 10000})
         self.assertEqual(pipeline[3], {"$limit": 5})
         self.assertIn("$project", pipeline[4])
 
@@ -2294,6 +2700,68 @@ class TestSortHoisting(unittest.IsolatedAsyncioTestCase):
         limit_at = next(i for i, s in enumerate(pipeline) if "$limit" in s)
         self.assertGreater(sort_at, project_at)
         self.assertGreater(limit_at, project_at)
+
+    async def test_active_restriction_still_pages_before_the_projection(self):
+        resources = FakeCollection(
+            indexes=[{"key": {"node_id": 1, "type": 1, "title": 1, "disabled": 1}}]
+        )
+        engine = engine_with(resources=resources)
+        await engine.run(
+            "resources",
+            ["=", "type", "File"],
+            paging=Paging(order_by=[("certname", 1), ("type", 1), ("title", 1)], limit=5, offset=20000),
+            restrict_active=True,
+        )
+        pipeline = resources.pipelines[0]
+        self.assertEqual(
+            pipeline[0], {"$match": {"$and": [{"disabled": {"$ne": True}}, {"type": "File"}]}}
+        )
+        self.assertEqual(pipeline[1], {"$sort": {"node_id": 1, "type": 1, "title": 1}})
+        self.assertEqual(pipeline[2], {"$skip": 20000})
+        self.assertEqual(pipeline[3], {"$limit": 5})
+        self.assertIn("$project", pipeline[4])
+
+    async def test_deep_offsets_without_a_covering_index_skip_behind_the_match(self):
+        reports = FakeCollection(indexes=[{"key": {"report.end_time": -1}}])
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        pipeline = reports.pipelines[0]
+        self.assertEqual(pipeline[2], {"$limit": 10005})
+        self.assertEqual(pipeline[5], {"$skip": 10000})
+
+    async def test_partial_indexes_never_count_as_covering(self):
+        reports = FakeCollection(
+            indexes=[
+                {
+                    "key": {"report.end_time": -1, "report.status": 1},
+                    "partialFilterExpression": {"report.status": "changed"},
+                }
+            ]
+        )
+        engine = engine_with(reports=reports)
+        await engine.run(
+            "reports",
+            ["=", "status", "changed"],
+            paging=Paging(order_by=[("end_time", -1)], limit=5, offset=10000),
+        )
+        self.assertEqual(reports.pipelines[0][2], {"$limit": 10005})
+
+    async def test_negated_node_state_pages_late(self):
+        resources = FakeCollection()
+        engine = engine_with(resources=resources)
+        await engine.run(
+            "resources",
+            ["not", ["=", "node_state", "active"]],
+            paging=Paging(order_by=[("certname", 1)], limit=5, offset=10),
+        )
+        pipeline = resources.pipelines[0]
+        project_at = next(i for i, s in enumerate(pipeline) if "$project" in s)
+        skip_at = next(i for i, s in enumerate(pipeline) if "$skip" in s)
+        self.assertGreater(skip_at, project_at)
 
     async def test_paging_stays_late_when_a_filter_survives(self):
         reports = FakeCollection()

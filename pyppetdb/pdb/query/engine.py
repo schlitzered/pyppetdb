@@ -40,6 +40,8 @@ from pyppetdb.pdb.query.ast import parse_query
 from pyppetdb.pdb.query.entities import ENTITIES
 from pyppetdb.pdb.query.entities import get_entity
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
+from pyppetdb.pdb.query.paging import Paging
+from pyppetdb.pdb.query.errors import page_too_large
 from pyppetdb.pdb.query.errors import subquery_too_large
 from pyppetdb.pdb.query.errors import unknown_entity
 from pyppetdb.pdb.query.errors import unknown_field
@@ -74,6 +76,7 @@ class QueryEngine:
         self._query_timeout = query_timeout
         self._query_timeout_max = query_timeout_max
         self._max_page_size = max_page_size
+        self._index_keys = {}
 
     @property
     def log(self):
@@ -141,6 +144,7 @@ class QueryEngine:
         restrict_active: bool = False,
         extra_columns: Optional[list] = None,
         distinct_window=None,
+        stream: bool = False,
     ):
         return await self._guarded(
             ast,
@@ -153,8 +157,32 @@ class QueryEngine:
                 restrict_active=restrict_active,
                 extra_columns=extra_columns,
                 distinct_window=distinct_window,
+                stream=stream,
             ),
         )
+
+    async def exists(self, entity_name: str, column: str, value, timeout=None) -> bool:
+        return await self._guarded(
+            None, timeout, lambda: self._exists(entity_name, column, value)
+        )
+
+    async def _exists(self, entity_name: str, column: str, value) -> bool:
+        entity = self.entity(entity_name)
+        ast = ["=", column, value]
+        if entity.document_rows:
+            match = await FilterCompiler(entity, engine=self).compile(ast)
+            prefilter, exact = build_prefilter_plan(entity, match, self._facts_index)
+            if exact and prefilter:
+                clauses = [stage["$match"] for stage in entity.stages] + [prefilter]
+                condition = clauses[0] if len(clauses) == 1 else {"$and": clauses}
+                found = await self.collection(entity.collection).find_one(
+                    condition, projection={"_id": 1}
+                )
+                return found is not None
+        rows, _total = await self._run(
+            entity_name, ["extract", [column], ast], Paging(limit=1)
+        )
+        return bool(rows)
 
     async def explain(
         self,
@@ -213,11 +241,13 @@ class QueryEngine:
         finally:
             _query_timeout.reset(token)
 
-    def _apply_page_cap(self, query: Query) -> None:
+    def _apply_page_cap(self, query: Query) -> Optional[int]:
         if not self._max_page_size or query.functions:
-            return
+            return None
         if query.limit is None or query.limit > self._max_page_size:
-            query.limit = self._max_page_size
+            query.limit = self._max_page_size + 1
+            return self._max_page_size
+        return None
 
     def effective_timeout(self, requested):
         seconds = self._query_timeout if requested is None else requested
@@ -237,6 +267,7 @@ class QueryEngine:
         extra_columns: Optional[list] = None,
         distinct_window=None,
         explain: bool = False,
+        stream: bool = False,
     ):
         entity = self.entity(entity_name)
         query = parse_query(entity.name, ast, ENTITIES)
@@ -254,13 +285,31 @@ class QueryEngine:
         if paging is not None:
             paging.apply(query)
             self._check_columns(target, query)
-        self._apply_page_cap(query)
+        stream = (
+            stream
+            and not explain
+            and not target.python_expand
+            and not query.functions
+            and not _is_distinct_query(target, query)
+        )
+        cap = None if stream else self._apply_page_cap(query)
 
         if _is_distinct_query(target, query) and not explain:
-            return await self._run_distinct(target, query)
+            rows, total = await self._run_distinct(target, query)
+            return _within_cap(rows, cap), total
 
         compiler = FilterCompiler(target, engine=self)
         match = await compiler.compile(query.filter)
+
+        if not explain and _distinct_eligible(target, query) and not _is_never(match):
+            prefilter, exact = (
+                build_prefilter_plan(target, match, self._facts_index)
+                if match
+                else ({}, True)
+            )
+            if exact:
+                rows, total = await self._run_distinct(target, query, prefilter)
+                return _within_cap(rows, cap), total
 
         include_total = paging is not None and paging.include_total
         if target.python_expand:
@@ -278,14 +327,24 @@ class QueryEngine:
                 extra_columns=extra_columns,
                 distinct_window=distinct_window,
                 explain=explain,
+                stream=stream,
             )
             if explain:
                 return rows
 
+        scalar = (
+            target.scalar_result
+            if target.scalar_result and not query.columns and not query.functions
+            else None
+        )
+        if stream:
+            rows.scalar = scalar
+            return rows, total
+        rows = _within_cap(rows, cap)
         if query.functions and not query.group_by and not rows:
             rows, total = [_empty_aggregate_row(query)], 1
-        if target.scalar_result and not query.columns and not query.functions:
-            rows = [row.get(target.scalar_result) for row in rows]
+        if scalar:
+            rows = [row.get(scalar) for row in rows]
         return rows, total
 
     def _explain_python(self, entity, match: dict) -> list:
@@ -326,6 +385,9 @@ class QueryEngine:
         )
         rewritten = _rewrite_to_storage(target, stages) if rows_exact else None
         if rewritten is not None:
+            covered = _covering_prefilter(target, _prefilter)
+            if covered is not None:
+                pipeline = [{"$match": covered}] + pipeline[1 if _prefilter else 0:]
             pipeline.extend(rewritten)
         else:
             selected, _filter_only = projection_plan(target, query, match)
@@ -340,7 +402,7 @@ class QueryEngine:
                 pipeline.append({"$match": condition})
             pipeline.extend(stages)
         return await self.collection(target.collection).aggregate(
-            pipeline, **self.aggregate_options
+            _prune_lookups(pipeline), **self.aggregate_options
         ).to_list(length=None)
 
     def _pipeline_head(self, entity, match: dict, distinct_window=None):
@@ -375,7 +437,9 @@ class QueryEngine:
         if target.python_expand:
             rows, _total = await self._run_python(target, query, match)
         else:
-            rows = await self._select_distinct(target, query, match)
+            rows = await self._select_fact_documents(target, query, match)
+            if rows is None:
+                rows = await self._select_distinct(target, query, match)
             if rows is None:
                 rows, _total = await self._run_mongo(
                     target, query, match, distinct=True
@@ -388,6 +452,61 @@ class QueryEngine:
         return _distinct_tuples(
             [tuple(row.get(column) for column in columns) for row in rows]
         )
+
+    async def _select_fact_documents(self, entity, query: Query, match: dict):
+        spec = entity.fact_pair
+        if not spec or not match or len(query.columns) != 1:
+            return None
+        name = query.columns[0]
+        path = _storage_path(entity, name)
+        if path is None or not _document_level(entity, {name: 1}):
+            return None
+        names = None
+        rest = []
+        for clause in _top_conjuncts(match):
+            if set(clause) == {spec["name"]}:
+                found = _pinned_leaf(clause[spec["name"]])
+                if found is None:
+                    return None
+                names = found if names is None else names & found
+            else:
+                rest.append(clause)
+        if names is None:
+            return None
+        if not names:
+            return []
+        if len(names) > MAX_PINNED_KEYS or any(not SAFE_KEY.match(key) for key in names):
+            return None
+        remainder = rest[0] if len(rest) == 1 else ({"$and": rest} if rest else {})
+        if remainder and not _document_level(entity, remainder):
+            return None
+        prefilter, exact = (
+            build_prefilter_plan(entity, remainder, self._facts_index)
+            if remainder
+            else ({}, True)
+        )
+        if not exact:
+            return None
+        present = [
+            {
+                "$and": [
+                    {f"{FACTS_INDEX_FIELD}.p": key},
+                    {f"{spec['path']}.{key}": {"$exists": True}},
+                ]
+            }
+            for key in sorted(names)
+        ]
+        condition = present[0] if len(present) == 1 else {"$or": present}
+        pipeline = [
+            {"$match": _and_filters(prefilter, condition)},
+            {"$group": {"_id": f"${path}"}},
+            {"$match": {"_id": {"$ne": None}}},
+            {"$limit": query.limit},
+        ]
+        rows = await self.collection(entity.collection).aggregate(
+            pipeline, **self.aggregate_options
+        ).to_list(length=None)
+        return [{name: row["_id"]} for row in rows]
 
     async def _select_distinct(self, entity, query: Query, match: dict):
         if not entity.document_rows or len(query.columns) != 1:
@@ -434,9 +553,10 @@ class QueryEngine:
         extra_columns: Optional[list] = None,
         distinct_window=None,
         explain: bool = False,
+        stream: bool = False,
     ):
         if _is_never(match):
-            return [], 0
+            return (RowStream.empty() if stream else []), 0
         head, prefilter, exact, element_cond, pinned = self._pipeline_head(
             entity, match, distinct_window
         )
@@ -449,10 +569,17 @@ class QueryEngine:
         early_sort = build_early_sort(entity, query)
         if early_sort is None and rows_exact and not query.functions and not distinct:
             early_sort = build_early_sort(entity, query, document_rows_only=False)
-        if early_sort:
+        collection = self.collection(entity.collection)
+        incremental = None
+        if early_sort and not distinct and distinct_window is None and not explain:
+            incremental = await self._incremental_prefix(
+                collection, entity, query, early_sort, prefilter
+            )
+        if incremental:
+            head.append({"$sort": dict(list(early_sort.items())[:incremental])})
+        elif early_sort:
             head.append({"$sort": early_sort})
 
-        collection = self.collection(entity.collection)
         count_filter = None
         if exact and not distinct and not element_cond and not pinned:
             count_filter = _exact_count_filter(entity, prefilter)
@@ -477,7 +604,9 @@ class QueryEngine:
             tail.extend(_distinct_stages(query.columns))
 
         total = None
-        if include_total and (query.limit is not None or query.offset is not None):
+        if include_total and (
+            stream or query.limit is not None or query.offset is not None
+        ):
             if count_filter is not None:
                 total = await self._count(collection, count_filter)
             else:
@@ -488,12 +617,24 @@ class QueryEngine:
             and rows_exact
             and not query.functions
             and not distinct
+            and not incremental
         )
         pipeline = list(head)
-        if early_paging:
+        if incremental:
+            pipeline.extend(tail)
+        elif early_paging and match and query.offset and not (
+            query.offset >= DEEP_OFFSET
+            and await self._skips_on_index_keys(collection, early_sort, prefilter)
+        ):
+            if query.limit:
+                pipeline.append({"$limit": query.offset + query.limit})
+            pipeline.extend(_skip_behind_match(tail, query.offset))
+        elif early_paging:
             pipeline.extend(_offset_limit_stages(query))
-        pipeline.extend(tail)
-        if not early_paging:
+            pipeline.extend(tail)
+        else:
+            pipeline.extend(tail)
+        if not early_paging and not incremental:
             pipeline.extend(_paging_stages(query, sorted_early=bool(early_sort)))
         if not query.functions:
             pipeline.extend(
@@ -503,6 +644,7 @@ class QueryEngine:
             )
         if filter_only:
             pipeline.append({"$unset": sorted(filter_only)})
+        pipeline = _prune_lookups(pipeline)
         if explain:
             plan = await collection.database.command(
                 "explain",
@@ -512,12 +654,135 @@ class QueryEngine:
             plan.pop("$clusterTime", None)
             plan.pop("operationTime", None)
             return [{"query plan": plan}], 1
-        rows = await collection.aggregate(
-            pipeline, **self.aggregate_options
-        ).to_list(length=None)
+        if incremental and rows_exact and query.offset:
+            boundary = await self._incremental_boundary(
+                collection, early_sort, incremental, prefilter, query.offset
+            )
+            if boundary is not None:
+                condition, before = boundary
+                query = query.model_copy(update={"offset": query.offset - before})
+                pipeline = _with_head_condition(pipeline, condition)
+        options = self.aggregate_options
+        if incremental:
+            options["batchSize"] = STREAM_BATCH_SIZE
+        cursor = collection.aggregate(pipeline, **options)
+        if incremental:
+            ordered = _incremental_rows(cursor, query, incremental)
+            if stream:
+                first = await _take(ordered, STREAM_BATCH_SIZE)
+                return OrderedRowStream(cursor, ordered, first), total
+            rows = await _take(ordered, None)
+            await cursor.close()
+            if total is None:
+                total = len(rows)
+            return rows, total
+        if stream:
+            first = await cursor.to_list(length=STREAM_BATCH_SIZE)
+            return RowStream(cursor, first), total
+        rows = await cursor.to_list(length=None)
         if total is None:
             total = len(rows)
         return rows, total
+
+    async def _incremental_prefix(
+        self, collection, entity, query: Query, sort: dict, prefilter: dict
+    ):
+        if len(sort) < 2 or query.functions:
+            return None
+        if query.columns and not all(
+            column in query.columns for column, _ in query.order_by
+        ):
+            return None
+        for column_name, _ in query.order_by:
+            column = entity.by_name.get(column_name)
+            if column is None or column.type not in ORDERABLE_TYPES:
+                return None
+        wanted = list(sort.items())
+        indexes = await self._collection_index_keys(collection)
+        pinned = _single_value_fields(prefilter)
+        if any(keys and keys[0][0] in pinned for keys in indexes):
+            return None
+        best = 0
+        for keys in indexes:
+            for flip in (1, -1):
+                length = 0
+                for (field, direction), (want, order) in zip(keys, wanted):
+                    if field != want or direction != order * flip:
+                        break
+                    length += 1
+                best = max(best, length)
+        if best == 0 or best >= len(wanted):
+            return None
+        return best
+
+    async def _incremental_boundary(
+        self, collection, sort: dict, prefix: int, prefilter: dict, offset: int
+    ):
+        keys = list(sort.items())[:prefix]
+        if any(direction < 0 for _, direction in keys):
+            return None
+        fields = [field for field, _ in keys]
+        filter_fields = set()
+        _collect_filter_fields(prefilter, filter_fields)
+        if not filter_fields <= set(fields):
+            return None
+        pipeline = []
+        if prefilter:
+            pipeline.append({"$match": prefilter})
+        pipeline.append({"$sort": dict(keys)})
+        pipeline.append({"$project": {"_id": 0, **{field: 1 for field in fields}}})
+        cursor = collection.aggregate(
+            pipeline, batchSize=BOUNDARY_BATCH_SIZE, **self.aggregate_options
+        )
+        seen = 0
+        before = 0
+        current = None
+        try:
+            while True:
+                batch = await cursor.to_list(length=BOUNDARY_BATCH_SIZE)
+                for document in batch:
+                    key = tuple(document.get(field) for field in fields)
+                    if key != current:
+                        if seen > offset:
+                            return _boundary(fields, current, before)
+                        before = seen
+                        current = key
+                    seen += 1
+                if len(batch) < BOUNDARY_BATCH_SIZE:
+                    break
+        finally:
+            await cursor.close()
+        if current is None or seen <= offset:
+            return None
+        return _boundary(fields, current, before)
+
+    async def _skips_on_index_keys(self, collection, sort: dict, prefilter: dict) -> bool:
+        fields = set()
+        _collect_filter_fields(prefilter, fields)
+        wanted = list(sort.items())
+        for keys in await self._collection_index_keys(collection):
+            prefix = keys[: len(wanted)]
+            if [field for field, _ in prefix] != [field for field, _ in wanted]:
+                continue
+            same = all(key == order for (_, key), (_, order) in zip(prefix, wanted))
+            flipped = all(key == -order for (_, key), (_, order) in zip(prefix, wanted))
+            if (same or flipped) and fields <= {field for field, _ in keys}:
+                return True
+        return False
+
+    async def _collection_index_keys(self, collection) -> list:
+        cached = self._index_keys.get(collection.name)
+        if cached is not None and time.monotonic() - cached[0] < INDEX_KEYS_TTL:
+            return cached[1]
+        keys = []
+        async for index in collection.list_indexes():
+            if index.get("partialFilterExpression"):
+                continue
+            spec = list(index["key"].items())
+            if all(isinstance(direction, int) for _, direction in spec):
+                keys.append(spec)
+        self._index_keys[collection.name] = (time.monotonic(), keys)
+        return keys
 
     async def _count(self, collection, count_filter: dict) -> int:
         options = {}
@@ -543,19 +808,27 @@ class QueryEngine:
             pipeline.append({"$match": condition})
         pipeline.append({"$count": "count"})
         counted = await collection.aggregate(
-            pipeline, **self.aggregate_options
+            _prune_lookups(pipeline), **self.aggregate_options
         ).to_list(length=1)
         return counted[0]["count"] if counted else 0
 
-    async def _run_distinct(self, entity, query: Query):
+    async def _run_distinct(self, entity, query: Query, prefilter: Optional[dict] = None):
         collection = self.collection(entity.collection)
-        values = await collection.distinct(entity.distinct_field)
+        options = {}
+        timeout = _query_timeout.get()
+        if timeout:
+            options["maxTimeMS"] = int(timeout * 1000)
+        values = await collection.distinct(
+            entity.distinct_field, prefilter or None, **options
+        )
         names = sorted(
             value
             for value in values
             if isinstance(value, str)
             and not (entity.distinct_top_level and "." in value)
         )
+        if query.functions:
+            return [{query.functions[0].alias: len(names)}], 1
         rows = [{entity.columns[0].name: name} for name in names]
         total = len(rows)
         rows = _python_paging(rows, query)
@@ -671,6 +944,198 @@ class QueryEngine:
 
 
 PYTHON_BATCH_SIZE = 200
+DEEP_OFFSET = 10000
+INDEX_KEYS_TTL = 300
+STREAM_BATCH_SIZE = 1000
+
+
+class RowStream:
+    def __init__(self, cursor, first: list):
+        self._cursor = cursor
+        self._first = first
+        self.scalar = None
+
+    @classmethod
+    def empty(cls):
+        return cls(None, [])
+
+    async def batches(self):
+        batch = self._first
+        while batch:
+            yield self._shape(batch)
+            if self._cursor is None or len(batch) < STREAM_BATCH_SIZE:
+                return
+            batch = await self._cursor.to_list(length=STREAM_BATCH_SIZE)
+
+    def _shape(self, batch: list) -> list:
+        if self.scalar:
+            return [row.get(self.scalar) for row in batch]
+        return batch
+
+    async def close(self) -> None:
+        if self._cursor is not None:
+            await self._cursor.close()
+
+
+class OrderedRowStream(RowStream):
+    def __init__(self, cursor, ordered, first: list):
+        super().__init__(cursor, first)
+        self._ordered = ordered
+
+    async def batches(self):
+        batch = self._first
+        while batch:
+            yield self._shape(batch)
+            if len(batch) < STREAM_BATCH_SIZE:
+                return
+            batch = await _take(self._ordered, STREAM_BATCH_SIZE)
+
+
+ORDERABLE_TYPES = ("string", "timestamp", "integer", "float", "boolean")
+BOUNDARY_BATCH_SIZE = 20000
+
+
+def _prune_lookups(pipeline: list) -> list:
+    kept = []
+    for index, stage in enumerate(pipeline):
+        lookup = stage.get("$lookup") if isinstance(stage, dict) else None
+        if lookup and _unused_field(lookup.get("as"), pipeline[index + 1:]):
+            continue
+        kept.append(stage)
+    return kept
+
+
+def _unused_field(field, rest: list) -> bool:
+    if not field:
+        return False
+    text = json.dumps(rest, default=str)
+    if "$$ROOT" in text or "$$CURRENT" in text:
+        return False
+    return f'"${field}' not in text and f'"{field}' not in text
+
+
+def _boundary_condition(fields: list, key: tuple):
+    if key is None or any(value is None for value in key):
+        return None
+    branches = [dict(zip(fields, key))]
+    for index in range(len(fields)):
+        branch = dict(zip(fields[:index], key[:index]))
+        branch[fields[index]] = {"$gt": key[index]}
+        branches.append(branch)
+    return {"$or": branches}
+
+
+def _single_value_fields(prefilter: dict) -> set:
+    fields = set()
+    if not isinstance(prefilter, dict):
+        return fields
+    for key, value in prefilter.items():
+        if key == "$and" and isinstance(value, list):
+            for child in value:
+                fields |= _single_value_fields(child)
+        elif not key.startswith("$") and _single_value(value):
+            fields.add(key)
+    return fields
+
+
+def _single_value(condition) -> bool:
+    if isinstance(condition, dict):
+        if set(condition) == {"$eq"}:
+            return True
+        values = condition.get("$in")
+        return set(condition) == {"$in"} and isinstance(values, list) and len(values) == 1
+    return not isinstance(condition, list)
+
+
+def _boundary(fields: list, key: tuple, before: int):
+    condition = _boundary_condition(fields, key)
+    if condition is None:
+        return None
+    return condition, before
+
+
+def _with_head_condition(pipeline: list, condition) -> list:
+    stages = list(pipeline)
+    if stages and "$match" in stages[0]:
+        stages[0] = {"$match": _and_filters(stages[0]["$match"], condition)}
+    else:
+        stages.insert(0, {"$match": condition})
+    return stages
+
+
+async def _take(rows, count: Optional[int]) -> list:
+    taken = []
+    async for row in rows:
+        taken.append(row)
+        if count is not None and len(taken) >= count:
+            break
+    return taken
+
+
+async def _incremental_rows(cursor, query: Query, prefix: int):
+    order = query.order_by
+    prefix_columns = [column for column, _ in order[:prefix]]
+    rest = order[prefix:]
+    skip = query.offset or 0
+    remaining = query.limit
+    group = []
+    current = None
+    while True:
+        batch = await cursor.to_list(length=STREAM_BATCH_SIZE)
+        for row in batch:
+            key = tuple(row.get(column) for column in prefix_columns)
+            if group and key != current:
+                for item in _sorted_group(group, rest):
+                    if skip:
+                        skip -= 1
+                        continue
+                    yield item
+                    if remaining is not None:
+                        remaining -= 1
+                        if remaining <= 0:
+                            return
+                group = []
+            current = key
+            group.append(row)
+        if len(batch) < STREAM_BATCH_SIZE:
+            break
+    for item in _sorted_group(group, rest):
+        if skip:
+            skip -= 1
+            continue
+        yield item
+        if remaining is not None:
+            remaining -= 1
+            if remaining <= 0:
+                return
+
+
+def _sorted_group(rows: list, order) -> list:
+    for column, direction in reversed(order):
+        rows.sort(key=lambda row: _bson_order(row.get(column)), reverse=direction < 0)
+    return rows
+
+
+def _bson_order(value):
+    if value is None:
+        return (1, 0)
+    if isinstance(value, bool):
+        return (8, value)
+    if isinstance(value, (int, float)):
+        return (2, value)
+    if isinstance(value, str):
+        return (3, value.encode("utf-8"))
+    if isinstance(value, datetime):
+        return (9, value.timestamp())
+    return (4, str(value))
+
+
+def _within_cap(rows: list, cap: Optional[int]) -> list:
+    if cap is not None and len(rows) > cap:
+        raise page_too_large(cap)
+    return rows
+
+
 MAX_PATH_PREFILTER = 100
 PATH_COLUMNS = ("name", "path")
 
@@ -700,6 +1165,39 @@ def _path_node(node, columns: tuple):
     if not parts:
         return None
     return parts[0] if len(parts) == 1 else {"$and": parts}
+
+
+def _top_conjuncts(match: dict) -> list:
+    clauses = []
+    for key, value in match.items():
+        if key == "$and":
+            for child in value:
+                clauses.extend(_top_conjuncts(child))
+        else:
+            clauses.append({key: value})
+    return clauses
+
+
+def _covering_prefilter(entity, prefilter: dict):
+    spec = entity.covering_index
+    if not spec:
+        return None
+    fields = set()
+    _collect_filter_fields(prefilter, fields)
+    if spec["prefix"] in fields or not fields <= set(spec["fields"]):
+        return None
+    return _and_filters(prefilter, {spec["prefix"]: {"$in": list(spec["values"])}})
+
+
+def _collect_filter_fields(node, fields: set) -> None:
+    if not isinstance(node, dict):
+        return
+    for key, value in node.items():
+        if key in ("$and", "$or", "$nor") and isinstance(value, list):
+            for child in value:
+                _collect_filter_fields(child, fields)
+        else:
+            fields.add(key)
 
 
 def _and_filters(left: dict, right: dict) -> dict:
@@ -926,10 +1424,20 @@ def _document_level(entity, match: dict) -> bool:
     names = set()
     _collect_match_columns(match, names)
     for name in names:
-        path = _storage_path(entity, name.split(".", 1)[0])
+        head = name.split(".", 1)[0]
+        path = _storage_path(entity, head)
+        if path is None:
+            path = _document_prefilter_path(entity, head)
         if path is None or any(path.startswith(prefix) for prefix in prefixes):
             return False
     return True
+
+
+def _document_prefilter_path(entity, column_name: str) -> Optional[str]:
+    column = entity.by_name.get(column_name)
+    if column is None or column.virtual or column.prefilter_kind != "node_state":
+        return None
+    return column.prefilter
 
 
 def _storage_path(entity, column_name: str) -> Optional[str]:
@@ -980,6 +1488,20 @@ def _collect_match_columns(node, into: set) -> None:
             into.update(value["keys"])
         elif not key.startswith("$") and not key.startswith("__"):
             into.add(key)
+
+
+def _distinct_eligible(entity, query: Query) -> bool:
+    if not entity.distinct_field or query.group_by:
+        return False
+    column = entity.columns[0].name
+    if query.columns and query.columns != [column]:
+        return False
+    if query.functions:
+        if query.columns or len(query.functions) != 1:
+            return False
+        function = query.functions[0]
+        return function.name == "count" and function.column in (None, column)
+    return True
 
 
 def _is_distinct_query(entity, query: Query) -> bool:
@@ -1532,6 +2054,13 @@ def _paging_stages(query: Query, sorted_early: bool = False) -> list:
     if query.order_by and not sorted_early:
         stages.append({"$sort": {column: order for column, order in query.order_by}})
     stages.extend(_offset_limit_stages(query))
+    return stages
+
+
+def _skip_behind_match(tail: list, offset: int) -> list:
+    stages = list(tail)
+    at = next(index for index, stage in enumerate(stages) if "$match" in stage)
+    stages.insert(at + 1, {"$skip": offset})
     return stages
 
 

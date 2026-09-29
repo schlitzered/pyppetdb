@@ -28,6 +28,9 @@ from pyppetdb.config import ConfigAppFacts
 from pyppetdb.config import ConfigAppPuppetdb
 from pyppetdb.controller.pdb.query.v4 import ControllerPdbQueryV4
 from pyppetdb.controller.pdb.query.v4 import apply_local_paging
+from pyppetdb.controller.pdb.query.v4 import json_response
+from pyppetdb.controller.pdb.query.v4 import stream_response
+from pyppetdb.pdb.query.engine import RowStream
 from pyppetdb.pdb.query import event_counts
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
 from pyppetdb.pdb.query.paging import Paging
@@ -47,6 +50,7 @@ def build(config_kwargs=None):
         crud_nodes_reports=MagicMock(),
         authorize_client_cert=authorize,
     )
+    controller.engine.exists = AsyncMock(return_value=True)
     app = FastAPI()
     app.include_router(controller.router, prefix="/pdb/query/v4")
     return controller, TestClient(app), authorize
@@ -296,16 +300,13 @@ class TestUpstreamRouteBehaviour(unittest.TestCase):
         self.run.assert_not_awaited()
 
     def test_child_routes_check_the_parent(self):
-        self.controller.engine.run = AsyncMock(return_value=([], 0))
+        self.controller.engine.exists = AsyncMock(return_value=False)
         response = self.client.get("/pdb/query/v4/nodes/nope/facts")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(
             response.json(), {"error": "No information is known about node nope"}
         )
-        self.assertEqual(
-            self.controller.engine.run.await_args.kwargs["ast"],
-            ["extract", ["certname"], ["=", "certname", "nope"]],
-        )
+        self.controller.engine.exists.assert_awaited_once_with("nodes", "certname", "nope")
 
     def test_single_routes_answer_a_json_404(self):
         self.controller.engine.run = AsyncMock(return_value=([], 0))
@@ -343,10 +344,7 @@ class TestUpstreamRouteBehaviour(unittest.TestCase):
 
     def test_report_metrics_and_logs_return_the_data_array(self):
         self.controller.engine.run = AsyncMock(
-            side_effect=[
-                ([{"hash": "abc"}], 1),
-                ([{"metrics": {"href": "/x", "data": [{"name": "total"}]}}], 1),
-            ]
+            return_value=([{"metrics": {"href": "/x", "data": [{"name": "total"}]}}], 1)
         )
         response = self.client.get("/pdb/query/v4/reports/abc/metrics")
         self.assertEqual(response.json(), [{"name": "total"}])
@@ -455,9 +453,10 @@ class TestEventCountsEndpoints(unittest.TestCase):
             self.controller.engine.group.assert_awaited_once()
             kwargs = self.controller.engine.group.await_args.kwargs
             self.assertEqual(kwargs["entity_name"], "events")
-            self.assertEqual(
-                kwargs["stages"], event_counts.summary_stages("certname", "certname")
-            )
+            expected = event_counts.summary_stages("certname", "certname")
+            if "aggregate" in path:
+                expected = expected + event_counts.aggregate_stages()
+            self.assertEqual(kwargs["stages"], expected)
 
     def test_every_summarize_by_is_grouped_separately(self):
         self.client.get(
@@ -466,14 +465,30 @@ class TestEventCountsEndpoints(unittest.TestCase):
         )
         self.assertEqual(self.controller.engine.group.await_count, 2)
 
-    def test_aggregate_event_counts(self):
+    def test_aggregate_event_counts_are_summed_in_the_database(self):
+        self.controller.engine.group = AsyncMock(
+            return_value=[{"failures": 1, "successes": 0, "noops": 0, "skips": 0, "total": 1}]
+        )
         response = self.client.get(
             "/pdb/query/v4/aggregate-event-counts",
             params={"summarize_by": "certname"},
         )
-        body = response.json()
-        self.assertEqual(body[0]["total"], 1)
-        self.assertEqual(body[0]["summarize_by"], "certname")
+        self.assertEqual(
+            response.json(),
+            [{"failures": 1, "successes": 0, "noops": 0, "skips": 0, "total": 1, "summarize_by": "certname"}],
+        )
+
+    def test_aggregate_event_counts_with_a_counts_filter_sum_in_python(self):
+        response = self.client.get(
+            "/pdb/query/v4/aggregate-event-counts",
+            params={"summarize_by": "certname", "counts_filter": '[">", "failures", 0]'},
+        )
+        self.assertEqual(
+            self.controller.engine.group.await_args.kwargs["stages"],
+            event_counts.summary_stages("certname", "resource"),
+        )
+        self.assertEqual(response.json()[0]["total"], 1)
+        self.assertEqual(response.json()[0]["failures"], 1)
 
     def test_counts_filter_applies(self):
         response = self.client.get(
@@ -603,3 +618,79 @@ class TestJsonRendering(unittest.TestCase):
             body,
             ('[{"t":"2026-03-01T12:00:00.123000Z","u":"2026-03-01T00:00:00Z","o":"%s","ü":"ä"}]' % oid).encode(),
         )
+
+
+class FakeStreamCursor:
+    def __init__(self, docs):
+        self.docs = list(docs)
+        self.closed = False
+
+    async def to_list(self, length=None):
+        batch, self.docs = self.docs[:length], self.docs[length:]
+        return batch
+
+    async def close(self):
+        self.closed = True
+
+
+class TestStreamResponse(unittest.IsolatedAsyncioTestCase):
+    async def body(self, rows, pretty, batch=2):
+        from pyppetdb.pdb.query import engine as module
+
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = batch
+        try:
+            cursor = FakeStreamCursor(rows[batch:])
+            response = stream_response(
+                RowStream(cursor, rows[:batch]), pretty, logging.getLogger("test")
+            )
+            chunks = [chunk async for chunk in response.body_iterator]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        return b"".join(chunks), cursor
+
+    async def test_streamed_bytes_equal_the_buffered_response(self):
+        from datetime import datetime
+
+        rows = [
+            {"certname": "a", "facts": {"os": {"family": "Debian"}}, "ts": datetime(2026, 1, 1)},
+            {"certname": "b", "facts": {}, "ts": None},
+            {"certname": "c", "list": [1, 2]},
+        ]
+        for pretty in (False, True):
+            body, cursor = await self.body(rows, pretty)
+            self.assertEqual(body, json_response(rows, pretty).body, pretty)
+            self.assertTrue(cursor.closed)
+
+    async def test_an_empty_stream_is_an_empty_array(self):
+        for pretty in (False, True):
+            body, _cursor = await self.body([], pretty)
+            self.assertEqual(body, json_response([], pretty).body)
+
+    async def test_a_disconnected_client_stops_the_cursor(self):
+        from pyppetdb.pdb.query import engine as module
+
+        class Request:
+            calls = 0
+
+            async def is_disconnected(self):
+                Request.calls += 1
+                return Request.calls > 1
+
+        original = module.STREAM_BATCH_SIZE
+        module.STREAM_BATCH_SIZE = 1
+        try:
+            cursor = FakeStreamCursor([{"a": 2}, {"a": 3}])
+            response = stream_response(
+                RowStream(cursor, [{"a": 1}]),
+                False,
+                logging.getLogger("test"),
+                request=Request(),
+            )
+            chunks = [chunk async for chunk in response.body_iterator]
+        finally:
+            module.STREAM_BATCH_SIZE = original
+        self.assertEqual(chunks, [b'[{"a":1}'])
+        self.assertTrue(cursor.closed)
+        self.assertEqual(cursor.docs, [{"a": 3}])
+

@@ -24,6 +24,7 @@ from pyppetdb.helpers.puppetdb import build_fact_paths
 from pyppetdb.helpers.puppetdb import build_facts_index
 from pyppetdb.helpers.puppetdb import decode_fact_path
 from pyppetdb.helpers.puppetdb import dotted_fact_name
+from pyppetdb.helpers.puppetdb import report_summary
 from pyppetdb.helpers.puppetdb import build_resource_params
 from pyppetdb.helpers.puppetdb import normalise_edges
 from pyppetdb.model.nodes import NodeGetCatalog
@@ -573,3 +574,13 @@ class TestFactPaths(unittest.TestCase):
         self.assertEqual(dotted_fact_name(["os", "release", "major"]), "os.release.major")
         self.assertEqual(dotted_fact_name(["processors", "models", 3]), "processors.models")
         self.assertEqual(dotted_fact_name(["disks", 0, "size"]), "disks.size")
+
+
+class TestReportSummary(unittest.TestCase):
+    def test_the_node_keeps_everything_but_logs_and_resources(self):
+        report = {"status": "changed", "hash": "h", "metrics": [1], "logs": [2], "resources": [3]}
+        self.assertEqual(
+            report_summary(report), {"status": "changed", "hash": "h", "metrics": [1]}
+        )
+        self.assertIn("resources", report)
+

@@ -103,6 +103,58 @@ class TestApiV1NodesUnit(unittest.IsolatedAsyncioTestCase):
             report_status=None,
         )
 
+    def node(self, **report):
+        from pyppetdb.model.nodes import NodeGet
+
+        return NodeGet(id="node1", report=report or {"status": "changed"})
+
+    async def test_report_details_come_from_the_latest_report(self):
+        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=None)
+        stale = [{"message": "unredacted secret", "level": "info", "source": "s", "tags": [], "file": None, "line": None}]
+        self.mock_crud_nodes.get = AsyncMock(return_value=self.node(status="changed", logs=stale))
+        self.mock_crud_reports.latest_details = AsyncMock(
+            return_value={
+                "node1": {
+                    "logs": [{"message": "XXXXX", "level": "info", "source": "s", "tags": [], "file": None, "line": None}],
+                    "resources": [],
+                }
+            }
+        )
+        node = await self.controller.get(
+            node_id="node1", request=MagicMock(), fields={"id", "report"}, outdated_threshold=None
+        )
+        self.mock_crud_reports.latest_details.assert_awaited_once_with(
+            node_ids=["node1"], parts=("logs", "resources")
+        )
+        self.assertEqual(node.report.status, "changed")
+        self.assertEqual(node.report.logs[0].message, "XXXXX")
+        self.assertEqual(node.report.resources, [])
+
+    async def test_report_details_are_dropped_when_no_latest_report_exists(self):
+        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=None)
+        stale = [{"message": "unredacted secret", "level": "info", "source": "s", "tags": [], "file": None, "line": None}]
+        self.mock_crud_nodes.get = AsyncMock(return_value=self.node(status="changed", logs=stale))
+        self.mock_crud_reports.latest_details = AsyncMock(return_value={})
+        node = await self.controller.get(
+            node_id="node1", request=MagicMock(), fields={"id", "report.logs"}, outdated_threshold=None
+        )
+        self.mock_crud_reports.latest_details.assert_awaited_once_with(
+            node_ids=["node1"], parts=("logs",)
+        )
+        self.assertIsNone(node.report.logs)
+
+    async def test_summary_fields_do_not_load_report_details(self):
+        self.mock_authorize.require_user = AsyncMock()
+        self.mock_authorize.get_user_node_groups = AsyncMock(return_value=None)
+        self.mock_crud_nodes.get = AsyncMock(return_value=self.node())
+        self.mock_crud_reports.latest_details = AsyncMock()
+        await self.controller.get(
+            node_id="node1", request=MagicMock(), fields={"id", "report.status"}, outdated_threshold=None
+        )
+        self.mock_crud_reports.latest_details.assert_not_awaited()
+
     async def test_delete_node_ignores_missing_certificate(self):
         self.mock_authorize.require_perm = AsyncMock()
         self.mock_ca_service.update_certificate_status = AsyncMock(

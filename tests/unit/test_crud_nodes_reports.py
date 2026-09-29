@@ -100,6 +100,33 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.crud._delete.assert_called_once_with(query={"id": now, "node_id": "node1"})
 
+    async def test_latest_details_reads_and_redacts_the_latest_reports(self):
+        docs = [{"node_id": "node1", "report": {"logs": ["secret"]}}]
+
+        class Cursor:
+            def __aiter__(self):
+                async def generate():
+                    for doc in docs:
+                        yield doc
+
+                return generate()
+
+        self.mock_coll.find = MagicMock(return_value=Cursor())
+        self.mock_redactor.redact = MagicMock(
+            side_effect=lambda doc: {**doc, "report": {"logs": ["XXXXX"]}}
+        )
+        details = await self.crud.latest_details(node_ids=["node1", "node2"], parts=("logs",))
+        self.mock_coll.find.assert_called_once_with(
+            {"node_id": {"$in": ["node1", "node2"]}, "report.latest": True},
+            projection={"_id": 0, "node_id": 1, "report.logs": 1},
+        )
+        self.assertEqual(details, {"node1": {"logs": ["XXXXX"]}})
+
+    async def test_latest_details_without_nodes_reads_nothing(self):
+        self.mock_coll.find = MagicMock()
+        self.assertEqual(await self.crud.latest_details(node_ids=[], parts=("logs",)), {})
+        self.mock_coll.find.assert_not_called()
+
     async def test_delete_all_from_node(self):
         self.mock_coll.delete_many = AsyncMock()
         await self.crud.delete_all_from_node(

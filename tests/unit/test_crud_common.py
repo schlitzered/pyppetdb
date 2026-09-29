@@ -104,6 +104,25 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         dropped = [call.args[0] for call in self.mock_coll.drop_index.call_args_list]
         self.assertEqual(dropped, ["idx_a"])
 
+    async def test_sync_index_replaces_an_index_whose_options_changed(self):
+        index = pymongo.IndexModel(
+            [("disabled", 1)], name="idx_disabled", partialFilterExpression={"disabled": True}
+        )
+        conflict = pymongo.errors.OperationFailure("conflict", code=85)
+        self.mock_coll.create_indexes = AsyncMock(side_effect=[conflict, None])
+        self.mock_coll.drop_index = AsyncMock()
+        self.mock_coll.list_indexes = MagicMock(
+            return_value=MagicMock(
+                to_list=AsyncMock(
+                    return_value=[{"name": "idx_disabled", "key": {"disabled": 1}}]
+                )
+            )
+        )
+        await self.crud._sync_index(index)
+        dropped = [call.args[0] for call in self.mock_coll.drop_index.call_args_list]
+        self.assertEqual(dropped, ["idx_disabled"])
+        self.assertEqual(self.mock_coll.create_indexes.call_count, 2)
+
     async def test_sync_index_raises_other_failures(self):
         index = pymongo.IndexModel([("a", 1)], name="idx_a")
         self.mock_coll.create_indexes = AsyncMock(

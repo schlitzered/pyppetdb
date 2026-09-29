@@ -25,6 +25,7 @@ from fastapi import Request
 from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
+from fastapi.responses import StreamingResponse
 
 from bson.objectid import ObjectId
 
@@ -35,6 +36,7 @@ from pyppetdb.crud.nodes_reports import CrudNodesReports
 from pyppetdb.helpers.puppetdb import FactsIndexSpec
 from pyppetdb.pdb.query import event_counts
 from pyppetdb.pdb.query.engine import QueryEngine
+from pyppetdb.pdb.query.engine import RowStream
 from pyppetdb.pdb.query.engine import _sort_key
 from pyppetdb.pdb.query.errors import PuppetDBQueryError
 from pyppetdb.pdb.query.paging import Paging
@@ -78,6 +80,49 @@ class PrettyJSONResponse(JSONResponse):
 def json_response(content, pretty: bool, status_code: int = 200, headers=None):
     cls = PrettyJSONResponse if pretty else PdbJSONResponse
     return cls(content=content, status_code=status_code, headers=headers)
+
+
+def _dump_batch(batch: list, pretty: bool) -> bytes:
+    if not pretty:
+        return orjson.dumps(batch, default=_encode, option=JSON_OPTIONS)[1:-1]
+    text = orjson.dumps(
+        batch, default=_encode, option=JSON_OPTIONS | orjson.OPT_INDENT_2
+    )
+    return text[2:-2]
+
+
+async def _stream_body(stream: RowStream, pretty: bool, log, request=None):
+    separator = b",\n" if pretty else b","
+    written = False
+    try:
+        async for batch in stream.batches():
+            if request is not None and await request.is_disconnected():
+                return
+            if not batch:
+                continue
+            chunk = _dump_batch(batch, pretty)
+            if written:
+                yield separator + chunk
+            else:
+                yield (b"[\n" if pretty else b"[") + chunk
+                written = True
+    except Exception as err:
+        log.error(f"streaming a /pdb/query/v4 response failed: {err}")
+        raise
+    finally:
+        await stream.close()
+    if not written:
+        yield b"[]"
+    else:
+        yield b"\n]" if pretty else b"]"
+
+
+def stream_response(stream: RowStream, pretty: bool, log, headers=None, request=None):
+    return StreamingResponse(
+        _stream_body(stream, pretty, log, request),
+        media_type="application/json",
+        headers=headers,
+    )
 
 
 def not_found(label: str, identifier: str, pretty: bool = False):
@@ -495,6 +540,7 @@ class ControllerPdbQueryV4:
             restrict_active=restrict,
             extra_columns=_extra_columns(entity, params, route.kind),
             distinct_window=distinct,
+            stream=route.kind != "single",
         )
         if route.kind == "single":
             if not rows:
@@ -502,15 +548,14 @@ class ControllerPdbQueryV4:
                 return not_found(label, request.path_params.get(route.implicit[0][0]), pretty)
             return json_response(rows[0], pretty)
         headers = {"X-Records": str(total)} if paging.include_total else None
+        if isinstance(rows, RowStream):
+            return stream_response(
+                rows, pretty, self.log, headers=headers, request=request
+            )
         return json_response(rows, pretty, headers=headers)
 
     async def _exists(self, entity: str, column: str, value) -> bool:
-        rows, _total = await self.engine.run(
-            entity_name=entity,
-            ast=["extract", [column], ["=", column, value]],
-            paging=Paging(limit=1),
-        )
-        return bool(rows)
+        return await self.engine.exists(entity, column, value)
 
     async def _report_data(self, route: Route, implicit: list, timeout, pretty: bool):
         rows, _total = await self.engine.run(
@@ -546,15 +591,23 @@ class ControllerPdbQueryV4:
         query = params.get("query")
         results = []
         for field in summarize_by:
+            stages = event_counts.summary_stages(field, count_by)
+            summed = aggregate and not counts_filter
+            if summed:
+                stages = stages + event_counts.aggregate_stages()
             counts = await self.engine.group(
                 entity_name="events",
                 ast=event_counts.extract_columns_query(query),
-                stages=event_counts.summary_stages(field, count_by),
+                stages=stages,
                 timeout=timeout,
                 distinct_window=distinct,
             )
             counts = event_counts.apply_counts_filter(counts, counts_filter)
-            if aggregate:
+            if summed:
+                summary = event_counts.aggregate_totals(counts)
+                summary["summarize_by"] = field
+                results.append(summary)
+            elif aggregate:
                 summary = event_counts.aggregate(counts)
                 summary["summarize_by"] = field
                 results.append(summary)

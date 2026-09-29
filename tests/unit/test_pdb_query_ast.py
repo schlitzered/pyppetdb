@@ -180,6 +180,60 @@ class TestFilterCompiler(unittest.IsolatedAsyncioTestCase):
             {"$nor": [{"$and": [{"certname": "a"}, {"latest_report_noop": True}]}]},
         )
 
+    async def test_pinned_join_column_narrows_the_subquery(self):
+        engine = StubEngine(rows=[("a",)])
+        await self.compiler("facts", engine).compile(
+            ["and", ["=", "certname", "a"], ["subquery", "resources", ["=", "type", "File"]]]
+        )
+        self.assertEqual(
+            engine.calls,
+            [("select", "resources", ["certname"], ["and", ["=", "type", "File"], ["=", "certname", "a"]])],
+        )
+
+    async def test_pinned_values_reach_in_subqueries_under_not_and_or(self):
+        engine = StubEngine(rows=[("a",)])
+        await self.compiler("nodes", engine).compile(
+            [
+                "and",
+                ["in", "certname", ["array", ["b", "a"]]],
+                [
+                    "or",
+                    ["=", "latest_report_noop", True],
+                    ["not", ["in", "certname", ["extract", "certname", ["select_resources", None]]]],
+                ],
+            ]
+        )
+        self.assertEqual(
+            engine.calls[0][3], ["in", "certname", ["array", ["a", "b"]]]
+        )
+
+    async def test_intersecting_pins_are_combined(self):
+        engine = StubEngine(rows=[("a",)])
+        await self.compiler("nodes", engine).compile(
+            [
+                "and",
+                ["in", "certname", ["array", ["a", "b"]]],
+                ["and", ["=", "certname", "a"], ["in", "certname", ["extract", "certname", ["select_resources", ["=", "type", "File"]]]]],
+            ]
+        )
+        self.assertEqual(
+            engine.calls[0][3], ["and", ["=", "type", "File"], ["=", "certname", "a"]]
+        )
+
+    async def test_pins_from_an_or_do_not_narrow_the_subquery(self):
+        engine = StubEngine(rows=[("a",)])
+        await self.compiler("nodes", engine).compile(
+            ["or", ["=", "certname", "a"], ["in", "certname", ["extract", "certname", ["select_resources", ["=", "type", "File"]]]]]
+        )
+        self.assertEqual(engine.calls[0][3], ["=", "type", "File"])
+
+    async def test_pins_on_other_columns_do_not_narrow_the_subquery(self):
+        engine = StubEngine(rows=[("a",)])
+        await self.compiler("nodes", engine).compile(
+            ["and", ["=", "facts_environment", "production"], ["in", "certname", ["extract", "certname", ["select_resources", ["=", "type", "File"]]]]]
+        )
+        self.assertEqual(engine.calls[0][3], ["=", "type", "File"])
+
     async def test_comparison_operators(self):
         compiler = self.compiler("resources")
         self.assertEqual(await compiler.compile([">", "line", 3]), {"line": {"$gt": 3}})

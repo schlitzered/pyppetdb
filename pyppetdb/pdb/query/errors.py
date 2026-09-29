@@ -93,3 +93,11 @@ def subquery_too_large() -> PuppetDBQueryError:
     return PuppetDBQueryError(
         "the subquery result is too large to be evaluated; narrow the subquery"
     )
+
+
+def page_too_large(limit: int) -> PuppetDBQueryError:
+    return PuppetDBQueryError(
+        f"the query returns more than {limit} rows, which cannot be streamed "
+        f"for this entity; page through it with limit and offset "
+        f"(app_puppetdb_maxPageSize)"
+    )
