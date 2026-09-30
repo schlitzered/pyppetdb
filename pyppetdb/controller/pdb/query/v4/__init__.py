@@ -414,6 +414,7 @@ class ControllerPdbQueryV4:
             ),
         )
         self._router = APIRouter(tags=["pdb_query_v4"])
+        self._post_routes = []
 
         self._add_route("", self._make_handler(Route("", None, "root", (), None, "root")))
         for route in ENTITY_ROUTES:
@@ -422,13 +423,19 @@ class ControllerPdbQueryV4:
         self._add_route(
             "/aggregate-event-counts", self._make_event_counts_handler(True)
         )
+        for path, handler in self._post_routes:
+            self._add_method_route(path, handler, "POST")
 
     def _add_route(self, path: str, handler) -> None:
+        self._add_method_route(path, handler, "GET")
+        self._post_routes.append((path, handler))
+
+    def _add_method_route(self, path: str, handler, method: str) -> None:
         self.router.add_api_route(
             path,
             handler,
             response_model=None,
-            methods=["GET", "POST"],
+            methods=[method],
             status_code=200,
         )
 

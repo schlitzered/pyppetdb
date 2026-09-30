@@ -55,9 +55,14 @@ class ControllerPdbQuery:
         )
         for version in RETIRED_VERSIONS:
             handler = self._retired(version)
-            self.router.add_api_route(f"/{version}", handler, methods=ANY_METHODS)
             self.router.add_api_route(
-                f"/{version}/{{rest:path}}", handler, methods=ANY_METHODS
+                f"/{version}", handler, methods=ANY_METHODS, include_in_schema=False
+            )
+            self.router.add_api_route(
+                f"/{version}/{{rest:path}}",
+                handler,
+                methods=ANY_METHODS,
+                include_in_schema=False,
             )
 
     @staticmethod
