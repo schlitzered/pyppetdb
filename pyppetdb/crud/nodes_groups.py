@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -23,7 +22,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.nodes_groups import NodeGroupGet
@@ -38,23 +37,7 @@ class CrudNodesGroupsCache:
         self._coll = coll
         self._log = log
         self._cache = {}
-        self._watch_task = None
-        self._initialized = False
-
-    @property
-    def cache(self) -> dict["str", NodeGroupGet]:
-        return self._cache
-
-    @property
-    def coll(self):
-        return self._coll
-
-    @property
-    def log(self):
-        return self._log
-
-    async def _watch_changes(self):
-        await watch_collection(
+        self._watcher = CollectionWatcher(
             coll=self.coll,
             log=self.log,
             name="nodes_groups",
@@ -71,6 +54,26 @@ class CrudNodesGroupsCache:
                 }
             ],
         )
+        self._initialized = False
+
+    @property
+    def cache(self) -> dict["str", NodeGroupGet]:
+        return self._cache
+
+    @property
+    def coll(self):
+        return self._coll
+
+    @property
+    def log(self):
+        return self._log
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
+    async def _watch_changes(self):
+        await self._watcher.run()
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -106,8 +109,8 @@ class CrudNodesGroupsCache:
     async def run(self):
         if self._initialized:
             return
-        await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        await self._watcher.resync()
+        self._watcher.start()
         self._initialized = True
         self.log.info("NodeGroupsCache initialized successfully")
 
@@ -138,6 +141,10 @@ class CrudNodesGroups(CrudMongo):
     @property
     def cache(self):
         return self._cache
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self.cache.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

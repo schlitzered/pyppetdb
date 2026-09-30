@@ -14,7 +14,6 @@
 
 import datetime
 import logging
-import asyncio
 import typing
 from typing import Optional
 import pymongo
@@ -23,7 +22,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSessio
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.ca_authorities import (
     CAAuthorityGet,
@@ -54,7 +53,13 @@ class CrudCAAuthoritiesCache:
         self._cache = {}
         self._key_cache = {}
         self._doc_to_id = {}
-        self._watch_task = None
+        self._watcher = CollectionWatcher(
+            coll=self.coll,
+            log=self.log,
+            name="ca_authorities",
+            handle_change=self._handle_change,
+            resync=self._load,
+        )
         self._initialized = False
 
     @property
@@ -77,7 +82,7 @@ class CrudCAAuthoritiesCache:
         if self._initialized:
             return
         await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        self._watcher.start()
         self._initialized = True
 
     def _process_doc(self, doc: dict) -> CAAuthorityGet:
@@ -126,14 +131,12 @@ class CrudCAAuthoritiesCache:
             else:
                 await self._load()
 
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
     async def _watch_changes(self):
-        await watch_collection(
-            coll=self.coll,
-            log=self.log,
-            name="CA authorities",
-            handle_change=self._handle_change,
-            resync=self._load,
-        )
+        await self._watcher.run()
 
 
 class CrudCAAuthorities(CrudMongo):
@@ -200,6 +203,10 @@ class CrudCAAuthorities(CrudMongo):
             if secret_id in extract_references(config):
                 referencing.append(doc["id"])
         return referencing
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self.cache.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

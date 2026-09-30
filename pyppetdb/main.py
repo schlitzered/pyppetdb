@@ -155,6 +155,7 @@ async def lifespan(app: FastAPI):
         pyhiera=container.pyhiera,
         redactor=container.nodes_secrets_redactor,
         ws_hub=container.ws_hub,
+        watcher_coordinator=container.watcher_coordinator,
         ingest_queue=container.ingest_queue,
     )
 

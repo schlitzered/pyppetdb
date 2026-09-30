@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import datetime
 import logging
 from typing import Optional
@@ -24,7 +23,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.errors import BackendError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import CACertificateGet
@@ -49,7 +48,13 @@ class CertRevocationWatcher:
         self._log = log
         self._coll = coll
         self._listeners: list[CacheInvalidationListener] = []
-        self._watch_task = None
+        self._watcher = CollectionWatcher(
+            coll=self._coll,
+            log=self._log,
+            name="ca_certificates",
+            handle_change=self._handle_change_async,
+            resync=self._resync,
+        )
         self._initialized = False
 
     def add_listener(self, listener: CacheInvalidationListener) -> None:
@@ -59,7 +64,7 @@ class CertRevocationWatcher:
         if self._initialized:
             return
         self._initialized = True
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        self._watcher.start()
 
     def _invalidate_serial(self, serial: str) -> None:
         for listener in self._listeners:
@@ -105,14 +110,12 @@ class CertRevocationWatcher:
     async def _handle_change_async(self, change: dict) -> None:
         self._handle_change(change)
 
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
     async def _watch_changes(self) -> None:
-        await watch_collection(
-            coll=self._coll,
-            log=self._log,
-            name="cert revocation cache",
-            handle_change=self._handle_change_async,
-            resync=self._resync,
-        )
+        await self._watcher.run()
 
 
 class CrudCACertificates(CrudMongo):
@@ -177,6 +180,10 @@ class CrudCACertificates(CrudMongo):
         if not doc:
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")
         return str(doc["_id"])
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._revocation_watcher.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

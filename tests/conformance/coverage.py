@@ -26,6 +26,8 @@ CORPUS = os.path.join(HERE, "corpus")
 sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..")))
 os.environ.setdefault("APP_SECRETKEY", "ci-test-secret")
 
+from pyppetdb.config import ConfigAppFacts  # noqa: E402
+from pyppetdb.config import ConfigAppPuppetdb  # noqa: E402
 from pyppetdb.controller.pdb import ControllerPdb  # noqa: E402
 from pyppetdb.pdb.query.engine import QueryEngine  # noqa: E402
 from pyppetdb.pdb.query.entities import get_entity  # noqa: E402
@@ -63,14 +65,20 @@ SIBLING_ENTITIES = {
 
 
 def implemented_routes():
+    config = MagicMock()
+    config.app.puppetdb = ConfigAppPuppetdb()
+    config.app.main.facts = ConfigAppFacts()
     controller = ControllerPdb(
         log=MagicMock(),
-        config=MagicMock(),
+        config=config,
         crud_nodes=MagicMock(),
         crud_nodes_catalog_cache=MagicMock(),
         crud_nodes_catalogs=MagicMock(),
         crud_nodes_groups=MagicMock(),
         crud_nodes_reports=MagicMock(),
+        crud_nodes_resources=MagicMock(),
+        crud_nodes_edges=MagicMock(),
+        crud_nodes_events=MagicMock(),
         authorize_client_cert=MagicMock(),
         ingest_queue=MagicMock(),
     )

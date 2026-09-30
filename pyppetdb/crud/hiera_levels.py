@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -23,7 +22,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_levels import HieraLevelGet
@@ -38,7 +37,22 @@ class CrudHieraLevelsCache:
         self._log = log
         self._cache = {}
         self._level_ids = []
-        self._watch_task = None
+        self._watcher = CollectionWatcher(
+            coll=self.coll,
+            log=self.log,
+            name="hiera_levels",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
+                {
+                    "$project": {
+                        "fullDocument.id": 1,
+                        "operationType": 1,
+                        "documentKey._id": 1,
+                    }
+                }
+            ],
+        )
         self._initialized = False
 
     @property
@@ -57,23 +71,12 @@ class CrudHieraLevelsCache:
     def log(self):
         return self._log
 
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
     async def _watch_changes(self):
-        await watch_collection(
-            coll=self.coll,
-            log=self.log,
-            name="hiera_levels",
-            handle_change=self._handle_change,
-            resync=self._load_initial_data,
-            pipeline=[
-                {
-                    "$project": {
-                        "fullDocument.id": 1,
-                        "operationType": 1,
-                        "documentKey._id": 1,
-                    }
-                }
-            ],
-        )
+        await self._watcher.run()
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -126,8 +129,8 @@ class CrudHieraLevelsCache:
     async def run(self):
         if self._initialized:
             return
-        await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        await self._watcher.resync()
+        self._watcher.start()
         self._initialized = True
         self.log.info("HieraLevelsCache initialized successfully")
 
@@ -163,6 +166,10 @@ class CrudHieraLevels(CrudMongo):
     @property
     def cache(self):
         return self._cache
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self.cache.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

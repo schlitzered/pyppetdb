@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -26,7 +25,7 @@ from pyppetdb.ca.secret_resolver import extract_references
 from pyppetdb.config import Config
 from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost
@@ -49,7 +48,13 @@ class CrudCASpacesCache:
         self._protector = protector
         self._cache = {}
         self._doc_to_id = {}
-        self._watch_task = None
+        self._watcher = CollectionWatcher(
+            coll=self.coll,
+            log=self.log,
+            name="ca_spaces",
+            handle_change=self._handle_change,
+            resync=self._load,
+        )
         self._initialized = False
 
     @property
@@ -68,7 +73,7 @@ class CrudCASpacesCache:
         if self._initialized:
             return
         await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        self._watcher.start()
         self._initialized = True
 
     def _process_doc(self, doc: dict) -> CASpaceGet:
@@ -108,14 +113,12 @@ class CrudCASpacesCache:
             else:
                 await self._load()
 
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
     async def _watch_changes(self):
-        await watch_collection(
-            coll=self.coll,
-            log=self.log,
-            name="CA spaces",
-            handle_change=self._handle_change,
-            resync=self._load,
-        )
+        await self._watcher.run()
 
 
 class CrudCASpaces(CrudMongo):
@@ -170,6 +173,10 @@ class CrudCASpaces(CrudMongo):
             return self.cache.cache[_id]
         result = await self._get(query={"id": _id}, fields=fields)
         return CASpaceGet(**result)
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self.cache.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()
