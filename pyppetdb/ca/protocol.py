@@ -15,7 +15,7 @@
 import asyncio
 from typing import Any
 from uvicorn.protocols.http.httptools_impl import HttpToolsProtocol
-from uvicorn.protocols.websockets.websockets_impl import WebSocketProtocol
+from uvicorn.protocols.websockets.websockets_sansio_impl import WebSocketsSansIOProtocol
 
 
 class ClientCertProtocol(HttpToolsProtocol):
@@ -34,7 +34,7 @@ class ClientCertProtocol(HttpToolsProtocol):
         super().on_headers_complete()
 
 
-class ClientCertWebSocketsProtocol(WebSocketProtocol):
+class ClientCertWebSocketsProtocol(WebSocketsSansIOProtocol):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._peer_cert_dict = None
