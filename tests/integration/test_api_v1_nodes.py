@@ -207,6 +207,59 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
         self.assertEqual(results["dev"], 1)
 
 
+class ApiV1NodesFactFilterIntegrationTests(IntegrationTestBase):
+    def setUp(self):
+        super().setUp()
+        self.pfx = uuid.uuid4().hex[:8]
+        self.fact = f"uptime{self.pfx}"
+        self.ids = {}
+        docs = []
+        for value in (50, 200, 400, 900, {"nested": 1}):
+            node_id = f"node-{self.pfx}-{len(docs)}"
+            self.ids[node_id] = value
+            docs.append({"id": node_id, "facts": {self.fact: value}, "node_groups": []})
+        self._db["nodes"].insert_many(docs)
+        self.addCleanup(self._db["nodes"].delete_many, {"id": {"$in": list(self.ids)}})
+
+    def _search(self, filters):
+        resp = self.client.get(
+            "/api/v1/nodes",
+            headers=self._auth_headers(),
+            params={"node_id": f"^node-{self.pfx}-", "fact": filters, "fields": ["id"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        return sorted(self.ids[node["id"]] for node in resp.json()["result"])
+
+    def test_two_filters_on_one_fact_both_apply(self):
+        self.assertEqual(
+            self._search([f"{self.fact}:gt:int:100", f"{self.fact}:lt:int:500"]),
+            [200, 400],
+        )
+
+    def test_the_same_operator_twice_on_one_fact_both_apply(self):
+        self.assertEqual(
+            self._search(
+                [
+                    f"{self.fact}:ne:int:200",
+                    f"{self.fact}:ne:int:400",
+                    f"{self.fact}:lt:int:1000",
+                ]
+            ),
+            [50, 900],
+        )
+
+    def test_distinct_values_keep_their_type_restriction_under_a_filter(self):
+        resp = self.client.get(
+            "/api/v1/nodes/_distinct_fact_values",
+            headers=self._auth_headers(),
+            params={"fact_id": self.fact, "fact": [f"{self.fact}:ne:int:50"]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            sorted(item["value"] for item in resp.json()["result"]), [200, 400, 900]
+        )
+
+
 class ApiV1NodesAuthzIntegrationTests(IntegrationTestBase):
     def setUp(self):
         super().setUp()

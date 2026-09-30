@@ -65,6 +65,53 @@ class TestCrudMixinsUnit(unittest.TestCase):
         FilterMixIn._filter_literal(query, "status", "active", list_filter=["active"])
         self.assertEqual(query["status"], {"$eq": "active", "$in": ["active"]})
 
+    def test_complex_search_combines_filters_on_the_same_attribute(self):
+        filters = ["uptime:gt:int:100", "uptime:lt:int:500"]
+        for complex_search in (filters, list(reversed(filters)), set(filters)):
+            query = {}
+            FilterMixIn._filter_complex_search(query, "facts", complex_search)
+            self.assertEqual(query, {"facts.uptime": {"$gt": 100, "$lt": 500}})
+
+    def test_complex_search_repeating_an_operator_uses_and(self):
+        query = {}
+        FilterMixIn._filter_complex_search(
+            query, "facts", {"osfamily:ne:str:Debian", "osfamily:ne:str:RedHat"}
+        )
+        self.assertEqual(
+            query,
+            {
+                "facts.osfamily": {"$ne": "Debian"},
+                "$and": [{"facts.osfamily": {"$ne": "RedHat"}}],
+            },
+        )
+
+    def test_complex_search_keeps_conditions_the_caller_already_set(self):
+        query = {"facts.osfamily": {"$type": ["string"]}}
+        FilterMixIn._filter_complex_search(query, "facts", ["osfamily:ne:str:Debian"])
+        self.assertEqual(
+            query, {"facts.osfamily": {"$type": ["string"], "$ne": "Debian"}}
+        )
+
+        query = {"facts.osfamily": "RedHat"}
+        FilterMixIn._filter_complex_search(query, "facts", ["osfamily:ne:str:Debian"])
+        self.assertEqual(
+            query,
+            {
+                "facts.osfamily": "RedHat",
+                "$and": [{"facts.osfamily": {"$ne": "Debian"}}],
+            },
+        )
+
+    def test_complex_search_keeps_attributes_apart(self):
+        query = {}
+        FilterMixIn._filter_complex_search(
+            query, "facts", ["uptime:gt:int:100", "osfamily:eq:str:RedHat"]
+        )
+        self.assertEqual(
+            query,
+            {"facts.uptime": {"$gt": 100}, "facts.osfamily": {"$eq": "RedHat"}},
+        )
+
     def test_filter_complex_search(self):
         query = {}
         complex_search = ["osfamily:eq:str:RedHat"]
