@@ -74,13 +74,12 @@ class FilterMixIn(object):
         if not complex_search:
             return
 
-        for item in complex_search:
+        for item in sorted(complex_search):
             res = filter_complex_search_pattern.match(item)
             _attr = res.group(1)
             _op = res.group(2)
             _type = res.group(3)
             _value = res.group(4)
-            query[f"{base_attribute}.{_attr}"] = {}
             try:
                 if _op in ["in", "nin"]:
                     _value = _value.split(",")
@@ -106,7 +105,25 @@ class FilterMixIn(object):
                 raise QueryParamValidationError(
                     msg=f"could not transform attribute {_attr} with value {_value} into type {_type}"
                 )
-            query[f"{base_attribute}.{_attr}"][f"${_op}"] = _value
+            FilterMixIn._add_condition(
+                query, f"{base_attribute}.{_attr}", f"${_op}", _value
+            )
+
+    @staticmethod
+    def _add_condition(query: dict, field: str, operator: str, value) -> None:
+        if field not in query:
+            query[field] = {operator: value}
+            return
+        existing = query[field]
+        if (
+            isinstance(existing, dict)
+            and existing
+            and all(key.startswith("$") for key in existing)
+            and operator not in existing
+        ):
+            existing[operator] = value
+            return
+        query.setdefault("$and", []).append({field: {operator: value}})
 
 
 class Format:

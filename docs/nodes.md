@@ -59,6 +59,13 @@ environment:eq:str:production
 processorcount:gt:int:4
 ```
 
+All filters have to match. Several filters may name the same fact, for example a range:
+
+```
+processorcount:gte:int:4
+processorcount:lt:int:16
+```
+
 ## Node groups
 
 **Node groups** map nodes to teams for RBAC purposes and are defined by fact-based rules.
