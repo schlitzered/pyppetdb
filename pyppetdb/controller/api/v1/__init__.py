@@ -411,7 +411,6 @@ class ControllerApiV1:
             router=ControllerApiV1Status(
                 log=log,
                 config=config,
-                authorize=authorize,
                 watcher_coordinator=watcher_coordinator,
             ).router,
             responses={404: {"description": "Not found"}},

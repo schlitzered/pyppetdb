@@ -16,9 +16,7 @@ import logging
 import socket
 
 from fastapi import APIRouter
-from fastapi import Request
 
-from pyppetdb.authorize import AuthorizePyppetDB
 from pyppetdb.config import Config
 from pyppetdb.crud.watcher import WatcherCoordinator
 from pyppetdb.model.status import StatusGet
@@ -29,10 +27,8 @@ class ControllerApiV1Status:
         self,
         log: logging.Logger,
         config: Config,
-        authorize: AuthorizePyppetDB,
         watcher_coordinator: WatcherCoordinator,
     ):
-        self._authorize = authorize
         self._log = log
         self._watcher_coordinator = watcher_coordinator
         self._instance = f"{socket.getfqdn()}:{config.app.main.port}"
@@ -49,10 +45,6 @@ class ControllerApiV1Status:
         )
 
     @property
-    def authorize(self):
-        return self._authorize
-
-    @property
     def log(self):
         return self._log
 
@@ -64,8 +56,7 @@ class ControllerApiV1Status:
     def watcher_coordinator(self):
         return self._watcher_coordinator
 
-    async def get(self, request: Request):
-        await self.authorize.require_user(request=request)
+    async def get(self):
         watchers = self.watcher_coordinator.status()
         return StatusGet(
             instance=self._instance,

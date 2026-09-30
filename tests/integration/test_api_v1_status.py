@@ -17,13 +17,9 @@ from tests.integration.base import IntegrationTestBase
 
 class ApiV1StatusIntegrationTests(IntegrationTestBase):
     def _status(self):
-        resp = self.client.get("/api/v1/status", headers=self._auth_headers())
+        resp = self.client.get("/api/v1/status")
         self.assertEqual(resp.status_code, 200)
         return resp.json()
-
-    def test_requires_authentication(self):
-        resp = self.client.get("/api/v1/status")
-        self.assertEqual(resp.status_code, 401)
 
     def test_reports_every_watcher_as_ready(self):
         status = self._wait_until(

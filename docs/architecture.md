@@ -215,8 +215,8 @@ While the certificate watcher is not `ready`, client certificates are checked ag
 database on every request instead of the serial cache, so a revocation that the instance could
 not be told about is never missed.
 
-`GET /api/v1/status` (authenticated) reports the state of every watcher of the instance that
-answers the request:
+`GET /api/v1/status` needs no authentication and reports the state of every watcher of the
+instance that answers the request:
 
 ```json
 {
