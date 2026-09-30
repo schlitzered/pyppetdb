@@ -195,16 +195,6 @@ class ControllerPuppetCaV1CA:
         except DuplicateResource as e:
             raise HTTPException(status_code=400, detail=e.detail)
         except asyncio.CancelledError:
-            self.log.info(
-                f"CSR submission for {nodename} cancelled, rolling back DB entry"
-            )
-            try:
-                # We only rollback if it was still in 'requested' state
-                await self._crud_certificates.delete_by_cn(
-                    space_id="puppet-ca", cn=nodename, status="requested"
-                )
-            except Exception as e:
-                self.log.error(f"Failed to rollback CSR for {nodename}: {e}")
             raise
         except Exception as e:
             self.log.error(f"Failed to process CSR for {nodename}: {e}")
@@ -215,7 +205,7 @@ class ControllerPuppetCaV1CA:
     async def get_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
         try:
-            cert_doc = await self._crud_certificates.get_by_cn(
+            cert_doc = await self._crud_certificates.get_active_by_cn(
                 space_id="puppet-ca",
                 cn=nodename,
                 fields=[
@@ -287,8 +277,12 @@ class ControllerPuppetCaV1CA:
     async def delete_certificate(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
         try:
-            await self._ca_service.delete_certificate("puppet-ca", nodename)
+            await asyncio.shield(
+                self._ca_service.clean_certificate("puppet-ca", nodename)
+            )
             return Response(status_code=204)
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.log.error(f"Failed to delete certificate {nodename}: {e}")
             raise HTTPException(status_code=500, detail="Failed to delete certificate")

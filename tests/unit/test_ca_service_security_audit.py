@@ -52,6 +52,7 @@ class _ServiceTestBase(unittest.IsolatedAsyncioTestCase):
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
+        self.crud_certificates.delete_request.return_value = None
         self.crud_pyppetdb_nodes = MagicMock()
         self.crud_secrets = AsyncMock()
         self.crud_secrets.get_values = AsyncMock(return_value={})
@@ -126,7 +127,7 @@ class TestRevocationOwnership(_ServiceTestBase):
 
 class TestRevocationCacheInvalidation(_ServiceTestBase):
     async def test_revoke_notifies_listeners_with_serial(self):
-        self.crud_certificates.update.return_value = CACertificateGet(
+        self.crud_certificates.revoke.return_value = CACertificateGet(
             id="serial-1", status="revoked"
         )
         seen = []
@@ -137,7 +138,7 @@ class TestRevocationCacheInvalidation(_ServiceTestBase):
         self.assertEqual(seen, ["serial-1"])
 
     async def test_revoke_notifies_even_when_already_revoked(self):
-        self.crud_certificates.update.side_effect = ResourceNotFound()
+        self.crud_certificates.revoke.side_effect = ResourceNotFound()
         self.crud_certificates.get.return_value = CACertificateGet(
             id="serial-2", status="revoked"
         )
@@ -149,7 +150,7 @@ class TestRevocationCacheInvalidation(_ServiceTestBase):
         self.assertEqual(seen, ["serial-2"])
 
     async def test_listener_failure_does_not_break_revocation(self):
-        self.crud_certificates.update.return_value = CACertificateGet(
+        self.crud_certificates.revoke.return_value = CACertificateGet(
             id="serial-3", status="revoked"
         )
 

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
@@ -32,7 +33,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_certificates = MagicMock()
         self.mock_crud_certificates.search = AsyncMock()
         self.mock_crud_certificates.get_by_cn = AsyncMock()
-        self.mock_crud_certificates.delete_by_cn = AsyncMock()
+        self.mock_crud_certificates.get_active_by_cn = AsyncMock()
         self.mock_crud_nodes = MagicMock()
         self.mock_crud_nodes.resource_exists = AsyncMock()
         self.mock_ca_service = MagicMock()
@@ -42,6 +43,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_ca_service.sign_certificate = AsyncMock()
         self.mock_ca_service.revoke_certificate = AsyncMock()
         self.mock_ca_service.update_certificate_status = AsyncMock()
+        self.mock_ca_service.clean_certificate = AsyncMock()
 
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
@@ -200,7 +202,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             status="signed",
             fingerprint=Fingerprints(sha256="f1", sha1="f2", md5="f3"),
         )
-        self.mock_crud_certificates.get_by_cn.return_value = cert
+        self.mock_crud_certificates.get_active_by_cn.return_value = cert
         mock_request = MagicMock()
 
         result = await self.controller.get_certificate_status("node1", mock_request)
@@ -216,7 +218,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
     async def test_get_certificate_status_not_found(self):
         from pyppetdb.errors import ResourceNotFound
 
-        self.mock_crud_certificates.get_by_cn.side_effect = ResourceNotFound()
+        self.mock_crud_certificates.get_active_by_cn.side_effect = ResourceNotFound()
         mock_request = MagicMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -231,7 +233,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_get_certificate_status_error(self):
-        self.mock_crud_certificates.get_by_cn.side_effect = Exception("DB error")
+        self.mock_crud_certificates.get_active_by_cn.side_effect = Exception("DB error")
         mock_request = MagicMock()
 
         with self.assertRaises(Exception) as cm:
@@ -306,6 +308,21 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Autosign failed", cm.exception.detail)
         self.mock_ca_service.sign_certificate.assert_called_once()
 
+    async def test_submit_certificate_request_cancelled_keeps_request(self):
+        from pyppetdb.ca.utils import CAUtils
+
+        csr_pem, _ = CAUtils.generate_csr("node1")
+        mock_request = MagicMock()
+        mock_request.body = AsyncMock(return_value=csr_pem)
+        self.mock_config.ca.autoSign = True
+        self.mock_ca_service.sign_certificate.side_effect = asyncio.CancelledError()
+
+        with self.assertRaises(asyncio.CancelledError):
+            await self.controller.submit_certificate_request(
+                "node1", mock_request, MagicMock()
+            )
+        self.assertEqual(self.mock_crud_certificates.method_calls, [])
+
     async def test_update_certificate_status_signed(self):
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"desired_state": "signed"})
@@ -378,8 +395,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             await self.controller.get_crl()
         self.assertEqual(cm.exception.status_code, 500)
 
-    async def test_delete_certificate_success(self):
-        self.mock_ca_service.delete_certificate = AsyncMock()
+    async def test_delete_certificate_cleans_the_node(self):
         mock_request = MagicMock()
 
         result = await self.controller.delete_certificate(
@@ -387,16 +403,15 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.mock_auth_cert.require_cn_trusted.assert_called_once_with(mock_request)
-        self.mock_ca_service.delete_certificate.assert_called_once_with(
+        self.mock_ca_service.clean_certificate.assert_called_once_with(
             "puppet-ca", "node1"
         )
+        self.mock_ca_service.update_certificate_status.assert_not_called()
         self.assertIsInstance(result, Response)
         self.assertEqual(result.status_code, 204)
 
     async def test_delete_certificate_failure_returns_500(self):
-        self.mock_ca_service.delete_certificate = AsyncMock(
-            side_effect=Exception("boom")
-        )
+        self.mock_ca_service.clean_certificate.side_effect = Exception("boom")
 
         with self.assertRaises(HTTPException) as ctx:
             await self.controller.delete_certificate(

@@ -43,7 +43,7 @@ Each CA space carries a `validation_config` that governs which certificate reque
 * `key_usages` / `extended_key_usages` — enforced key usage constraints.
 * `san_validation` — bounds and checks on Subject Alternative Names: `max_san_count`, regex
   allow-lists, external HTTP checks, and external script checks.
-* `san_injection` — inject additional SANs based on a matching pattern.
+* `san_injection` — inject additional SANs when a pattern matches the whole CN.
 
 ## Puppet CA endpoints (agent-facing)
 
@@ -56,9 +56,25 @@ Served under `/puppet-ca/v1` (Puppet proxy router group, mTLS):
 | `PUT` | `/puppet-ca/v1/certificate_request/{nodename}` | Submit a CSR. |
 | `GET` | `/puppet-ca/v1/certificate_status/{nodename}` | Get certificate status. |
 | `PUT` | `/puppet-ca/v1/certificate_status/{nodename}` | Sign a pending request. |
-| `DELETE` | `/puppet-ca/v1/certificate_status/{nodename}` | Revoke / clean a certificate. |
+| `DELETE` | `/puppet-ca/v1/certificate_status/{nodename}` | Clean a node: revoke its signed certificate and drop its requests. |
 | `GET` | `/puppet-ca/v1/certificate_revocation_list/ca` | Retrieve the CRL. |
 | `POST` | `/puppet-ca/v1/certificate_renewal` | Renew the caller's certificate (the undocumented Puppet auto-refresh endpoint). |
+
+Signed certificates are never deleted, only revoked; revoked ones stay in the database until
+they expire. The Puppet CA endpoints only see the active certificate of a node — its pending
+request or its signed certificate, of which there is at most one — so a revoked certificate
+looks deleted to them: `certificate_status` answers 404.
+
+A certificate request is not a certificate: revoking a pending request — through the Puppet CA
+endpoints or the management API — deletes it instead of keeping a revoked document, which
+would carry no expiry date and stay forever. The management API still answers with the request
+as it was, marked `revoked`.
+
+`puppetserver ca clean` sends a `PUT` with `desired_state: revoked` followed by the `DELETE`
+above. The `DELETE` revokes the signed certificate if it is still active and deletes the node's
+requests, after which the node can submit a new request. Because the preceding `PUT` may
+already have revoked the certificate or deleted the request, the `DELETE` always answers 204,
+also for a node the CA does not know.
 
 ## CA management API
 

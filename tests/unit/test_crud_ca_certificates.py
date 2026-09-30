@@ -60,6 +60,80 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(listener.serials, ["serial-9"])
 
+    async def test_get_active_by_cn_uses_uniqueness_constraint(self):
+        self.mock_coll.find_one = AsyncMock(
+            return_value={"id": "serial-1", "status": "signed"}
+        )
+
+        result = await self.crud.get_active_by_cn(
+            space_id="puppet-ca", cn="node1", fields=[]
+        )
+
+        self.assertEqual(result.id, "serial-1")
+        query = self.mock_coll.find_one.call_args.kwargs["filter"]
+        self.assertEqual(
+            query, {"space_id": "puppet-ca", "cert_uniqueness": "puppet-ca:node1"}
+        )
+
+    async def test_delete_request_only_deletes_a_pending_request(self):
+        self.mock_coll.find_one_and_delete = AsyncMock(
+            return_value={"id": "req-1", "status": "requested", "cn": "node1"}
+        )
+
+        result = await self.crud.delete_request(_id="req-1")
+
+        self.mock_coll.find_one_and_delete.assert_awaited_once_with(
+            filter={"id": "req-1", "status": "requested"}, projection={"_id": 0}
+        )
+        self.assertEqual(result.cn, "node1")
+
+    async def test_delete_request_returns_none_for_anything_else(self):
+        self.mock_coll.find_one_and_delete = AsyncMock(return_value=None)
+
+        self.assertIsNone(await self.crud.delete_request(_id="serial-1"))
+
+    async def test_delete_requests_only_hits_documents_without_a_serial(self):
+        self.mock_coll.delete_many = AsyncMock()
+
+        await self.crud.delete_requests(space_id="puppet-ca", cn="node1")
+
+        self.mock_coll.delete_many.assert_awaited_once_with(
+            filter={"space_id": "puppet-ca", "cn": "node1", "serial_number": None}
+        )
+
+    async def test_revoke_skips_already_revoked_certs(self):
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        self.mock_coll.find_one_and_update = AsyncMock(
+            return_value={"id": "serial-1", "status": "revoked"}
+        )
+
+        await self.crud.revoke(_id="serial-1", revocation_date=now, fields=[])
+
+        kwargs = self.mock_coll.find_one_and_update.call_args.kwargs
+        self.assertEqual(
+            kwargs["filter"], {"id": "serial-1", "status": {"$ne": "revoked"}}
+        )
+        self.assertEqual(
+            kwargs["update"]["$set"],
+            {
+                "status": "revoked",
+                "revocation_date": now,
+                "cert_uniqueness": "revoked:serial-1",
+            },
+        )
+
+    async def test_revoke_already_revoked_raises_not_found(self):
+        from datetime import datetime, timezone
+
+        self.mock_coll.find_one_and_update = AsyncMock(return_value=None)
+
+        with self.assertRaises(ResourceNotFound):
+            await self.crud.revoke(
+                _id="serial-1", revocation_date=datetime.now(timezone.utc), fields=[]
+            )
+
     async def test_get_internal_object_id_returns_stringified_id(self):
         oid = MagicMock()
         oid.__str__ = lambda self: "64f0c0ffee"

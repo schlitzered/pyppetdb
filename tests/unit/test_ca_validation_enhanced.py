@@ -323,6 +323,23 @@ class TestCAServiceValidationEnhanced(unittest.IsolatedAsyncioTestCase):
         self.assertIn("www-admin.prod.fra.dc.example.com", injected)
         self.assertEqual(len(injected), 2)
 
+    async def test_get_injected_sans_requires_full_cn_match(self):
+        from pyppetdb.model.ca_validation import CASANInjection
+
+        configs = [
+            CAValidationConfig(
+                san_injection=[
+                    CASANInjection(pattern=r"web\d+", templates=["{0}.internal"])
+                ]
+            )
+        ]
+        self.assertEqual(
+            await self.service._get_injected_sans("web1.evil.com", configs), []
+        )
+        self.assertEqual(
+            await self.service._get_injected_sans("web1", configs), ["web1.internal"]
+        )
+
     @patch("pyppetdb.ca.utils.CAUtils.get_cert_info")
     @patch("pyppetdb.ca.utils.CAUtils.sign_csr")
     async def test_sign_certificate_with_injection(self, mock_sign_csr, mock_get_info):

@@ -77,7 +77,9 @@ class TestCrudHieraKeyModelsDynamicUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._delete = AsyncMock()
         await self.crud.delete(_id="dynamic:test")
         self.crud._delete.assert_called_once_with(query={"id": "dynamic:test"})
-        self.mock_adapter.model_unregister.assert_called_once_with("dynamic:test")
+        self.mock_adapter.model_unregister_if_present.assert_called_once_with(
+            "dynamic:test"
+        )
 
     async def test_get(self):
         self.crud._get = AsyncMock(return_value={"id": "dynamic:test", "model": {}})
@@ -132,6 +134,7 @@ class TestCrudHieraModelsDynamicAdapterUnit(unittest.IsolatedAsyncioTestCase):
         self.adapter._doc_to_model_id["doc1"] = "dynamic:test"
         change = {"operationType": "delete", "documentKey": {"_id": "doc1"}}
         self.adapter.model_unregister = MagicMock()
+        self.mock_coll.find_one = AsyncMock(return_value=None)
         await self.adapter._handle_change(change)
         self.adapter.model_unregister.assert_called_once_with("dynamic:test")
         self.assertNotIn("doc1", self.adapter._doc_to_model_id)

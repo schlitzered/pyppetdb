@@ -23,6 +23,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_keys import HieraKeyGet
@@ -44,6 +45,7 @@ class CrudHieraKeysAdapter:
         self._log = log
         self._pyhiera = pyhiera
         self._doc_to_key = {}
+        self._watch_task = None
         self._initialized = False
 
     @property
@@ -75,8 +77,13 @@ class CrudHieraKeysAdapter:
             self.log.warning(f"failed to delete key {key_id}: {err}")
 
     async def _watch_changes(self):
-        try:
-            pipeline = [
+        await watch_collection(
+            coll=self.coll,
+            log=self.log,
+            name="hiera_keys",
+            handle_change=self._handle_change,
+            resync=self._load_initial_data,
+            pipeline=[
                 {
                     "$project": {
                         "fullDocument.id": 1,
@@ -85,23 +92,8 @@ class CrudHieraKeysAdapter:
                         "documentKey._id": 1,
                     }
                 }
-            ]
-
-            async with self.coll.watch(
-                full_document="updateLookup",
-                pipeline=pipeline,
-            ) as change_stream:
-                self.log.info("Change stream watcher started for hiera_keys")
-                async for change in change_stream:
-                    await self._handle_change(change)
-
-        except pymongo.errors.PyMongoError as err:
-            self.log.error(f"Error in hiera_keys change stream: {err}")
-        except Exception as err:
-            self.log.error(f"Unexpected error in hiera_keys change stream: {err}")
-
-        await asyncio.sleep(5)
-        asyncio.create_task(self._watch_changes())
+            ],
+        )
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -131,18 +123,23 @@ class CrudHieraKeysAdapter:
     async def _load_initial_data(self):
         try:
             cursor = self.coll.find({}, {"id": 1, "key_model_id": 1, "_id": 1})
-            count = 0
+            loaded = {}
             async for doc in cursor:
-                doc_id = doc["_id"]
                 key_id = doc.get("id")
                 model_id = doc.get("key_model_id")
                 if not key_id or not model_id:
                     continue
-                self._add_or_update_key(key_id, model_id)
-                self._doc_to_key[doc_id] = key_id
-                count += 1
+                loaded[doc["_id"]] = (key_id, model_id)
 
-            self.log.info(f"Loaded {count} initial documents into hiera_keys adapter")
+            for doc_id, key_id in list(self._doc_to_key.items()):
+                if doc_id not in loaded:
+                    self._delete_key(str(key_id))
+            for key_id, model_id in loaded.values():
+                self._add_or_update_key(key_id, model_id)
+            self._doc_to_key = {
+                doc_id: key_id for doc_id, (key_id, _) in loaded.items()
+            }
+            self.log.info(f"Loaded {len(loaded)} documents into hiera_keys adapter")
 
         except pymongo.errors.PyMongoError as err:
             self.log.error(f"Error loading initial data: {err}")
@@ -151,8 +148,8 @@ class CrudHieraKeysAdapter:
     async def run(self):
         if self._initialized:
             return
-        asyncio.create_task(self._watch_changes())
         await self._load_initial_data()
+        self._watch_task = asyncio.create_task(self._watch_changes())
         self._initialized = True
         self.log.info("HieraKeysAdapter initialized successfully")
 

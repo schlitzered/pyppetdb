@@ -83,6 +83,7 @@ class CACryptoVerificationTests(IntegrationTestBase):
                 "ca_id": ca_id,
                 "cn": cn,
                 "status": "requested",
+                "cert_uniqueness": f"{space_id}:{cn}",
                 "csr": self._csr_pem(cn),
                 "created": datetime.datetime.now(datetime.timezone.utc),
             }

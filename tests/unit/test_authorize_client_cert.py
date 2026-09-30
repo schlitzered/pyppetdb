@@ -182,6 +182,23 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
     async def test_invalidate_unknown_serial_is_noop(self):
         self.auth.invalidate_serial("does-not-exist")
 
+    async def test_invalidate_all_forces_db_recheck(self):
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "01",
+        }
+        self._setup_mock_cert("admin.example.com")
+        mock_request = self._create_mock_request(cert_dict)
+        await self.auth.get_cert_info(mock_request)
+        self.crud_ca_certificates.get_internal_object_id.assert_called_once()
+
+        self.auth.invalidate_all()
+
+        await self.auth.get_cert_info(mock_request)
+        self.assertEqual(
+            self.crud_ca_certificates.get_internal_object_id.call_count, 2
+        )
+
     async def test_invalidate_object_id_evicts_matching_serial(self):
         cert_dict = {
             "subject": ((("commonName", "admin.example.com"),),),

@@ -20,9 +20,12 @@ from typing import Protocol
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
+import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.common import watch_collection
+from pyppetdb.errors import BackendError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import CACertificateGet
 from pyppetdb.model.ca_certificates import CACertificateGetMulti
@@ -38,12 +41,15 @@ class CacheInvalidationListener(Protocol):
 
     def invalidate_object_id(self, object_id: str) -> None: ...  # noqa: E704
 
+    def invalidate_all(self) -> None: ...  # noqa: E704
+
 
 class CertRevocationWatcher:
     def __init__(self, log: logging.Logger, coll: AsyncIOMotorCollection):
         self._log = log
         self._coll = coll
         self._listeners: list[CacheInvalidationListener] = []
+        self._watch_task = None
         self._initialized = False
 
     def add_listener(self, listener: CacheInvalidationListener) -> None:
@@ -53,7 +59,7 @@ class CertRevocationWatcher:
         if self._initialized:
             return
         self._initialized = True
-        asyncio.create_task(self._watch_changes())
+        self._watch_task = asyncio.create_task(self._watch_changes())
 
     def _invalidate_serial(self, serial: str) -> None:
         for listener in self._listeners:
@@ -73,6 +79,13 @@ class CertRevocationWatcher:
                     f"Cert revocation listener failed for _id '{object_id}': {e}"
                 )
 
+    def _invalidate_all(self) -> None:
+        for listener in self._listeners:
+            try:
+                listener.invalidate_all()
+            except Exception as e:
+                self._log.error(f"Cert revocation listener failed to reset: {e}")
+
     def _handle_change(self, change: dict) -> None:
         operation = change.get("operationType")
         if operation in ("insert", "replace", "update"):
@@ -86,18 +99,20 @@ class CertRevocationWatcher:
         elif operation == "delete":
             self._invalidate_object_id(str(change["documentKey"]["_id"]))
 
+    async def _resync(self) -> None:
+        self._invalidate_all()
+
+    async def _handle_change_async(self, change: dict) -> None:
+        self._handle_change(change)
+
     async def _watch_changes(self) -> None:
-        try:
-            async with self._coll.watch(full_document="updateLookup") as change_stream:
-                self._log.info(
-                    "Change stream watcher started for cert revocation cache"
-                )
-                async for change in change_stream:
-                    self._handle_change(change)
-        except Exception as e:
-            self._log.error(f"Error in cert revocation change stream: {e}")
-            await asyncio.sleep(5)
-            asyncio.create_task(self._watch_changes())
+        await watch_collection(
+            coll=self._coll,
+            log=self._log,
+            name="cert revocation cache",
+            handle_change=self._handle_change_async,
+            resync=self._resync,
+        )
 
 
 class CrudCACertificates(CrudMongo):
@@ -248,16 +263,49 @@ class CrudCACertificates(CrudMongo):
         result = await self._get(query=query, fields=fields)
         return CACertificateGet(**result)
 
-    async def delete_by_cn(
+    async def get_active_by_cn(
         self,
         space_id: str,
         cn: str,
-        status: Optional[CAStatus] = None,
-    ) -> None:
-        query = {"space_id": space_id, "cn": cn}
-        if status:
-            query["status"] = status
-        await self._delete_many(query=query)
+        fields: list,
+    ) -> CACertificateGet:
+        result = await self._get(
+            query={"space_id": space_id, "cert_uniqueness": f"{space_id}:{cn}"},
+            fields=fields,
+        )
+        return CACertificateGet(**result)
+
+    async def revoke(
+        self, _id: str, revocation_date: datetime.datetime, fields: list
+    ) -> CACertificateGet:
+        result = await self._update(
+            query={"id": _id, "status": {"$ne": "revoked"}},
+            payload={
+                "status": "revoked",
+                "revocation_date": revocation_date,
+                "cert_uniqueness": f"revoked:{_id}",
+            },
+            fields=fields,
+        )
+        return CACertificateGet(**result)
+
+    async def delete_request(self, _id: str) -> Optional[CACertificateGet]:
+        try:
+            result = await self.coll.find_one_and_delete(
+                filter={"id": _id, "status": "requested"},
+                projection={"_id": 0},
+            )
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        if result is None:
+            return None
+        return CACertificateGet(**result)
+
+    async def delete_requests(self, space_id: str, cn: str) -> None:
+        await self._delete_many(
+            query={"space_id": space_id, "cn": cn, "serial_number": None}
+        )
 
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
@@ -276,9 +324,8 @@ class CrudCACertificates(CrudMongo):
             revoked.append(
                 {
                     "serial_number": int(cert["serial_number"]),
-                    "revocation_date": cert.get(
-                        "revocation_date", datetime.datetime.now(datetime.timezone.utc)
-                    ),
+                    "revocation_date": cert.get("revocation_date")
+                    or datetime.datetime.now(datetime.timezone.utc),
                 }
             )
         return revoked

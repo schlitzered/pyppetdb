@@ -41,6 +41,7 @@ class ApiV1NodesIntegrationTests(IntegrationTestBase):
                 "ca_id": "puppet-ca",
                 "cn": node_id,
                 "status": "signed",
+                "cert_uniqueness": f"puppet-ca:{node_id}",
                 "serial_number": "12345",
                 "certificate": "CERT_CONTENT",
             }

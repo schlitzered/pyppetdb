@@ -230,3 +230,45 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.generation, 7)
         self.assertEqual(self.mock_coll.update_one.await_count, 2)
+
+    async def test_revoke_only_updates_unrevoked_authorities(self):
+        now = datetime.now(timezone.utc)
+        self.mock_coll.find_one_and_update = AsyncMock(return_value={"id": "sub"})
+
+        await self.crud.revoke(_id="sub", revocation_date=now)
+
+        kwargs = self.mock_coll.find_one_and_update.call_args.kwargs
+        self.assertEqual(kwargs["filter"], {"id": "sub", "status": {"$ne": "revoked"}})
+        self.assertEqual(
+            kwargs["update"]["$set"], {"status": "revoked", "revocation_date": now}
+        )
+
+    async def test_get_revoked_for_ca_replaces_null_revocation_date(self):
+        stored = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+        class _Cursor:
+            def __init__(self, docs):
+                self._docs = list(docs)
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if not self._docs:
+                    raise StopAsyncIteration
+                return self._docs.pop(0)
+
+        self.mock_coll.find = MagicMock(
+            return_value=_Cursor(
+                [
+                    {"serial_number": "1", "revocation_date": None},
+                    {"serial_number": "2", "revocation_date": stored},
+                ]
+            )
+        )
+
+        revoked = await self.crud.get_revoked_for_ca(parent_id="root")
+
+        self.assertIsInstance(revoked[0]["revocation_date"], datetime)
+        self.assertEqual(revoked[1], {"serial_number": 2, "revocation_date": stored})
+
