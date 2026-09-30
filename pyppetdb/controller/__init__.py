@@ -101,6 +101,7 @@ class Controller:
         redactor: NodesSecretsRedactor,
         pyhiera,
         ws_hub,
+        watcher_coordinator,
         ingest_queue,
     ):
         self._log = log
@@ -141,6 +142,7 @@ class Controller:
             redactor=redactor,
             pyhiera=pyhiera,
             ws_hub=ws_hub,
+            watcher_coordinator=watcher_coordinator,
         ).router
 
         router_oauth = ControllerOauth(

@@ -92,6 +92,23 @@ class TestAuthorizeClientCert(unittest.IsolatedAsyncioTestCase):
         await self.auth.get_cert_info(mock_request)
         self.crud_ca_certificates.get_internal_object_id.assert_called_once()
 
+    async def test_cache_is_bypassed_while_the_revocation_watcher_is_not_ready(self):
+        cert_dict = {
+            "subject": ((("commonName", "admin.example.com"),),),
+            "serialNumber": "01",
+        }
+        self._setup_mock_cert("admin.example.com")
+        mock_request = self._create_mock_request(cert_dict)
+        await self.auth.get_cert_info(mock_request)
+
+        self.crud_ca_certificates.watcher.ready = False
+        await self.auth.get_cert_info(mock_request)
+        self.assertEqual(self.crud_ca_certificates.get_internal_object_id.call_count, 2)
+
+        self.crud_ca_certificates.watcher.ready = True
+        await self.auth.get_cert_info(mock_request)
+        self.assertEqual(self.crud_ca_certificates.get_internal_object_id.call_count, 2)
+
     async def test_get_cn_from_request_bypass(self):
         self.config.ca.verifyCertificateRegistration = False
         cert_dict = {

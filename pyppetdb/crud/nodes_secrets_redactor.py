@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 from datetime import datetime
 from datetime import timezone
 import hashlib
@@ -26,7 +25,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.common import DataDelete
 from pyppetdb.model.nodes_secrets_redactor import NodesSecretsRedactorGet
@@ -142,19 +141,7 @@ class CrudNodesSecretsRedactorCache:
         self._log = log
         self._redactor = redactor
         self._cache: dict[str, str] = {}
-        self._watch_task = None
-        self._initialized = False
-
-    @property
-    def coll(self):
-        return self._coll
-
-    @property
-    def log(self):
-        return self._log
-
-    async def _watch_changes(self):
-        await watch_collection(
+        self._watcher = CollectionWatcher(
             coll=self.coll,
             log=self.log,
             name="nodes_secrets_redactor",
@@ -171,6 +158,22 @@ class CrudNodesSecretsRedactorCache:
                 }
             ],
         )
+        self._initialized = False
+
+    @property
+    def coll(self):
+        return self._coll
+
+    @property
+    def log(self):
+        return self._log
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
+    async def _watch_changes(self):
+        await self._watcher.run()
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -222,8 +225,8 @@ class CrudNodesSecretsRedactorCache:
     async def run(self):
         if self._initialized:
             return
-        await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        await self._watcher.resync()
+        self._watcher.start()
         self._initialized = True
 
 
@@ -251,6 +254,10 @@ class CrudNodesSecretsRedactor(CrudMongo):
     @property
     def cache(self):
         return self._cache
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self.cache.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

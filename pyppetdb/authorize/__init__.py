@@ -194,7 +194,10 @@ class AuthorizeClientCert:
         cn = cert_info["cn"]
         serial = cert_info["serial"]
 
-        if serial in self._cert_serial_cache:
+        if (
+            serial in self._cert_serial_cache
+            and self.crud_ca_certificates.watcher.ready
+        ):
             return
 
         try:

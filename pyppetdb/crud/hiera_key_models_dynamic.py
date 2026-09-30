@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -25,7 +24,7 @@ from pyhiera.errors import PyHieraError
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.common import watch_collection
+from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.hiera_key_models_static import HieraKeyModelGet
@@ -47,23 +46,7 @@ class CrudHieraModelsDynamicAdapter:
         self._doc_to_model_id = {}
         self._log = log
         self._pyhiera = pyhiera
-        self._watch_task = None
-        self._initialized = False
-
-    @property
-    def coll(self):
-        return self._coll
-
-    @property
-    def log(self):
-        return self._log
-
-    @property
-    def pyhiera(self):
-        return self._pyhiera
-
-    async def _watch_changes(self):
-        await watch_collection(
+        self._watcher = CollectionWatcher(
             coll=self.coll,
             log=self.log,
             name="hiera_key_models_dynamic",
@@ -81,6 +64,26 @@ class CrudHieraModelsDynamicAdapter:
                 }
             ],
         )
+        self._initialized = False
+
+    @property
+    def coll(self):
+        return self._coll
+
+    @property
+    def log(self):
+        return self._log
+
+    @property
+    def pyhiera(self):
+        return self._pyhiera
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._watcher
+
+    async def _watch_changes(self):
+        await self._watcher.run()
 
     async def _handle_change(self, change):
         operation = change["operationType"]
@@ -196,8 +199,8 @@ class CrudHieraModelsDynamicAdapter:
     async def run(self):
         if self._initialized:
             return
-        await self._load_initial_data()
-        self._watch_task = asyncio.create_task(self._watch_changes())
+        await self._watcher.resync()
+        self._watcher.start()
         self._initialized = True
         self.log.info("HieraKeyModelDynamicSync initialized successfully")
 
@@ -226,6 +229,10 @@ class CrudHieraKeyModelsDynamic(CrudMongo):
             coll=coll,
             pyhiera=pyhiera,
         )
+
+    @property
+    def watcher(self) -> CollectionWatcher:
+        return self._key_model_adapter.watcher
 
     async def _create_index(self) -> None:
         await super()._create_index()

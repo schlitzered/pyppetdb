@@ -18,6 +18,9 @@ import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pyppetdb.config import Config
 from pyppetdb.crud.manager import CrudManager
+from pyppetdb.crud.watcher import EVENT_CHANGED
+from pyppetdb.crud.watcher import EVENT_READY
+from pyppetdb.crud.watcher import WatcherCoordinator
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.crud.nodes_secrets_redactor import NodesSecretsRedactor
 from pyppetdb.crud.nodes_reports import NodesReportsRedactor
@@ -409,6 +412,25 @@ class AppContainer:
         )
         self.crud_ca_certificates.add_revocation_listener(
             self.authorize_client_cert_pdb
+        )
+
+        self.watcher_coordinator = WatcherCoordinator(log=log)
+        for crud in (
+            self.crud_ca_authorities,
+            self.crud_ca_spaces,
+            self.crud_ca_certificates,
+            self.crud_hiera_levels,
+            self.crud_hiera_key_models_dynamic,
+            self.crud_hiera_keys,
+            self.crud_nodes_groups,
+            self.crud_nodes_secrets_redactor,
+        ):
+            self.watcher_coordinator.register(crud.watcher)
+        self.watcher_coordinator.on(
+            source=self.crud_hiera_key_models_dynamic.watcher,
+            events=(EVENT_READY, EVENT_CHANGED),
+            reaction=self.crud_hiera_keys.watcher.resync,
+            name="reload hiera keys after key model changes",
         )
 
     async def init(self):

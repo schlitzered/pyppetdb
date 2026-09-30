@@ -189,3 +189,42 @@ pyppetdb stores all state in **MongoDB** and requires a **replica set**, because
 in real time (cache invalidation, inter-instance coordination, live job logs) instead of
 polling. See the [Setup](setup.md#mongodb-setup) guide for details. Shard-capable collections
 can be distributed using placement facts (`mongodb_placementFacts`).
+
+### In-memory caches and their watchers
+
+Eight collections are mirrored into memory on every instance and kept current through a change
+stream: CA authorities, CA spaces, the certificate revocation cache, node groups, the secrets
+redactor, Hiera levels, dynamic Hiera key models and Hiera keys. Each of them is driven by a
+`CollectionWatcher` (`pyppetdb/crud/watcher.py`), which opens the stream, reloads the whole
+collection, applies the events that follow and starts over after an error. A watcher has a
+state — `starting`, `syncing`, `ready` or `error` — and emits `ready`, `changed` and `error`
+events.
+
+The watchers do not know each other. The `WatcherCoordinator`, created in `AppContainer`,
+observes all of them and holds the rules that connect them:
+
+| When | Then | Why |
+|---|---|---|
+| dynamic Hiera key models are `ready` or `changed` | reload the Hiera keys | A key is bound to its model when it is registered. Without the reload a key keeps a changed model's old version, and a key whose model arrived later is never registered. |
+
+Reactions run as their own tasks, never inside the watcher that triggered them, and triggers
+that arrive while a reaction is running collapse into one further run. A reload triggered from
+outside and the watcher's own event handling never run at the same time.
+
+While the certificate watcher is not `ready`, client certificates are checked against the
+database on every request instead of the serial cache, so a revocation that the instance could
+not be told about is never missed.
+
+`GET /api/v1/status` (authenticated) reports the state of every watcher of the instance that
+answers the request:
+
+```json
+{
+  "instance": "pyppetdb1.example.com:8000",
+  "ready": false,
+  "watchers": [
+    {"name": "nodes_groups", "state": "ready", "last_sync": "2026-09-30T10:00:00Z", "last_error": null},
+    {"name": "hiera_keys", "state": "error", "last_sync": "2026-09-30T09:00:00Z", "last_error": "connection lost"}
+  ]
+}
+```

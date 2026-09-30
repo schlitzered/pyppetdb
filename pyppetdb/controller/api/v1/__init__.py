@@ -41,6 +41,7 @@ from pyppetdb.controller.api.v1.nodes_reports import ControllerApiV1NodesReports
 from pyppetdb.controller.api.v1.nodes_secrets_redactor import (
     ControllerApiV1NodesSecretsRedactor,
 )
+from pyppetdb.controller.api.v1.status import ControllerApiV1Status
 from pyppetdb.controller.api.v1.teams import ControllerApiV1Teams
 from pyppetdb.controller.api.v1.users import ControllerApiV1Users
 from pyppetdb.controller.api.v1.users_credentials import ControllerApiV1UsersCredentials
@@ -134,6 +135,7 @@ class ControllerApiV1:
         redactor: NodesSecretsRedactor,
         pyhiera,
         ws_hub,
+        watcher_coordinator,
     ):
         self._router = APIRouter()
         self._log = log
@@ -401,6 +403,16 @@ class ControllerApiV1:
                 log=log,
                 authorize=authorize,
                 crud_pyppetdb_nodes=crud_pyppetdb_nodes,
+            ).router,
+            responses={404: {"description": "Not found"}},
+        )
+
+        self.router.include_router(
+            router=ControllerApiV1Status(
+                log=log,
+                config=config,
+                authorize=authorize,
+                watcher_coordinator=watcher_coordinator,
             ).router,
             responses={404: {"description": "Not found"}},
         )
