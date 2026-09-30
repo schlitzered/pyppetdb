@@ -52,6 +52,7 @@ class _ServiceTestBase(unittest.IsolatedAsyncioTestCase):
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
+        self.crud_certificates.delete_request.return_value = None
         self.crud_pyppetdb_nodes = MagicMock()
         self.crud_secrets = AsyncMock()
         self.crud_secrets.get_values = AsyncMock(return_value={})

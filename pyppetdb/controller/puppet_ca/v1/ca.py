@@ -281,8 +281,6 @@ class ControllerPuppetCaV1CA:
                 self._ca_service.clean_certificate("puppet-ca", nodename)
             )
             return Response(status_code=204)
-        except ResourceNotFound:
-            raise HTTPException(status_code=404, detail="Certificate not found")
         except asyncio.CancelledError:
             raise
         except Exception as e:

@@ -65,12 +65,16 @@ they expire. The Puppet CA endpoints only see the active certificate of a node �
 request or its signed certificate, of which there is at most one — so a revoked certificate
 looks deleted to them: `certificate_status` answers 404.
 
+A certificate request is not a certificate: revoking a pending request — through the Puppet CA
+endpoints or the management API — deletes it instead of keeping a revoked document, which
+would carry no expiry date and stay forever. The management API still answers with the request
+as it was, marked `revoked`.
+
 `puppetserver ca clean` sends a `PUT` with `desired_state: revoked` followed by the `DELETE`
 above. The `DELETE` revokes the signed certificate if it is still active and deletes the node's
-requests (pending or revoked; they carry no expiry date and would otherwise stay forever),
-after which the node can submit a new request. It answers 204 as long as anything is known
-about the node — also when the preceding `PUT` already revoked the certificate — and 404 only
-for a node the CA has never seen or whose revoked certificates have all expired.
+requests, after which the node can submit a new request. Because the preceding `PUT` may
+already have revoked the certificate or deleted the request, the `DELETE` always answers 204,
+also for a node the CA does not know.
 
 ## CA management API
 

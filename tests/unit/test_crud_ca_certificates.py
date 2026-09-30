@@ -75,6 +75,23 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
             query, {"space_id": "puppet-ca", "cert_uniqueness": "puppet-ca:node1"}
         )
 
+    async def test_delete_request_only_deletes_a_pending_request(self):
+        self.mock_coll.find_one_and_delete = AsyncMock(
+            return_value={"id": "req-1", "status": "requested", "cn": "node1"}
+        )
+
+        result = await self.crud.delete_request(_id="req-1")
+
+        self.mock_coll.find_one_and_delete.assert_awaited_once_with(
+            filter={"id": "req-1", "status": "requested"}, projection={"_id": 0}
+        )
+        self.assertEqual(result.cn, "node1")
+
+    async def test_delete_request_returns_none_for_anything_else(self):
+        self.mock_coll.find_one_and_delete = AsyncMock(return_value=None)
+
+        self.assertIsNone(await self.crud.delete_request(_id="serial-1"))
+
     async def test_delete_requests_only_hits_documents_without_a_serial(self):
         self.mock_coll.delete_many = AsyncMock()
 

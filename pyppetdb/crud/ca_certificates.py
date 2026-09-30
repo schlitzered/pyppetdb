@@ -20,10 +20,12 @@ from typing import Protocol
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
+import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.common import watch_collection
+from pyppetdb.errors import BackendError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.model.ca_certificates import CACertificateGet
 from pyppetdb.model.ca_certificates import CACertificateGetMulti
@@ -285,6 +287,19 @@ class CrudCACertificates(CrudMongo):
             },
             fields=fields,
         )
+        return CACertificateGet(**result)
+
+    async def delete_request(self, _id: str) -> Optional[CACertificateGet]:
+        try:
+            result = await self.coll.find_one_and_delete(
+                filter={"id": _id, "status": "requested"},
+                projection={"_id": 0},
+            )
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        if result is None:
+            return None
         return CACertificateGet(**result)
 
     async def delete_requests(self, space_id: str, cn: str) -> None:

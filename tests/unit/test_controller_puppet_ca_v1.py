@@ -410,15 +410,6 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result, Response)
         self.assertEqual(result.status_code, 204)
 
-    async def test_delete_certificate_of_an_unknown_node_returns_404(self):
-        self.mock_ca_service.clean_certificate.side_effect = ResourceNotFound()
-
-        with self.assertRaises(HTTPException) as ctx:
-            await self.controller.delete_certificate(
-                nodename="node1", request=MagicMock()
-            )
-        self.assertEqual(ctx.exception.status_code, 404)
-
     async def test_delete_certificate_failure_returns_500(self):
         self.mock_ca_service.clean_certificate.side_effect = Exception("boom")
 

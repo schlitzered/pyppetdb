@@ -436,6 +436,45 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         doc = self._db["ca_certificates"].find_one({"id": cert_b_id})
         self.assertEqual(doc["status"], "revoked")
 
+    def test_revoking_a_requested_cert_deletes_it(self):
+        ca_id = f"ca-reject-test-{uuid.uuid4().hex}"
+        space_id = f"space-reject-test-{uuid.uuid4().hex}"
+        self.client.post(
+            f"/api/v1/ca/authorities/{ca_id}",
+            headers=self._auth_headers(),
+            json={"cn": "Test Reject"},
+        )
+        self.client.post(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"ca_id": ca_id},
+        )
+        self.addCleanup(self._db["ca_certificates"].delete_many, {"space_id": space_id})
+
+        for path in ("spaces/{space}/certs/{cert}", "authorities/{ca}/certs/{cert}"):
+            cert_id = str(uuid.uuid4().int)
+            self._db["ca_certificates"].insert_one(
+                {
+                    "id": cert_id,
+                    "space_id": space_id,
+                    "ca_id": ca_id,
+                    "cn": "pending-node",
+                    "status": "requested",
+                    "cert_uniqueness": f"{space_id}:pending-node",
+                    "csr": "csr",
+                    "created": datetime.datetime.now(datetime.timezone.utc),
+                }
+            )
+            url = "/api/v1/ca/" + path.format(space=space_id, ca=ca_id, cert=cert_id)
+            resp = self.client.put(
+                url, headers=self._auth_headers(), json={"status": "revoked"}
+            )
+            self.assertEqual(resp.status_code, 200, path)
+            self.assertEqual(resp.json()["status"], "revoked", path)
+            self.assertIsNone(self._db["ca_certificates"].find_one({"id": cert_id}), path)
+            resp = self.client.get(url, headers=self._auth_headers())
+            self.assertEqual(resp.status_code, 404, path)
+
     def test_search_certs_by_cn(self):
         ca_id = f"ca-search-test-{uuid.uuid4().hex}"
         space_id = f"space-search-test-{uuid.uuid4().hex}"

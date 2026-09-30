@@ -155,7 +155,7 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
         self.assertEqual([doc["status"] for doc in docs], ["revoked"])
         self.assertIsNotNone(docs[0]["serial_number"])
 
-    def test_clean_deletes_pending_and_revoked_requests(self):
+    def test_clean_deletes_a_pending_request(self):
         nodename = f"node-{uuid.uuid4().hex}"
         query = {"space_id": "puppet-ca", "cn": nodename}
 
@@ -164,25 +164,48 @@ class PuppetCAIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(self._db["ca_certificates"].count_documents(query), 0)
 
+    def test_revoking_a_pending_request_deletes_it(self):
+        nodename = f"node-{uuid.uuid4().hex}"
+        query = {"space_id": "puppet-ca", "cn": nodename}
+        self.addCleanup(self._db["ca_certificates"].delete_many, query)
+
         self.assertEqual(self._submit(nodename).status_code, 200)
         resp = self.client.put(
             f"/puppet-ca/v1/certificate_status/{nodename}",
             json={"desired_state": "revoked"},
         )
         self.assertEqual(resp.status_code, 204)
+        self.assertEqual(self._db["ca_certificates"].count_documents(query), 0)
+
+        resp = self.client.delete(f"/puppet-ca/v1/certificate_status/{nodename}")
+        self.assertEqual(resp.status_code, 204)
+
+        self.assertEqual(self._submit(nodename).status_code, 200)
         self.assertEqual(self._db["ca_certificates"].count_documents(query), 1)
+
+    def test_clean_removes_requests_revoked_before_they_were_deleted(self):
+        nodename = f"node-{uuid.uuid4().hex}"
+        query = {"space_id": "puppet-ca", "cn": nodename}
+        self._db["ca_certificates"].insert_one(
+            {
+                "id": uuid.uuid4().hex,
+                "space_id": "puppet-ca",
+                "cn": nodename,
+                "status": "revoked",
+                "cert_uniqueness": f"revoked:{nodename}",
+            }
+        )
+        self.addCleanup(self._db["ca_certificates"].delete_many, query)
+
         resp = self.client.delete(f"/puppet-ca/v1/certificate_status/{nodename}")
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(self._db["ca_certificates"].count_documents(query), 0)
 
-        self.assertEqual(self._submit(nodename).status_code, 200)
-        self._db["ca_certificates"].delete_many(query)
-
-    def test_clean_of_an_unknown_node_is_not_found(self):
+    def test_clean_of_an_unknown_node_succeeds(self):
         resp = self.client.delete(
             f"/puppet-ca/v1/certificate_status/node-{uuid.uuid4().hex}"
         )
-        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 204)
 
     def test_revoke_after_renewal_hits_the_active_certificate(self):
         settings.ca.autoSign = True
