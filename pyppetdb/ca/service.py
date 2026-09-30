@@ -1008,6 +1008,24 @@ class CAService:
             return cert
         return await self.process_requested_certificate(_id=str(cert.id))
 
+    async def clean_certificate(self, space_id: str, cn: str) -> None:
+        known = await self._crud_certificates.count(
+            query={"space_id": space_id, "cn": cn}
+        )
+        if not known:
+            raise ResourceNotFound(
+                details=f"Certificate for {cn} in space {space_id} not found"
+            )
+        await self._crud_certificates.delete_requests(space_id=space_id, cn=cn)
+        try:
+            cert = await self._crud_certificates.get_active_by_cn(
+                space_id=space_id, cn=cn, fields=["id", "status"]
+            )
+        except ResourceNotFound:
+            return
+        if cert.status == "signed":
+            await self.revoke_certificate(_id=str(cert.id))
+
     async def update_certificate_status_by_ca(
         self, ca_id: str, cert_id: str, payload: CACertificatePut, fields: list
     ) -> CACertificateGet:

@@ -140,6 +140,54 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.service.process_requested_certificate.assert_not_called()
 
 
+class TestCAServiceClean(unittest.IsolatedAsyncioTestCase):
+    setUp = TestCAServiceStatusUpdate.setUp
+
+    async def test_unknown_node_raises_not_found(self):
+        self.crud_certificates.count.return_value = 0
+        self.service.revoke_certificate = AsyncMock()
+
+        with self.assertRaises(ResourceNotFound):
+            await self.service.clean_certificate(space_id="space1", cn="node1")
+        self.crud_certificates.delete_requests.assert_not_called()
+        self.service.revoke_certificate.assert_not_called()
+
+    async def test_signed_certificate_is_revoked_and_requests_are_dropped(self):
+        self.crud_certificates.count.return_value = 2
+        self.crud_certificates.get_active_by_cn.return_value = CACertificateGet(
+            id="123", status="signed", cn="node1", space_id="space1"
+        )
+        self.service.revoke_certificate = AsyncMock()
+
+        await self.service.clean_certificate(space_id="space1", cn="node1")
+
+        self.crud_certificates.delete_requests.assert_called_once_with(
+            space_id="space1", cn="node1"
+        )
+        self.service.revoke_certificate.assert_called_once_with(_id="123")
+
+    async def test_already_revoked_certificate_is_a_success(self):
+        self.crud_certificates.count.return_value = 1
+        self.crud_certificates.get_active_by_cn.side_effect = ResourceNotFound()
+        self.service.revoke_certificate = AsyncMock()
+
+        await self.service.clean_certificate(space_id="space1", cn="node1")
+
+        self.crud_certificates.delete_requests.assert_called_once()
+        self.service.revoke_certificate.assert_not_called()
+
+    async def test_a_request_submitted_meanwhile_is_left_alone(self):
+        self.crud_certificates.count.return_value = 1
+        self.crud_certificates.get_active_by_cn.return_value = CACertificateGet(
+            id="456", status="requested", cn="node1", space_id="space1"
+        )
+        self.service.revoke_certificate = AsyncMock()
+
+        await self.service.clean_certificate(space_id="space1", cn="node1")
+
+        self.service.revoke_certificate.assert_not_called()
+
+
 class TestCAServiceUpdateAuthority(unittest.IsolatedAsyncioTestCase):
     setUp = TestCAServiceStatusUpdate.setUp
 

@@ -75,6 +75,15 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
             query, {"space_id": "puppet-ca", "cert_uniqueness": "puppet-ca:node1"}
         )
 
+    async def test_delete_requests_only_hits_documents_without_a_serial(self):
+        self.mock_coll.delete_many = AsyncMock()
+
+        await self.crud.delete_requests(space_id="puppet-ca", cn="node1")
+
+        self.mock_coll.delete_many.assert_awaited_once_with(
+            filter={"space_id": "puppet-ca", "cn": "node1", "serial_number": None}
+        )
+
     async def test_revoke_skips_already_revoked_certs(self):
         from datetime import datetime, timezone
 

@@ -287,6 +287,11 @@ class CrudCACertificates(CrudMongo):
         )
         return CACertificateGet(**result)
 
+    async def delete_requests(self, space_id: str, cn: str) -> None:
+        await self._delete_many(
+            query={"space_id": space_id, "cn": cn, "serial_number": None}
+        )
+
     async def count(self, query: dict) -> int:
         return await self.coll.count_documents(query)
 

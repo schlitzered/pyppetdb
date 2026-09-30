@@ -278,9 +278,7 @@ class ControllerPuppetCaV1CA:
         await self.authorize_client_cert.require_cn_trusted(request)
         try:
             await asyncio.shield(
-                self._ca_service.update_certificate_status(
-                    "puppet-ca", nodename, CACertificatePut(status="revoked"), []
-                )
+                self._ca_service.clean_certificate("puppet-ca", nodename)
             )
             return Response(status_code=204)
         except ResourceNotFound:

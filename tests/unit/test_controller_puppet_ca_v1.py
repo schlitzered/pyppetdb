@@ -19,7 +19,6 @@ import logging
 from fastapi import HTTPException, Response
 from pyppetdb.controller.puppet_ca.v1.ca import ControllerPuppetCaV1CA
 from pyppetdb.errors import ResourceNotFound
-from pyppetdb.model.ca_certificates import CACertificatePut
 
 
 class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
@@ -44,6 +43,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_ca_service.sign_certificate = AsyncMock()
         self.mock_ca_service.revoke_certificate = AsyncMock()
         self.mock_ca_service.update_certificate_status = AsyncMock()
+        self.mock_ca_service.clean_certificate = AsyncMock()
 
         self.mock_auth_cert = MagicMock()
         self.mock_auth_cert.require_cn_trusted = AsyncMock()
@@ -395,7 +395,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
             await self.controller.get_crl()
         self.assertEqual(cm.exception.status_code, 500)
 
-    async def test_delete_certificate_revokes_instead_of_deleting(self):
+    async def test_delete_certificate_cleans_the_node(self):
         mock_request = MagicMock()
 
         result = await self.controller.delete_certificate(
@@ -403,14 +403,15 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         )
 
         self.mock_auth_cert.require_cn_trusted.assert_called_once_with(mock_request)
-        self.mock_ca_service.update_certificate_status.assert_called_once_with(
-            "puppet-ca", "node1", CACertificatePut(status="revoked"), []
+        self.mock_ca_service.clean_certificate.assert_called_once_with(
+            "puppet-ca", "node1"
         )
+        self.mock_ca_service.update_certificate_status.assert_not_called()
         self.assertIsInstance(result, Response)
         self.assertEqual(result.status_code, 204)
 
-    async def test_delete_certificate_without_active_cert_returns_404(self):
-        self.mock_ca_service.update_certificate_status.side_effect = ResourceNotFound()
+    async def test_delete_certificate_of_an_unknown_node_returns_404(self):
+        self.mock_ca_service.clean_certificate.side_effect = ResourceNotFound()
 
         with self.assertRaises(HTTPException) as ctx:
             await self.controller.delete_certificate(
@@ -419,7 +420,7 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
     async def test_delete_certificate_failure_returns_500(self):
-        self.mock_ca_service.update_certificate_status.side_effect = Exception("boom")
+        self.mock_ca_service.clean_certificate.side_effect = Exception("boom")
 
         with self.assertRaises(HTTPException) as ctx:
             await self.controller.delete_certificate(
