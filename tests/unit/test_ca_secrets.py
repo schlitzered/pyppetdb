@@ -14,7 +14,7 @@
 
 import unittest
 
-from pyppetdb.ca import secret_resolver as sr
+from pyppetdb.ca import secrets as sr
 from pyppetdb.errors import MissingSecretReference
 from pyppetdb.model.ca_validation import (
     CAValidationConfig,

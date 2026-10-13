@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from pydantic import Field
 from pyppetdb.model.common import MetaMulti
 from pyppetdb.model.ca_validation import CAValidationConfig
+from pyppetdb.model.ca_secret_refs import CASecretRefs
 
 filter_literal = Literal[
     "id",
@@ -27,6 +28,7 @@ filter_literal = Literal[
     "ca_id_history",
     "description",
     "validation_config",
+    "secret_refs",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -43,12 +45,17 @@ class CASpacePost(BaseModel):
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
+class CASpacePostInternal(CASecretRefs, CASpacePost):
+    pass
+
+
 class CASpaceGet(BaseModel):
     id: Optional[str] = None
     ca_id: Optional[str] = None
     ca_id_history: Optional[List[str]] = None
     description: Optional[str] = None
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
+    secret_refs: List[str] = []
 
 
 class CASpaceGetMulti(BaseModel):
@@ -62,5 +69,5 @@ class CASpacePut(BaseModel):
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
-class CASpacePutInternal(CASpacePut):
+class CASpacePutInternal(CASecretRefs, CASpacePut):
     ca_id_history: Optional[List[str]] = None

@@ -41,12 +41,6 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
             config=self.mock_config, log=self.log, coll=self.mock_coll
         )
 
-    async def test_count(self):
-        self.mock_coll.count_documents = AsyncMock(return_value=10)
-        res = await self.crud.count({"status": "signed"})
-        self.assertEqual(res, 10)
-        self.mock_coll.count_documents.assert_called_once_with({"status": "signed"})
-
     def test_add_revocation_listener_is_wired_to_watcher(self):
         listener = _RecordingListener()
         self.crud.add_revocation_listener(listener)
@@ -134,16 +128,16 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
                 _id="serial-1", revocation_date=datetime.now(timezone.utc), fields=[]
             )
 
-    async def test_get_internal_object_id_returns_stringified_id(self):
+    async def test_get_registration_returns_stringified_id_and_ca(self):
         oid = MagicMock()
         oid.__str__ = lambda self: "64f0c0ffee"
-        self.mock_coll.find_one = AsyncMock(return_value={"_id": oid})
+        self.mock_coll.find_one = AsyncMock(return_value={"_id": oid, "ca_id": "ca1"})
 
-        result = await self.crud.get_internal_object_id(
+        result = await self.crud.get_registration(
             serial="123", cn="node1.example.com", space_id="puppet-ca"
         )
 
-        self.assertEqual(result, "64f0c0ffee")
+        self.assertEqual(result, ("64f0c0ffee", "ca1"))
         self.mock_coll.find_one.assert_called_once_with(
             {
                 "id": "123",
@@ -151,23 +145,60 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
                 "space_id": "puppet-ca",
                 "status": "signed",
             },
-            {"_id": 1},
+            {"_id": 1, "ca_id": 1},
         )
 
-    async def test_get_internal_object_id_scopes_to_space(self):
+    async def test_get_registration_scopes_to_space(self):
         self.mock_coll.find_one = AsyncMock(return_value=None)
 
         with self.assertRaises(ResourceNotFound):
-            await self.crud.get_internal_object_id(
+            await self.crud.get_registration(
                 serial="123", cn="node1.example.com", space_id="other-space"
             )
 
         query, _ = self.mock_coll.find_one.call_args[0]
         self.assertEqual(query["space_id"], "other-space")
 
-    async def test_get_internal_object_id_missing_raises_not_found(self):
+    async def test_get_registration_missing_raises_not_found(self):
         self.mock_coll.find_one = AsyncMock(return_value=None)
         with self.assertRaises(ResourceNotFound):
-            await self.crud.get_internal_object_id(
+            await self.crud.get_registration(
                 serial="404", cn="ghost", space_id="puppet-ca"
             )
+
+    def test_request_expiry_ttl_index_is_declared(self):
+        indexes = {index.document["name"]: index.document for index in self.crud._indices}
+        ttl = indexes["ttl_request_expires"]
+        self.assertEqual(dict(ttl["key"]), {"request_expires": 1})
+        self.assertEqual(ttl["expireAfterSeconds"], 0)
+
+    async def test_migrate_2_gives_pending_requests_an_expiry(self):
+        self.crud._config.ca.certificateRequestTtlDays = 2
+        self.mock_coll.update_many = AsyncMock(return_value=MagicMock(modified_count=3))
+
+        await self.crud.migrate_2()
+
+        query, pipeline = self.mock_coll.update_many.call_args.args
+        self.assertEqual(
+            query, {"status": "requested", "request_expires": {"$exists": False}}
+        )
+        self.assertEqual(
+            pipeline[0]["$set"]["request_expires"],
+            {"$add": [{"$ifNull": ["$created", "$$NOW"]}, 2 * 86400 * 1000]},
+        )
+
+    async def test_update_can_unset_fields(self):
+        from pyppetdb.model.ca_certificates import CACertificatePutInternal
+
+        self.mock_coll.find_one_and_update = AsyncMock(return_value={"id": "1"})
+
+        await self.crud.update(
+            _id="req",
+            payload=CACertificatePutInternal(status="signed"),
+            fields=[],
+            unset=["request_expires"],
+        )
+
+        update = self.mock_coll.find_one_and_update.call_args.kwargs["update"]
+        self.assertEqual(update["$unset"], {"request_expires": ""})
+        self.assertEqual(update["$set"]["status"], "signed")

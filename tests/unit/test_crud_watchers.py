@@ -210,12 +210,14 @@ class TestCAAuthoritiesCacheResync(_WatcherTestCase):
         )
         self.coll.watch.side_effect = _streams_with_reconnect()
         await cache._load_initial_data()
-        self.assertEqual(set(cache.key_cache), {"ca1", "ca2"})
+        self.assertEqual(
+            {k: e.private_key for k, e in cache.cache.items()},
+            {"ca1": b"PEM", "ca2": b"PEM"},
+        )
 
         await self.run_watcher(cache)
 
         self.assertEqual(list(cache.cache), ["ca2"])
-        self.assertEqual(list(cache.key_cache), ["ca2"])
         self.assertEqual(cache._doc_to_id, {"o2": "ca2"})
 
 

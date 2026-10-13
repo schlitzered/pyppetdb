@@ -251,6 +251,7 @@ class CrudMongo(
         # Add future migrations to this list
         migrations = [
             self.migrate_1,
+            self.migrate_2,
         ]
         for migration in migrations:
             await self._run_migration_transactional(migration)
@@ -307,6 +308,11 @@ class CrudMongo(
             self.log.info(
                 f"Migrated {modified_total} {self.resource_type} objects to version 1"
             )
+
+    async def migrate_2(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        return None
 
     async def _create_ttl_index(
         self, field: str, ttl_seconds: int, index_name: str
@@ -451,6 +457,7 @@ class CrudMongo(
         fields: list,
         upsert=False,
         set_on_insert: Optional[dict] = None,
+        unset: Optional[list] = None,
     ) -> dict:
         update = {"$set": {}}
         for k, v in payload.items():
@@ -459,6 +466,8 @@ class CrudMongo(
             update["$set"][k] = v
         if set_on_insert:
             update["$setOnInsert"] = set_on_insert
+        if unset:
+            update["$unset"] = {field: "" for field in unset}
         try:
             result = await self._coll.find_one_and_update(
                 filter=query,

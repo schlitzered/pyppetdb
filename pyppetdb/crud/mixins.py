@@ -13,8 +13,10 @@
 # limitations under the License.
 
 from typing import Optional
+from typing import TypeVar
 
 import pymongo
+from pydantic import BaseModel
 
 from pyppetdb.errors import QueryParamValidationError
 
@@ -148,7 +150,15 @@ class PaginationSkipMixIn:
         return page * limit
 
 
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
 class ProjectionMixIn:
+    @staticmethod
+    def _project_model(model: ModelT, fields: list | None) -> ModelT:
+        include = {field.split(".", 1)[0] for field in fields} if fields else None
+        return type(model).model_validate(model.model_dump(include=include))
+
     @staticmethod
     def _projection(fields: list | None):
         if not fields:

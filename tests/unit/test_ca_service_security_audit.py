@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -20,6 +21,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
+from pyppetdb.ca.signer import CASigners
+from pyppetdb.ca.validation import CSRValidator
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
 from pyppetdb.model.ca_validation import (
@@ -49,6 +52,7 @@ class _ServiceTestBase(unittest.IsolatedAsyncioTestCase):
         self.log = MagicMock()
         self.config = MagicMock()
         self.config.ca.concurrentWorkers = 2
+        self.config.ca.certificateRequestTtlDays = 30
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
         self.crud_certificates = AsyncMock()
@@ -56,14 +60,20 @@ class _ServiceTestBase(unittest.IsolatedAsyncioTestCase):
         self.crud_pyppetdb_nodes = MagicMock()
         self.crud_secrets = AsyncMock()
         self.crud_secrets.get_values = AsyncMock(return_value={})
+        executor = ThreadPoolExecutor(max_workers=1)
         self.service = CAService(
             log=self.log,
             config=self.config,
             crud_authorities=self.crud_authorities,
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
-            crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
-            crud_secrets=self.crud_secrets,
+            signers=CASigners(
+                crud_authorities=self.crud_authorities, executor=executor
+            ),
+            validator=CSRValidator(
+                log=self.log, crud_secrets=self.crud_secrets
+            ),
+            executor=executor,
         )
 
 
@@ -171,7 +181,7 @@ class TestSanRfc1123Validation(_ServiceTestBase):
             san_validation=CASANValidation(max_san_count=10),
         )
         with self.assertRaises(QueryParamValidationError) as cm:
-            await self.service._validate_csr(
+            await self.service.validator.validate(
                 csr=csr,
                 cn="node.example.com",
                 ca_config=ca_config,
@@ -188,7 +198,7 @@ class TestSanRfc1123Validation(_ServiceTestBase):
             san_validation=CASANValidation(max_san_count=10),
         )
         with self.assertRaises(QueryParamValidationError):
-            await self.service._validate_csr(
+            await self.service.validator.validate(
                 csr=csr,
                 cn="node.example.com",
                 ca_config=ca_config,
@@ -203,7 +213,7 @@ class TestSanRfc1123Validation(_ServiceTestBase):
             enforce_rfc1123=True,
             san_validation=CASANValidation(max_san_count=10),
         )
-        await self.service._validate_csr(
+        await self.service.validator.validate(
             csr=csr,
             cn="node.example.com",
             ca_config=ca_config,
@@ -214,7 +224,7 @@ class TestSanRfc1123Validation(_ServiceTestBase):
 
     async def test_malformed_san_ignored_when_not_honored(self):
         csr = _generate_csr("node.example.com", san=["bad_underscore.example.com"])
-        await self.service._validate_csr(
+        await self.service.validator.validate(
             csr=csr,
             cn="node.example.com",
             ca_config=CAValidationConfig(enforce_rfc1123=True),
@@ -229,7 +239,7 @@ class TestSanRfc1123Validation(_ServiceTestBase):
             enforce_rfc1123=False,
             san_validation=CASANValidation(max_san_count=10),
         )
-        await self.service._validate_csr(
+        await self.service.validator.validate(
             csr=csr,
             cn="node.example.com",
             ca_config=ca_config,
@@ -245,7 +255,7 @@ class TestHttpValidationInjection(_ServiceTestBase):
         mock_request.return_value = MagicMock(is_error=False, status_code=200)
         config = CAHTTPValidation(url="http://validate.me/check/{cert_cn}")
 
-        await self.service._execute_http_validation(
+        await self.service.validator.run_http_check(
             cn="evil/../../admin?x=1",
             sans=[],
             config=config,
@@ -268,7 +278,7 @@ class TestHttpValidationInjection(_ServiceTestBase):
             body_template='{"host": "{{cn}}", "trusted": false}',
         )
 
-        await self.service._execute_http_validation(
+        await self.service.validator.run_http_check(
             cn='x", "trusted": true, "y": "',
             sans=[],
             config=config,
@@ -286,7 +296,7 @@ class TestHttpValidationInjection(_ServiceTestBase):
         mock_request.return_value = MagicMock(is_error=False, status_code=200)
         config = CAHTTPValidation(url="http://validate.me/{ca_id}/{space_id}/{cert_cn}")
 
-        await self.service._execute_http_validation(
+        await self.service.validator.run_http_check(
             cn="node1.example.com",
             sans=[],
             config=config,

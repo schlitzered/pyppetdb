@@ -30,11 +30,9 @@ from contextlib import asynccontextmanager
 import logging
 import secrets
 import socket
-import ssl
 import string
 import sys
 from pathlib import Path
-import datetime
 
 from authlib.integrations.starlette_client import OAuth
 import bonsai.asyncio
@@ -49,8 +47,7 @@ from structlog.stdlib import ProcessorFormatter
 
 import pyppetdb.controller
 import pyppetdb.controller.oauth
-import pyppetdb.ca.utils
-from pyppetdb.ca.protocol import ClientCertProtocol, ClientCertWebSocketsProtocol
+from pyppetdb.server.settings import uvicorn_settings
 
 from pyppetdb.config import Config
 from pyppetdb.config import ConfigLdap as SettingsLdap
@@ -59,11 +56,12 @@ from pyppetdb.crud.oauth import CrudOAuthGitHub
 from pyppetdb.container import AppContainer
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import DuplicateResource
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.users import UserPost
 from pyppetdb.model.ca_spaces import CASpacePost
 from pyppetdb.model.ca_spaces import CASpacePutInternal
 from pyppetdb.crud.pyppetdb_nodes import CrudPyppetDBNodes
-from pyppetdb.ca.utils import CAUtils
+from pyppetdb.ca import crypto
 from pyppetdb.middleware import ProcessTimeMiddleware
 
 version = "0.0.0"
@@ -184,7 +182,7 @@ async def lifespan(app: FastAPI):
     )
     if settings.ca.enableCrlRefresh:
         refresh_task = asyncio.create_task(
-            coro=container.ca_service.crl_refresh_worker(),
+            coro=container.ca_crl.worker(),
             name="ca-crl-refresh",
         )
 
@@ -372,7 +370,7 @@ async def cli_init_ca(
     container = await prepare_env()
     log = container.log
 
-    csr_pem, key_pem = CAUtils.generate_csr(
+    csr_pem, key_pem = crypto.generate_csr(
         cn=cn,
         alt_names=alt_names,
     )
@@ -419,6 +417,47 @@ async def cli_init_ca(
     )
 
 
+async def cli_import_signed_certificates(
+    container: AppContainer,
+    log: logging.Logger,
+    signed_dir: Path,
+    crl_path: Path,
+    ca_cert_pem: bytes,
+) -> dict[str, int]:
+    revoked: set[int] = set()
+    if crl_path.exists():
+        revoked = crypto.revoked_serials_from_crls(crl_path.read_bytes(), ca_cert_pem)
+        log.info(msg=f"{len(revoked)} serials are revoked in {crl_path}")
+    counts = {"imported": 0, "skipped": 0, "failed": 0}
+    for cert_file in sorted(signed_dir.glob("*.pem")):
+        try:
+            cert_pem = cert_file.read_bytes()
+            serial = crypto.get_cert_info(cert_pem=cert_pem)["serial_number"]
+            if int(serial) in revoked:
+                log.warning(
+                    msg=f"Skipping {cert_file.name}: serial {serial} is revoked in the Puppet CA CRL"
+                )
+                counts["skipped"] += 1
+                continue
+            cert = await container.ca_service.import_certificate(
+                space_id="puppet-ca", certificate_pem=cert_pem, fields=["id", "cn"]
+            )
+            log.info(msg=f"Imported certificate {cert.cn} (Serial: {cert.id})")
+            counts["imported"] += 1
+        except DuplicateResource:
+            log.warning(
+                msg=f"Skipping {cert_file.name}: the serial or an active certificate for its CN already exists"
+            )
+            counts["skipped"] += 1
+        except QueryParamValidationError as err:
+            log.warning(msg=f"Skipping {cert_file.name}: {err.detail}")
+            counts["skipped"] += 1
+        except Exception as err:
+            log.error(msg=f"Failed to import certificate {cert_file.name}: {err}")
+            counts["failed"] += 1
+    return counts
+
+
 async def cli_import_puppet_ca(
     ca_dir: str,
     ca_id: str = "puppet-ca",
@@ -460,39 +499,17 @@ async def cli_import_puppet_ca(
         pass
 
     log.info(msg=f"Importing CA Authority '{ca_id}' from {ca_dir}")
-
-    ca_info = CAUtils.get_cert_info(cert_pem=ca_cert_pem)
-    encrypted_key = container.nodes_data_protector.encrypt_string(
-        cleartext=ca_key_pem.decode(),
-    )
-
-    crl_pem, next_update = CAUtils.generate_crl(
-        ca_cert=ca_cert_pem,
-        ca_key=ca_key_pem,
-        revoked_certs=[],
-        validity_days=settings.ca.crlValidityDays,
-    )
-    now = datetime.datetime.now(tz=datetime.timezone.utc)
-
-    ca_authority_data = {
-        "id": ca_id,
-        "parent_id": None,
-        "certificate": ca_cert_pem.decode(),
-        "private_key_encrypted": encrypted_key,
-        "internal": True,
-        "chain": [],
-        "status": "active",
-        "crl": {
-            "crl_pem": crl_pem.decode(),
-            "generation": 1,
-            "updated_at": now,
-            "next_update": next_update,
-            "locked_at": None,
-        },
-        **ca_info,
-    }
-
-    await container.crud_ca_authorities.coll.insert_one(document=ca_authority_data)
+    try:
+        await container.ca_service.import_authority(
+            _id=ca_id,
+            certificate_pem=ca_cert_pem,
+            private_key_pem=ca_key_pem,
+            internal=True,
+            fields=[],
+        )
+    except QueryParamValidationError as err:
+        log.fatal(msg=f"Cannot import CA Authority '{ca_id}': {err.detail}")
+        sys.exit(1)
     log.info(msg=f"CA Authority '{ca_id}' imported successfully.")
 
     try:
@@ -520,51 +537,29 @@ async def cli_import_puppet_ca(
 
     log.info(msg="CA Space 'puppet-ca' updated successfully.")
 
-    if not skip_certs:
-        signed_certs_dir = ca_dir / "signed"
-        if signed_certs_dir.exists() and signed_certs_dir.is_dir():
-            log.info(msg=f"Importing signed certificates from {signed_certs_dir}")
-            for cert_file in signed_certs_dir.glob("*.pem"):
-                try:
-                    cert_pem = cert_file.read_bytes()
-                    cert_info = CAUtils.get_cert_info(cert_pem=cert_pem)
-                    cn = cert_info["cn"]
-                    serial_number = cert_info["serial_number"]
-
-                    try:
-                        await container.crud_ca_certificates.get(
-                            _id=serial_number,
-                            fields=["id"],
-                        )
-                        log.warning(
-                            msg=f"Certificate with serial {serial_number} (CN: {cn}) already exists. Skipping."
-                        )
-                        continue
-                    except ResourceNotFound:
-                        pass
-
-                    cert_data = {
-                        "id": serial_number,
-                        "space_id": "puppet-ca",
-                        "ca_id": ca_id,
-                        "cn": cn,
-                        "status": "signed",
-                        "certificate": cert_pem.decode(),
-                        "created": cert_info["not_before"],
-                        **cert_info,
-                    }
-                    await container.crud_ca_certificates.coll.insert_one(
-                        document=cert_data
-                    )
-                    log.info(msg=f"Imported certificate {cn} (Serial: {serial_number})")
-                except Exception as e:
-                    log.error(msg=f"Failed to import certificate {cert_file.name}: {e}")
-        else:
-            log.info(
-                msg=f"No 'signed' directory found at {signed_certs_dir}. Skipping signed certificate import."
-            )
-    else:
+    if skip_certs:
         log.info(msg="Skipping signed certificate import as requested.")
+    elif not (ca_dir / "signed").is_dir():
+        log.info(
+            msg=f"No 'signed' directory found at {ca_dir / 'signed'}. Skipping signed certificate import."
+        )
+    else:
+        counts = await cli_import_signed_certificates(
+            container=container,
+            log=log,
+            signed_dir=ca_dir / "signed",
+            crl_path=ca_dir / "ca_crl.pem",
+            ca_cert_pem=ca_cert_pem,
+        )
+        log.info(
+            msg=(
+                f"Signed certificates: {counts['imported']} imported, "
+                f"{counts['skipped']} skipped, {counts['failed']} failed"
+            )
+        )
+        if counts["failed"]:
+            log.fatal(msg="Puppet CA import finished with errors.")
+            sys.exit(1)
 
     log.info(msg="Puppet CA import complete.")
 
@@ -600,31 +595,7 @@ async def pyppetdb_nodes_heartbeat_worker(
 
 
 async def main_run(reload: bool = False):
-    _settings = settings.app.main
-
-    ssl_cert = None
-    ssl_key = None
-    ssl_ca = None
-    ssl_enabled = False
-
-    if _settings.ssl:
-        ssl_enabled = True
-        ssl_cert = _settings.ssl.cert
-        ssl_key = _settings.ssl.key
-        ssl_ca = _settings.ssl.ca
-
-    kwargs = dict(
-        host=_settings.host,
-        port=_settings.port,
-        log_config=None,
-        ssl_ca_certs=ssl_ca,
-        ssl_certfile=ssl_cert,
-        ssl_keyfile=ssl_key,
-        ssl_cert_reqs=ssl.CERT_OPTIONAL if ssl_enabled else ssl.CERT_NONE,
-        http=ClientCertProtocol if ssl_enabled else "auto",
-        ws=ClientCertWebSocketsProtocol if ssl_enabled else "auto",
-        loop="uvloop",
-    )
+    kwargs = uvicorn_settings(settings.app.main)
 
     if reload:
         uvicorn.run(

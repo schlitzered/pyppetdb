@@ -115,6 +115,74 @@ class ApiV1CASecretsIntegrationTests(IntegrationTestBase):
         )
         self.assertEqual(resp.status_code, 200)
 
+    def test_space_reference_lifecycle_and_search_filter(self):
+        secret_id = f"SEC_{uuid.uuid4().hex}"
+        space_id = f"space-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/ca/secrets/{secret_id}",
+            headers=self._auth_headers(),
+            json={"secret": "topsecret"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        resp = self.client.post(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={
+                "ca_id": "puppet-ca",
+                "validation_config": self._http_check_config(secret_id),
+            },
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(
+            self._db["ca_spaces"].find_one({"id": space_id})["secret_refs"],
+            [secret_id],
+        )
+        index_names = {i["name"] for i in self._db["ca_spaces"].list_indexes()}
+        self.assertIn("idx_secret_refs", index_names)
+
+        resp = self.client.get(
+            "/api/v1/ca/spaces",
+            headers=self._auth_headers(),
+            params={"secret_ref": secret_id},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([s["id"] for s in resp.json()["result"]], [space_id])
+
+        resp = self.client.put(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"description": "only the description"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            self._db["ca_spaces"].find_one({"id": space_id})["secret_refs"],
+            [secret_id],
+        )
+
+        resp = self.client.delete(
+            f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn(f"ca_space:{space_id}", resp.json()["detail"])
+
+        resp = self.client.put(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"validation_config": {}},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            self._db["ca_spaces"].find_one({"id": space_id})["secret_refs"], []
+        )
+
+        resp = self.client.delete(
+            f"/api/v1/ca/secrets/{secret_id}", headers=self._auth_headers()
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.client.delete(
+            f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers()
+        )
+
     def test_unknown_reference_rejected_on_save(self):
         ca_id = f"ca-{uuid.uuid4().hex}"
         resp = self.client.post(

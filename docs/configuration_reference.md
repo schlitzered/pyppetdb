@@ -121,6 +121,7 @@ pyppetdb's own database as well. The switch only decides who answers *queries*.
 | `ca_autoSign` | `false` | Automatically sign incoming certificate requests. |
 | `ca_autoSignNodeIfExists` | `false` | Auto-sign only if the node already exists in the database. |
 | `ca_certificateValidityDays` | `365` | Validity period (days) for issued certificates. |
+| `ca_certificateRequestTtlDays` | `30` | Pending certificate requests are deleted this many days after their last submission. |
 | `ca_concurrentWorkers` | `5` | Number of concurrent workers for CA signing operations. |
 | `ca_enableCrlRefresh` | `true` | Run the background CRL refresh worker. |
 | `ca_crlRefreshInterval` | `3600` | Interval (seconds) between CRL refresh runs. |

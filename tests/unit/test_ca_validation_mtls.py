@@ -17,18 +17,18 @@ import ssl
 import tempfile
 import unittest
 
-from pyppetdb.ca.service import CAService
-from pyppetdb.ca.utils import CAUtils
+from pyppetdb.ca.validation import CSRValidator
+from pyppetdb.ca import crypto
 from pyppetdb.model.ca_validation import CAHTTPValidation
 
 
 class TestBuildTlsVerify(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cert, key = CAUtils.generate_ca(cn="client")
+        cert, key = crypto.generate_ca(cn="client")
         cls.client_cert = cert.decode()
         cls.client_key = key.decode()
-        cacert, _ = CAUtils.generate_ca(cn="server-ca")
+        cacert, _ = crypto.generate_ca(cn="server-ca")
         cls.ca_cert = cacert.decode()
 
     def _check(self, **kwargs):
@@ -40,7 +40,7 @@ class TestBuildTlsVerify(unittest.TestCase):
         self.assertIs(self._build(verify_ssl=False), False)
 
     def _build(self, **kwargs):
-        return CAService._build_tls_verify(self._check(**kwargs))
+        return CSRValidator.build_tls_verify(self._check(**kwargs))
 
     def test_ca_cert_builds_context(self):
         verify = self._build(ca_cert=self.ca_cert)

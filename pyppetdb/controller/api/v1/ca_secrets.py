@@ -157,11 +157,13 @@ class ControllerApiV1CASecrets:
         )
         await self._crud_secrets.resource_exists(_id=secret_id)
 
-        authorities = await self._crud_authorities.find_referencing_ids(secret_id)
-        spaces = await self._crud_spaces.find_referencing_ids(secret_id)
-        if authorities or spaces:
-            locations = [f"ca_authority:{a}" for a in authorities] + [
-                f"ca_space:{s}" for s in spaces
+        authorities = await self._crud_authorities.search(
+            secret_ref=secret_id, fields=["id"]
+        )
+        spaces = await self._crud_spaces.search(secret_ref=secret_id, fields=["id"])
+        if authorities.result or spaces.result:
+            locations = [f"ca_authority:{a.id}" for a in authorities.result] + [
+                f"ca_space:{s.id}" for s in spaces.result
             ]
             raise ResourceInUse(
                 msg=(

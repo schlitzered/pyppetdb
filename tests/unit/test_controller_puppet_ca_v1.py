@@ -60,10 +60,10 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_submit_certificate_request_autosign_node_if_exists_success(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
         from pyppetdb.model.ca_certificates import CACertificateGet
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
@@ -83,9 +83,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_crud_nodes.resource_exists.assert_called_once_with(_id="node1")
 
     async def test_submit_certificate_request_autosign_node_if_exists_no_node(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
@@ -126,10 +126,10 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_submit_certificate_request(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
         from pyppetdb.model.ca_certificates import CACertificateGet
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
@@ -157,9 +157,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
 
     async def test_submit_certificate_request_mismatch(self):
         from pyppetdb.errors import QueryParamValidationError
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
 
-        csr_pem, _ = CAUtils.generate_csr("attacker")
+        csr_pem, _ = crypto.generate_csr("attacker")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = False
@@ -268,10 +268,10 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.status_code, 404)
 
     async def test_submit_certificate_request_autosign_success(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
         from pyppetdb.model.ca_certificates import CACertificateGet
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
@@ -288,9 +288,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_submit_certificate_request_autosign_error(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
@@ -309,9 +309,9 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_ca_service.sign_certificate.assert_called_once()
 
     async def test_submit_certificate_request_cancelled_keeps_request(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
 
-        csr_pem, _ = CAUtils.generate_csr("node1")
+        csr_pem, _ = crypto.generate_csr("node1")
         mock_request = MagicMock()
         mock_request.body = AsyncMock(return_value=csr_pem)
         self.mock_config.ca.autoSign = True
@@ -418,3 +418,42 @@ class TestControllerPuppetCaV1CAUnit(unittest.IsolatedAsyncioTestCase):
                 nodename="node1", request=MagicMock()
             )
         self.assertEqual(ctx.exception.status_code, 500)
+
+    async def test_certificate_status_reports_revoked_issuer_chain(self):
+        from pyppetdb.model.ca_certificates import CACertificateGet
+
+        self.mock_crud_certificates.get_active_by_cn.return_value = CACertificateGet(
+            id="1", ca_id="sub", cn="node1", status="signed"
+        )
+        self.mock_ca_service.authority_chain_revoked = AsyncMock(return_value=True)
+
+        result = await self.controller.get_certificate_status("node1", MagicMock())
+
+        self.assertEqual(result["state"], "revoked")
+        self.mock_ca_service.authority_chain_revoked.assert_awaited_once_with("sub")
+
+    async def test_certificate_status_stays_signed_with_active_chain(self):
+        from pyppetdb.model.ca_certificates import CACertificateGet
+
+        self.mock_crud_certificates.get_active_by_cn.return_value = CACertificateGet(
+            id="1", ca_id="sub", cn="node1", status="signed"
+        )
+        self.mock_ca_service.authority_chain_revoked = AsyncMock(return_value=False)
+
+        result = await self.controller.get_certificate_status("node1", MagicMock())
+
+        self.assertEqual(result["state"], "signed")
+
+    async def test_renewal_validation_error_is_a_client_error(self):
+        from pyppetdb.errors import QueryParamValidationError
+
+        self.mock_auth_cert.get_cert_info = AsyncMock(return_value={"cn": "node1"})
+        self.mock_ca_service.renew_certificate = AsyncMock(
+            side_effect=QueryParamValidationError(msg="CA Authority 'x' is revoked")
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            await self.controller.certificate_renewal(MagicMock())
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("revoked", ctx.exception.detail)

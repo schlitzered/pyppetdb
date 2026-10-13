@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import socket
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -49,7 +50,10 @@ from pyppetdb.crud.ca_authorities import CrudCAAuthorities
 from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 from pyppetdb.crud.ca_certificates import CrudCACertificates
+from pyppetdb.ca.crl import CACrl
 from pyppetdb.ca.service import CAService
+from pyppetdb.ca.signer import CASigners
+from pyppetdb.ca.validation import CSRValidator
 from pyppetdb.jobs.service import JobService
 from pyppetdb.authorize import AuthorizeClientCert
 from pyppetdb.ws.hub import WsHub
@@ -288,7 +292,6 @@ class AppContainer:
                 log=log,
                 coll=mongo_db["ca_authorities"],
                 protector=self.nodes_data_protector,
-                crud_secrets=self.crud_ca_secrets,
             )
         )
 
@@ -298,7 +301,6 @@ class AppContainer:
                 log=log,
                 coll=mongo_db["ca_spaces"],
                 protector=self.nodes_data_protector,
-                crud_secrets=self.crud_ca_secrets,
             )
         )
 
@@ -310,14 +312,29 @@ class AppContainer:
             )
         )
 
+        self.ca_executor = ThreadPoolExecutor(max_workers=config.ca.concurrentWorkers)
+        self.ca_signers = CASigners(
+            crud_authorities=self.crud_ca_authorities,
+            executor=self.ca_executor,
+        )
         self.ca_service = CAService(
             log=log,
             config=config,
             crud_authorities=self.crud_ca_authorities,
             crud_spaces=self.crud_ca_spaces,
             crud_certificates=self.crud_ca_certificates,
+            signers=self.ca_signers,
+            validator=CSRValidator(log=log, crud_secrets=self.crud_ca_secrets),
+            executor=self.ca_executor,
+        )
+        self.ca_crl = CACrl(
+            log=log,
+            config=config,
+            crud_authorities=self.crud_ca_authorities,
+            crud_certificates=self.crud_ca_certificates,
             crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
-            crud_secrets=self.crud_ca_secrets,
+            signers=self.ca_signers,
+            executor=self.ca_executor,
         )
 
         self.authorize_client_cert_puppet = AuthorizeClientCert(
@@ -325,6 +342,7 @@ class AppContainer:
             config=config,
             trusted_cns=config.app.puppet.trustedCns,
             crud_ca_certificates=self.crud_ca_certificates,
+            ca_service=self.ca_service,
         )
 
         self.ingest_queue = IngestQueue(
@@ -398,6 +416,7 @@ class AppContainer:
             config=config,
             trusted_cns=config.app.puppetdb.trustedCns,
             crud_ca_certificates=self.crud_ca_certificates,
+            ca_service=self.ca_service,
         )
 
         self.ca_service.add_revocation_listener(
@@ -432,6 +451,16 @@ class AppContainer:
             reaction=self.crud_hiera_keys.watcher.resync,
             name="reload hiera keys after key model changes",
         )
+        self.watcher_coordinator.on(
+            source=self.crud_ca_authorities.watcher,
+            events=(EVENT_READY, EVENT_CHANGED),
+            reaction=self._reset_client_cert_caches,
+            name="recheck client certificates after CA authority changes",
+        )
+
+    async def _reset_client_cert_caches(self) -> None:
+        self.authorize_client_cert_puppet.invalidate_all()
+        self.authorize_client_cert_pdb.invalidate_all()
 
     async def init(self):
         await self.crud_manager.init_all()
@@ -440,7 +469,7 @@ class AppContainer:
     async def _ensure_default_ca_setup(self):
         default_id = "puppet-ca"
         try:
-            await self.ca_service._crud_authorities.get(
+            await self.crud_ca_authorities.get(
                 _id=default_id,
                 fields=["id"],
             )
@@ -465,7 +494,7 @@ class AppContainer:
                 )
 
         try:
-            await self.ca_service._crud_spaces.get(
+            await self.crud_ca_spaces.get(
                 _id=default_id,
                 fields=["id"],
             )
@@ -488,6 +517,7 @@ class AppContainer:
     async def close(self):
         self.log.info(msg="Stopping ingest queue...")
         await self.ingest_queue.stop()
+        self.ca_executor.shutdown(wait=False)
 
         instance_id = f"{socket.getfqdn()}:{self.config.app.main.port}"
         self.log.info(msg=f"Removing PyppetDB node '{instance_id}' from database...")

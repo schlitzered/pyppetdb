@@ -19,7 +19,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from pyppetdb.ca.utils import CAUtils
+from pyppetdb.ca import crypto
 
 
 def _csr_with_sans(cn, general_names):
@@ -38,13 +38,13 @@ def _csr_with_sans(cn, general_names):
 class TestCAUtilsSANInjection(unittest.TestCase):
     def setUp(self):
         # Generate a CA for signing
-        self.ca_cert_pem, self.ca_key_pem = CAUtils.generate_ca(cn="Test CA")
+        self.ca_cert_pem, self.ca_key_pem = crypto.generate_ca(cn="Test CA")
 
     def test_sign_csr_inject_san_no_original_san(self):
         cn = "test-node"
-        csr_pem, _ = CAUtils.generate_csr(cn=cn)
+        csr_pem, _ = crypto.generate_csr(cn=cn)
 
-        signed_cert_pem = CAUtils.sign_csr(
+        signed_cert_pem = crypto.sign_csr(
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
@@ -75,9 +75,9 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_sign_csr_inject_san_with_existing_san(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
-        signed_cert_pem = CAUtils.sign_csr(
+        signed_cert_pem = crypto.sign_csr(
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
@@ -110,9 +110,9 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_sign_csr_inject_san_cn_already_in_san(self):
         cn = "test-node"
         alt_names = ["test-node", "alt1.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
-        signed_cert_pem = CAUtils.sign_csr(
+        signed_cert_pem = crypto.sign_csr(
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
@@ -143,7 +143,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
         self.assertEqual(len(dns_names), 2)
 
     def _sign(self, csr_pem, **kwargs):
-        return CAUtils.sign_csr(
+        return crypto.sign_csr(
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
@@ -175,7 +175,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_sign_csr_ignores_csr_sans_when_disabled(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = self._sign(csr_pem, honor_csr_sans=False)
 
@@ -188,7 +188,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_sign_csr_ignores_csr_sans_but_keeps_injected(self):
         cn = "test-node"
         alt_names = ["attacker.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = self._sign(
             csr_pem,
@@ -205,7 +205,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_sign_csr_honors_csr_sans_when_enabled(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
         signed_cert_pem = self._sign(csr_pem, honor_csr_sans=True)
 
@@ -218,9 +218,9 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_get_cert_info_sans(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
-        signed_cert_pem = CAUtils.sign_csr(
+        signed_cert_pem = crypto.sign_csr(
             csr=csr_pem,
             ca_cert=self.ca_cert_pem,
             ca_key=self.ca_key_pem,
@@ -241,7 +241,7 @@ class TestCAUtilsSANInjection(unittest.TestCase):
             ],
         )
 
-        info = CAUtils.get_cert_info(signed_cert_pem)
+        info = crypto.get_cert_info(signed_cert_pem)
         self.assertIn("sans", info)
         self.assertIn(cn, info["sans"])
         self.assertIn("alt1.example.com", info["sans"])
@@ -251,9 +251,9 @@ class TestCAUtilsSANInjection(unittest.TestCase):
     def test_parse_and_extract_csr_sans(self):
         cn = "test-node"
         alt_names = ["alt1.example.com", "alt2.example.com"]
-        csr_pem, _ = CAUtils.generate_csr(cn=cn, alt_names=alt_names)
+        csr_pem, _ = crypto.generate_csr(cn=cn, alt_names=alt_names)
 
-        csr, info = CAUtils.parse_and_extract_csr(csr_pem)
+        csr, info = crypto.parse_and_extract_csr(csr_pem)
         self.assertIn("sans", info)
         self.assertIn("alt1.example.com", info["sans"])
         self.assertIn("alt2.example.com", info["sans"])
