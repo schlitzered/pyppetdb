@@ -290,6 +290,46 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self.assertIsNotNone(ca_data.get("crl"))
         self.assertIn("BEGIN X509 CRL", ca_data["crl"]["crl_pem"])
 
+    def test_get_honours_fields(self):
+        ca_id = f"fields-{uuid.uuid4().hex}"
+        space_id = f"fields-space-{uuid.uuid4().hex}"
+        resp = self.client.post(
+            f"/api/v1/ca/authorities/{ca_id}",
+            headers=self._auth_headers(),
+            json={"cn": "Fields CA"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        resp = self.client.post(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"ca_id": ca_id, "description": "fields"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        resp = self.client.get(
+            f"/api/v1/ca/authorities/{ca_id}",
+            headers=self._auth_headers(),
+            params=[("fields", "id"), ("fields", "cn")],
+        )
+        self.assertEqual(resp.json(), {"id": ca_id, "cn": "Fields CA"})
+        full = self.client.get(
+            f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers()
+        ).json()
+        self.assertIn("BEGIN X509 CRL", full["crl"]["crl_pem"])
+
+        resp = self.client.get(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            params=[("fields", "ca_id")],
+        )
+        self.assertEqual(resp.json(), {"ca_id": ca_id})
+
+        self.client.delete(
+            f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers()
+        )
+        self.client.delete(
+            f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers()
+        )
+
     def test_authority_history(self):
         root1_id = f"root1-{uuid.uuid4().hex}"
         root2_id = f"root2-{uuid.uuid4().hex}"

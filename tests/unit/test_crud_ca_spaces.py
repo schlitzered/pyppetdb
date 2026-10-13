@@ -141,3 +141,30 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll.update_one.assert_any_await(
             {"_id": "o2"}, {"$set": {"secret_refs": []}}, session=None
         )
+
+    def _cached(self, **kwargs):
+        from pyppetdb.model.ca_spaces import CASpaceGet
+
+        self.crud.cache.cache["space1"] = CASpaceGet(id="space1", ca_id="ca1", **kwargs)
+
+    async def test_cached_get_returns_only_requested_fields_as_copy(self):
+        from pyppetdb.crud.watcher import STATE_READY
+
+        self.crud.cache.watcher._state = STATE_READY
+        self._cached(description="cached")
+        self.crud._get = AsyncMock()
+
+        result = await self.crud.get("space1", fields=["ca_id"])
+        result.ca_id = "changed"
+
+        self.assertEqual(result.model_fields_set, {"ca_id"})
+        self.assertEqual(self.crud.cache.cache["space1"].ca_id, "ca1")
+        self.crud._get.assert_not_called()
+
+    async def test_get_reads_backend_while_watcher_not_ready(self):
+        self._cached(description="stale")
+        self.crud._get = AsyncMock(return_value={"id": "space1", "description": "fresh"})
+
+        result = await self.crud.get("space1", fields=[])
+
+        self.assertEqual(result.description, "fresh")

@@ -203,6 +203,45 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.cn, "FRESH")
 
+    async def test_cached_get_returns_only_requested_fields(self):
+        self._ready()
+        self.crud.cache.cache["ca1"] = self._entry(
+            cn="CACHED",
+            crl={
+                "crl_pem": "HUGE",
+                "generation": 1,
+                "updated_at": datetime.now(timezone.utc),
+                "next_update": datetime.now(timezone.utc),
+            },
+        )
+
+        result = await self.crud.get("ca1", fields=["id", "cn"])
+
+        self.assertEqual(result.model_fields_set, {"id", "cn"})
+        self.assertEqual(
+            result.model_dump(exclude_unset=True), {"id": "ca1", "cn": "CACHED"}
+        )
+
+    async def test_cached_get_without_fields_returns_everything(self):
+        self._ready()
+        self.crud.cache.cache["ca1"] = self._entry(cn="CACHED")
+
+        result = await self.crud.get("ca1", fields=[])
+
+        self.assertEqual(result, self.crud.cache.cache["ca1"].authority)
+
+    async def test_cached_get_returns_a_copy(self):
+        self._ready()
+        self.crud.cache.cache["ca1"] = self._entry(cn="CACHED", chain=["A"])
+
+        result = await self.crud.get("ca1", fields=[])
+        result.cn = "CHANGED"
+        result.chain.append("B")
+
+        cached = self.crud.cache.cache["ca1"].authority
+        self.assertEqual(cached.cn, "CACHED")
+        self.assertEqual(cached.chain, ["A"])
+
     async def test_get_uses_cache_when_ready(self):
         self._ready()
         self.crud.cache.cache["ca1"] = self._entry(cn="CACHED")

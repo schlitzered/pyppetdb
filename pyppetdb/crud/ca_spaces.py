@@ -68,6 +68,10 @@ class CrudCASpacesCache:
     def log(self):
         return self._log
 
+    @property
+    def ready(self) -> bool:
+        return self._watcher.ready
+
     async def run(self):
         if self._initialized:
             return
@@ -154,8 +158,8 @@ class CrudCASpaces(CrudMongo):
         fields: list,
         use_cache: bool = True,
     ) -> CASpaceGet:
-        if use_cache and _id in self.cache.cache:
-            return self.cache.cache[_id]
+        if use_cache and self.cache.ready and _id in self.cache.cache:
+            return self._project_model(self.cache.cache[_id], fields)
         result = await self._get(query={"id": _id}, fields=fields)
         return CASpaceGet(**result)
 

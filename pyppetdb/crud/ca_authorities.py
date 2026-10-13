@@ -198,7 +198,7 @@ class CrudCAAuthorities(CrudMongo):
         use_cache: bool = True,
     ) -> CAAuthorityGet:
         if use_cache and self.cache.ready and _id in self.cache.cache:
-            return self.cache.cache[_id].authority
+            return self._project_model(self.cache.cache[_id].authority, fields)
         result = await self._get(query={"id": _id}, fields=fields)
         return CAAuthorityGet(**result)
 
