@@ -98,3 +98,11 @@ class CAValidationConfig(BaseModel):
                 if usage in usage_kwargs:
                     usage_kwargs[usage] = True
         return usage_kwargs
+
+
+class CASigningPolicy(BaseModel):
+    allowed_extensions: Optional[List[str]] = None
+    key_usages: dict[str, bool]
+    extended_key_usages: List[str] = []
+    injected_sans: List[str] = []
+    honor_requested_sans: bool = False

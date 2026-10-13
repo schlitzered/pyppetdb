@@ -197,6 +197,7 @@ class ConfigCA(BaseModel):
     autoSign: bool = False
     autoSignNodeIfExists: bool = False
     certificateValidityDays: int = 365
+    certificateRequestTtlDays: int = 30
     concurrentWorkers: int = 5
     verifyCertificateRegistration: bool = True
     verifyCertificateRegistrationCacheTtl: int = 300

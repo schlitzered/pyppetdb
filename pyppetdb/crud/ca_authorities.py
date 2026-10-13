@@ -25,8 +25,11 @@ from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.model.ca_authorities import (
+    CAAuthorityCacheEntry,
     CAAuthorityGet,
     CAAuthorityPostInternal,
+    CASigner,
+    SignerSource,
 )
 from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
 from pyppetdb.model.ca_authorities import CAAuthorityPutInternal
@@ -34,9 +37,7 @@ from pyppetdb.model.ca_authorities import CACRL
 from pyppetdb.model.ca_authorities import CAStatus
 from pyppetdb.model.common import sort_order_literal
 from pyppetdb.model.common import DataDelete
-from pyppetdb.ca.config_validation import validate_secret_references
-from pyppetdb.ca.secret_resolver import extract_references
-from pyppetdb.crud.ca_secrets import CrudCASecrets
+from pyppetdb.model.ca_secret_refs import secret_refs_of
 from pyppetdb.model.ca_validation import CAValidationConfig
 
 
@@ -50,8 +51,7 @@ class CrudCAAuthoritiesCache:
         self._coll = coll
         self._log = log
         self._protector = protector
-        self._cache = {}
-        self._key_cache = {}
+        self._cache: dict[str, CAAuthorityCacheEntry] = {}
         self._doc_to_id = {}
         self._watcher = CollectionWatcher(
             coll=self.coll,
@@ -63,12 +63,8 @@ class CrudCAAuthoritiesCache:
         self._initialized = False
 
     @property
-    def cache(self) -> dict["str", CAAuthorityGet]:
+    def cache(self) -> dict[str, CAAuthorityCacheEntry]:
         return self._cache
-
-    @property
-    def key_cache(self) -> dict["str", bytes]:
-        return self._key_cache
 
     @property
     def coll(self):
@@ -78,6 +74,10 @@ class CrudCAAuthoritiesCache:
     def log(self):
         return self._log
 
+    @property
+    def ready(self) -> bool:
+        return self._watcher.ready
+
     async def run(self):
         if self._initialized:
             return
@@ -85,25 +85,54 @@ class CrudCAAuthoritiesCache:
         self._watcher.start()
         self._initialized = True
 
-    def _process_doc(self, doc: dict) -> CAAuthorityGet:
-        obj = CAAuthorityGet(**doc)
+    def get_signer(self, ca_id: str) -> Optional[CASigner]:
+        if not self.ready:
+            return None
+        entry = self._cache.get(ca_id)
+        if entry is None:
+            return None
+        return entry.signer
+
+    def store_signer(self, ca_id: str, signer: CASigner) -> bool:
+        if not self.ready:
+            return False
+        entry = self._cache.get(ca_id)
+        if entry is None or entry.source is None or entry.source != signer.source:
+            return False
+        entry.signer = signer
+        return True
+
+    def _process_doc(self, doc: dict) -> CAAuthorityCacheEntry:
+        entry = CAAuthorityCacheEntry(authority=CAAuthorityGet(**doc))
         if doc.get("private_key_encrypted"):
             try:
                 decrypted = self._protector.decrypt_string(doc["private_key_encrypted"])
-                self._key_cache[obj.id] = decrypted.encode()
+                entry.private_key = decrypted.encode()
             except Exception as e:
-                self.log.error(f"Failed to decrypt private key for CA {obj.id}: {e}")
-        return obj
+                self.log.error(
+                    f"Failed to decrypt private key for CA {entry.authority.id}: {e}"
+                )
+        return entry
+
+    def _put(self, entry: CAAuthorityCacheEntry) -> None:
+        previous = self._cache.get(entry.authority.id)
+        if (
+            previous is not None
+            and previous.signer is not None
+            and entry.source is not None
+            and previous.signer.source == entry.source
+        ):
+            entry.signer = previous.signer
+        self._cache[entry.authority.id] = entry
 
     async def _load(self):
         doc_to_id = {}
         async for doc in self.coll.find({}):
-            obj = self._process_doc(doc)
-            self._cache[obj.id] = obj
-            doc_to_id[doc["_id"]] = obj.id
+            entry = self._process_doc(doc)
+            self._put(entry)
+            doc_to_id[doc["_id"]] = entry.authority.id
         for stale in set(self._cache) - set(doc_to_id.values()):
             self._cache.pop(stale, None)
-            self._key_cache.pop(stale, None)
         self._doc_to_id = doc_to_id
         self.log.info(f"Loaded {len(self._cache)} CA authorities into cache")
 
@@ -119,14 +148,13 @@ class CrudCAAuthoritiesCache:
         if operation in ("insert", "replace", "update"):
             doc = change.get("fullDocument")
             if doc:
-                obj = self._process_doc(doc)
-                self._cache[obj.id] = obj
-                self._doc_to_id[doc_id] = obj.id
+                entry = self._process_doc(doc)
+                self._put(entry)
+                self._doc_to_id[doc_id] = entry.authority.id
         elif operation == "delete":
             custom_id = self._doc_to_id.pop(doc_id, None)
             if custom_id:
                 self._cache.pop(custom_id, None)
-                self._key_cache.pop(custom_id, None)
                 self.log.info(f"Removed CA authority {custom_id} from cache")
             else:
                 await self._load()
@@ -146,14 +174,17 @@ class CrudCAAuthorities(CrudMongo):
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
-        crud_secrets: CrudCASecrets,
     ):
         super().__init__(config, log, coll, schema_model=CAAuthorityGet)
         self._protector = protector
-        self._crud_secrets = crud_secrets
         self._cache = CrudCAAuthoritiesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
             pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("secret_refs", pymongo.ASCENDING)], name="idx_secret_refs"
+            )
         )
 
     @property
@@ -166,43 +197,31 @@ class CrudCAAuthorities(CrudMongo):
         fields: list,
         use_cache: bool = True,
     ) -> CAAuthorityGet:
-        if use_cache and _id in self.cache.cache:
-            return self.cache.cache[_id]
+        if use_cache and self.cache.ready and _id in self.cache.cache:
+            return self.cache.cache[_id].authority
         result = await self._get(query={"id": _id}, fields=fields)
         return CAAuthorityGet(**result)
 
-    async def get_private_key_cached(self, _id: str) -> bytes:
-        if _id not in self.cache.key_cache:
-            return await self.get_private_key(_id)
-        return self.cache.key_cache[_id]
+    async def get_signer(self, _id: str) -> Optional[CASigner]:
+        return self.cache.get_signer(_id)
 
-    async def get_all_internal_cas(self) -> list[str]:
-        return [
-            ca_id
-            for ca_id, ca in self.cache.cache.items()
-            if ca.internal and ca.status == "active"
-        ]
+    async def get_signer_source(self, _id: str) -> SignerSource:
+        if self.cache.ready:
+            entry = self.cache.cache.get(_id)
+            if entry is not None and entry.source is not None:
+                return entry.source
+        result = await self._get(
+            query={"id": _id}, fields=["certificate", "private_key_encrypted"]
+        )
+        decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
+        return result["certificate"], decrypted.encode()
+
+    async def store_signer(self, _id: str, signer: CASigner) -> bool:
+        return self.cache.store_signer(_id, signer)
 
     @property
     def protector(self):
         return self._protector
-
-    async def _validate_validation_config(self, payload: dict) -> None:
-        if payload.get("validation_config"):
-            config = CAValidationConfig(**payload["validation_config"])
-            await validate_secret_references(config, self._crud_secrets)
-
-    async def find_referencing_ids(self, secret_id: str) -> list[str]:
-        referencing: list[str] = []
-        cursor = self.coll.find({}, {"id": 1, "validation_config": 1})
-        async for doc in cursor:
-            raw = doc.get("validation_config")
-            if not raw:
-                continue
-            config = CAValidationConfig(**raw)
-            if secret_id in extract_references(config):
-                referencing.append(doc["id"])
-        return referencing
 
     @property
     def watcher(self) -> CollectionWatcher:
@@ -216,8 +235,6 @@ class CrudCAAuthorities(CrudMongo):
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         await super().migrate_1(session=session)
-        from pyppetdb.model.ca_validation import CAValidationConfig
-
         default_config = CAValidationConfig().model_dump()
         res = await self.coll.update_many(
             {"validation_config": {"$exists": False}},
@@ -229,12 +246,32 @@ class CrudCAAuthorities(CrudMongo):
                 f"Migrated {res.modified_count} CA Authorities with default validation config"
             )
 
+    async def migrate_2(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        await super().migrate_2(session=session)
+        cursor = self.coll.find(
+            {"secret_refs": {"$exists": False}},
+            {"validation_config": 1},
+            session=session,
+        )
+        migrated = 0
+        async for doc in cursor:
+            config = CAValidationConfig(**(doc.get("validation_config") or {}))
+            await self.coll.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"secret_refs": secret_refs_of(config)}},
+                session=session,
+            )
+            migrated += 1
+        if migrated > 0:
+            self.log.info(f"Migrated {migrated} CA Authorities with secret references")
+
     async def create(
         self, _id: str, payload: CAAuthorityPostInternal, fields: list
     ) -> CAAuthorityGet:
         data = payload.model_dump()
         data["id"] = _id
-        await self._validate_validation_config(data)
         result = await self._create(payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
@@ -242,7 +279,6 @@ class CrudCAAuthorities(CrudMongo):
         self, _id: str, payload: CAAuthorityPutInternal, fields: list
     ) -> CAAuthorityGet:
         data = payload.model_dump(exclude_unset=True)
-        await self._validate_validation_config(data)
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CAAuthorityGet(**result)
 
@@ -261,34 +297,6 @@ class CrudCAAuthorities(CrudMongo):
         await self._delete(query={"id": _id})
         return DataDelete()
 
-    async def count(self, query: dict) -> int:
-        return await self.coll.count_documents(query)
-
-    async def get_private_key(self, _id: str) -> bytes:
-        result = await self._get(query={"id": _id}, fields=["private_key_encrypted"])
-        decrypted = self._protector.decrypt_string(result["private_key_encrypted"])
-        return decrypted.encode()
-
-    async def get_revoked_for_ca(self, parent_id: str) -> list[dict]:
-        cursor = self.coll.find(
-            {
-                "parent_id": parent_id,
-                "status": "revoked",
-                "serial_number": {"$exists": True},
-            },
-            {"serial_number": 1, "revocation_date": 1},
-        )
-        revoked = []
-        async for ca in cursor:
-            revoked.append(
-                {
-                    "serial_number": int(ca["serial_number"]),
-                    "revocation_date": ca.get("revocation_date")
-                    or datetime.datetime.now(datetime.timezone.utc),
-                }
-            )
-        return revoked
-
     async def search(
         self,
         _id: typing.Optional[str] = None,
@@ -297,6 +305,7 @@ class CrudCAAuthorities(CrudMongo):
         fingerprint: typing.Optional[str] = None,
         internal: typing.Optional[bool] = None,
         status: typing.Optional[CAStatus] = None,
+        secret_ref: typing.Optional[str] = None,
         fields: typing.Optional[list] = None,
         sort: typing.Optional[str] = None,
         sort_order: typing.Optional[sort_order_literal] = None,
@@ -312,6 +321,7 @@ class CrudCAAuthorities(CrudMongo):
             query["internal"] = internal
         if status:
             query["status"] = status
+        self._filter_literal(query, "secret_refs", secret_ref)
 
         result = await self._search(
             query=query,

@@ -15,7 +15,7 @@
 import unittest
 from unittest.mock import AsyncMock
 
-from pyppetdb.ca.config_validation import validate_secret_references
+from pyppetdb.ca.secrets import validate_secret_references
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_validation import (
     CAValidationConfig,

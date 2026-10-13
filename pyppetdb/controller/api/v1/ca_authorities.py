@@ -25,7 +25,9 @@ from pyppetdb.authorize import PERM_CA_AUTHORITIES_CREATE
 from pyppetdb.authorize import PERM_CA_AUTHORITIES_UPDATE
 from pyppetdb.authorize import PERM_CA_AUTHORITIES_DELETE
 from pyppetdb.authorize import PATTERN_CA_AUTHORITIES
+from pyppetdb.ca.secrets import validate_secret_references
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_authorities import CAAuthorityPost
@@ -44,12 +46,14 @@ class ControllerApiV1CAAuthorities:
         log: logging.Logger,
         authorize: AuthorizePyppetDB,
         crud_authorities: CrudCAAuthorities,
+        crud_secrets: CrudCASecrets,
         crud_teams: CrudTeams,
         ca_service: CAService,
     ):
         self._log = log
         self._authorize = authorize
         self._crud_authorities = crud_authorities
+        self._crud_secrets = crud_secrets
         self._crud_teams = crud_teams
         self._ca_service = ca_service
         self._router = APIRouter(prefix="/ca/authorities", tags=["ca authorities"])
@@ -105,6 +109,7 @@ class ControllerApiV1CAAuthorities:
         await self._authorize.require_perm(
             request=request, permission=PERM_CA_AUTHORITIES_UPDATE
         )
+        await validate_secret_references(data.validation_config, self._crud_secrets)
         res = await self._ca_service.update_authority(
             ca_id=ca_id, payload=data, fields=list(fields)
         )
@@ -134,6 +139,7 @@ class ControllerApiV1CAAuthorities:
         await self._authorize.require_perm(
             request=request, permission=PERM_CA_AUTHORITIES_CREATE
         )
+        await validate_secret_references(data.validation_config, self._crud_secrets)
         res = await self._ca_service.create_authority(
             _id=ca_id, payload=data, fields=list(fields)
         )
@@ -159,6 +165,9 @@ class ControllerApiV1CAAuthorities:
             description="filter: regular_expressions", default=None
         ),
         internal: bool = Query(default=None),
+        secret_ref: str = Query(
+            description="filter: exact id of a referenced secret", default=None
+        ),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="id"),
         sort_order: sort_order_literal = Query(default="ascending"),
@@ -177,6 +186,7 @@ class ControllerApiV1CAAuthorities:
             cn=cn,
             fingerprint=fingerprint,
             internal=internal,
+            secret_ref=secret_ref,
             fields=list(fields),
             sort=sort,
             sort_order=sort_order,

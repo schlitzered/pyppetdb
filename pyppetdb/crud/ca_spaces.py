@@ -20,15 +20,14 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from motor.motor_asyncio import AsyncIOMotorClientSession
 import pymongo
 
-from pyppetdb.ca.config_validation import validate_secret_references
-from pyppetdb.ca.secret_resolver import extract_references
+from pyppetdb.model.ca_secret_refs import secret_refs_of
 from pyppetdb.config import Config
-from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.common import CrudMongo
 from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.model.ca_spaces import CASpaceGet, CASpacePost
+from pyppetdb.model.ca_spaces import CASpacePostInternal
 from pyppetdb.model.ca_spaces import CASpaceGetMulti
 from pyppetdb.model.ca_spaces import CASpacePutInternal
 from pyppetdb.model.ca_validation import CAValidationConfig
@@ -128,14 +127,17 @@ class CrudCASpaces(CrudMongo):
         log: logging.Logger,
         coll: AsyncIOMotorCollection,
         protector: NodesDataProtector,
-        crud_secrets: CrudCASecrets,
     ):
         super().__init__(config, log, coll, schema_model=CASpacePost)
         self._protector = protector
-        self._crud_secrets = crud_secrets
         self._cache = CrudCASpacesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
             pymongo.IndexModel([("id", pymongo.ASCENDING)], unique=True, name="idx_id")
+        )
+        self._indices.append(
+            pymongo.IndexModel(
+                [("secret_refs", pymongo.ASCENDING)], name="idx_secret_refs"
+            )
         )
 
     @property
@@ -145,23 +147,6 @@ class CrudCASpaces(CrudMongo):
     @property
     def protector(self):
         return self._protector
-
-    async def _validate_validation_config(self, payload: dict) -> None:
-        if payload.get("validation_config"):
-            config = CAValidationConfig(**payload["validation_config"])
-            await validate_secret_references(config, self._crud_secrets)
-
-    async def find_referencing_ids(self, secret_id: str) -> list[str]:
-        referencing: list[str] = []
-        cursor = self.coll.find({}, {"id": 1, "validation_config": 1})
-        async for doc in cursor:
-            raw = doc.get("validation_config")
-            if not raw:
-                continue
-            config = CAValidationConfig(**raw)
-            if secret_id in extract_references(config):
-                referencing.append(doc["id"])
-        return referencing
 
     async def get(
         self,
@@ -186,8 +171,6 @@ class CrudCASpaces(CrudMongo):
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         await super().migrate_1(session=session)
-        from pyppetdb.model.ca_validation import CAValidationConfig
-
         default_config = CAValidationConfig().model_dump()
         res = await self.coll.update_many(
             {"validation_config": {"$exists": False}},
@@ -199,10 +182,32 @@ class CrudCASpaces(CrudMongo):
                 f"Migrated {res.modified_count} CA Spaces with default validation config"
             )
 
-    async def create(self, _id: str, payload: CASpacePost, fields: list) -> CASpaceGet:
+    async def migrate_2(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        await super().migrate_2(session=session)
+        cursor = self.coll.find(
+            {"secret_refs": {"$exists": False}},
+            {"validation_config": 1},
+            session=session,
+        )
+        migrated = 0
+        async for doc in cursor:
+            config = CAValidationConfig(**(doc.get("validation_config") or {}))
+            await self.coll.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"secret_refs": secret_refs_of(config)}},
+                session=session,
+            )
+            migrated += 1
+        if migrated > 0:
+            self.log.info(f"Migrated {migrated} CA Spaces with secret references")
+
+    async def create(
+        self, _id: str, payload: CASpacePostInternal, fields: list
+    ) -> CASpaceGet:
         data = payload.model_dump()
         data["id"] = _id
-        await self._validate_validation_config(data)
         result = await self._create(payload=data, fields=fields)
         return CASpaceGet(**result)
 
@@ -210,7 +215,6 @@ class CrudCASpaces(CrudMongo):
         self, _id: str, payload: CASpacePutInternal, fields: list
     ) -> CASpaceGet:
         data = payload.model_dump(exclude_unset=True)
-        await self._validate_validation_config(data)
         result = await self._update(query={"id": _id}, payload=data, fields=fields)
         return CASpaceGet(**result)
 
@@ -235,13 +239,11 @@ class CrudCASpaces(CrudMongo):
         cursor = self.coll.find({"$or": [{"ca_id": ca_id}, {"ca_id_history": ca_id}]})
         return await cursor.to_list(length=None)
 
-    async def count(self, query: dict) -> int:
-        return await self.coll.count_documents(query)
-
     async def search(
         self,
         _id: Optional[str] = None,
         ca_id: Optional[str] = None,
+        secret_ref: Optional[str] = None,
         fields: Optional[list] = None,
         sort: Optional[str] = None,
         sort_order: Optional[sort_order_literal] = None,
@@ -251,6 +253,7 @@ class CrudCASpaces(CrudMongo):
         query = {}
         self._filter_re(query, "id", _id)
         self._filter_re(query, "ca_id", ca_id)
+        self._filter_literal(query, "secret_refs", secret_ref)
 
         result = await self._search(
             query=query,

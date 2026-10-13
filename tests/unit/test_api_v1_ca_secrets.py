@@ -16,6 +16,8 @@ import logging
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 
+from pyppetdb.model.ca_authorities import CAAuthorityGet
+from pyppetdb.model.ca_spaces import CASpaceGet
 from pyppetdb.authorize import (
     PERM_CA_GET,
     PERM_CA_SECRETS_CREATE,
@@ -93,8 +95,12 @@ class TestApiV1CASecretsUnit(unittest.IsolatedAsyncioTestCase):
     async def test_delete_blocked_when_referenced(self):
         self.crud_secrets.resource_exists = AsyncMock(return_value="TOK")
         self.crud_secrets.delete = AsyncMock()
-        self.crud_authorities.find_referencing_ids = AsyncMock(return_value=["my-ca"])
-        self.crud_spaces.find_referencing_ids = AsyncMock(return_value=["my-space"])
+        self.crud_authorities.search = AsyncMock(
+            return_value=MagicMock(result=[CAAuthorityGet(id="my-ca")])
+        )
+        self.crud_spaces.search = AsyncMock(
+            return_value=MagicMock(result=[CASpaceGet(id="my-space")])
+        )
 
         with self.assertRaises(ResourceInUse) as ctx:
             await self.controller.delete(request=MagicMock(), secret_id="TOK")
@@ -103,12 +109,18 @@ class TestApiV1CASecretsUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ca_authority:my-ca", detail)
         self.assertIn("ca_space:my-space", detail)
         self.crud_secrets.delete.assert_not_called()
+        self.crud_authorities.search.assert_awaited_once_with(
+            secret_ref="TOK", fields=["id"]
+        )
+        self.crud_spaces.search.assert_awaited_once_with(
+            secret_ref="TOK", fields=["id"]
+        )
 
     async def test_delete_allowed_when_unreferenced(self):
         self.crud_secrets.resource_exists = AsyncMock(return_value="TOK")
         self.crud_secrets.delete = AsyncMock()
-        self.crud_authorities.find_referencing_ids = AsyncMock(return_value=[])
-        self.crud_spaces.find_referencing_ids = AsyncMock(return_value=[])
+        self.crud_authorities.search = AsyncMock(return_value=MagicMock(result=[]))
+        self.crud_spaces.search = AsyncMock(return_value=MagicMock(result=[]))
         request = MagicMock()
 
         await self.controller.delete(request=request, secret_id="TOK")

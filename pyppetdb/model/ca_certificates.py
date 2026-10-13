@@ -72,9 +72,11 @@ class CACertificateGet(BaseModel):
     created: Optional[datetime] = None
     cert_uniqueness: Optional[str] = None
     revocation_date: Optional[datetime] = None
+    request_expires: Optional[datetime] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
     sans: List[str] = []
+    requested_sans: Optional[List[str]] = None
 
 
 class CACertificateGetMulti(BaseModel):
@@ -101,9 +103,11 @@ class CACertificatePutInternal(CACertificatePut):
     created: Optional[datetime] = None
     cert_uniqueness: Optional[str] = None
     revocation_date: Optional[datetime] = None
+    request_expires: Optional[datetime] = None
     ca: Optional[str] = None
     ca_chain: List[str] = []
     sans: List[str] = []
+    requested_sans: Optional[List[str]] = None
 
 
 class CACertificatePostInternal(BaseModel):
@@ -123,3 +127,4 @@ class CACertificatePostInternal(BaseModel):
     ca: Optional[str] = None
     ca_chain: List[str] = []
     sans: List[str] = []
+    requested_sans: Optional[List[str]] = None

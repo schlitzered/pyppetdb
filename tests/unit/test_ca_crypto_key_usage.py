@@ -16,7 +16,7 @@ import unittest
 
 from cryptography import x509
 
-from pyppetdb.ca.utils import CAUtils
+from pyppetdb.ca import crypto
 
 
 def _key_usage(cert_pem):
@@ -26,7 +26,7 @@ def _key_usage(cert_pem):
 
 class TestCACertKeyUsage(unittest.TestCase):
     def test_generate_ca_sets_cert_sign_and_crl_sign(self):
-        cert_pem, _ = CAUtils.generate_ca(cn="Root CA")
+        cert_pem, _ = crypto.generate_ca(cn="Root CA")
         ext = _key_usage(cert_pem)
 
         self.assertTrue(ext.critical)
@@ -35,11 +35,11 @@ class TestCACertKeyUsage(unittest.TestCase):
         self.assertFalse(ext.value.key_encipherment)
 
     def test_sign_ca_sets_cert_sign_and_crl_sign(self):
-        root_cert, root_key = CAUtils.generate_ca(cn="Root CA")
-        sub_cert, _ = CAUtils.sign_ca(
+        root_cert, root_key = crypto.generate_ca(cn="Root CA")
+        sub_cert, _ = crypto.sign_ca(
             cn="Intermediate CA",
-            ca_cert_pem=root_cert,
-            ca_key_pem=root_key,
+            ca_cert=root_cert,
+            ca_key=root_key,
         )
         ext = _key_usage(sub_cert)
 
@@ -48,7 +48,7 @@ class TestCACertKeyUsage(unittest.TestCase):
         self.assertTrue(ext.value.crl_sign)
 
     def test_ca_certs_are_still_basic_constraints_ca(self):
-        cert_pem, _ = CAUtils.generate_ca(cn="Root CA")
+        cert_pem, _ = crypto.generate_ca(cn="Root CA")
         cert = x509.load_pem_x509_certificate(cert_pem)
         bc = cert.extensions.get_extension_for_class(x509.BasicConstraints)
         self.assertTrue(bc.value.ca)

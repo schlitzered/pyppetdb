@@ -12,13 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 from unittest.mock import MagicMock, AsyncMock
+from pyppetdb.ca.signer import CASigners
+from pyppetdb.ca.validation import CSRValidator
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_authorities import CAAuthorityGet, CAAuthorityPut
 from pyppetdb.model.ca_certificates import CACertificateGet, CACertificatePut
+from pyppetdb.model.ca_certificates import CACertificateGetMulti
 from pyppetdb.model.ca_validation import CAValidationConfig
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.errors import ResourceNotFound
+from pyppetdb.model.ca_authorities import CAAuthorityGetMulti
+from pyppetdb.model.ca_spaces import CASpaceGet
+from pyppetdb.model.ca_spaces import CASpaceGetMulti
+from pyppetdb.model.ca_spaces import CASpacePost
+from pyppetdb.model.ca_spaces import CASpacePut
+
+
+def _multi(model, items):
+    return model(result=items, meta={"result_size": len(items)})
 
 
 class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
@@ -26,19 +40,28 @@ class TestCAServiceStatusUpdate(unittest.IsolatedAsyncioTestCase):
         self.log = MagicMock()
         self.config = MagicMock()
         self.config.ca.concurrentWorkers = 2
+        self.config.ca.certificateRequestTtlDays = 30
         self.crud_authorities = AsyncMock()
         self.crud_spaces = AsyncMock()
+        self.crud_spaces.search.return_value = _multi(CASpaceGetMulti, [])
+        self.crud_authorities.search.return_value = _multi(CAAuthorityGetMulti, [])
         self.crud_certificates = AsyncMock()
         self.crud_pyppetdb_nodes = MagicMock()
         self.crud_secrets = AsyncMock()
+        executor = ThreadPoolExecutor(max_workers=1)
         self.service = CAService(
             log=self.log,
             config=self.config,
             crud_authorities=self.crud_authorities,
             crud_spaces=self.crud_spaces,
             crud_certificates=self.crud_certificates,
-            crud_pyppetdb_nodes=self.crud_pyppetdb_nodes,
-            crud_secrets=self.crud_secrets,
+            signers=CASigners(
+                crud_authorities=self.crud_authorities, executor=executor
+            ),
+            validator=CSRValidator(
+                log=self.log, crud_secrets=self.crud_secrets
+            ),
+            executor=executor,
         )
 
     async def test_update_certificate_status_transition_requested_to_signed(self):
@@ -267,3 +290,140 @@ class TestCAServiceUpdateAuthority(unittest.IsolatedAsyncioTestCase):
                 exclude_unset=True
             ),
         )
+
+    async def test_revoke_rejected_while_spaces_use_the_authority(self):
+        self.crud_spaces.search.return_value = _multi(
+            CASpaceGetMulti, [CASpaceGet(id="space-b"), CASpaceGet(id="space-a")]
+        )
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.service.update_authority(
+                ca_id="sub.1", payload=CAAuthorityPut(status="revoked"), fields=[]
+            )
+
+        self.assertEqual(
+            ctx.exception.detail,
+            "CA Authority 'sub.1' is still used by spaces: space-a, space-b",
+        )
+        self.crud_spaces.search.assert_awaited_with(ca_id="^sub\\.1$", fields=["id"])
+        self.crud_authorities.revoke.assert_not_called()
+
+    async def test_revoke_rejected_while_active_sub_authorities_exist(self):
+        self.crud_authorities.search.return_value = _multi(
+            CAAuthorityGetMulti, [CAAuthorityGet(id="sub2"), CAAuthorityGet(id="sub1")]
+        )
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.service.update_authority(
+                ca_id="root", payload=CAAuthorityPut(status="revoked"), fields=[]
+            )
+
+        self.assertEqual(
+            ctx.exception.detail,
+            "CA Authority 'root' is still the parent of active authorities: sub1, sub2",
+        )
+        self.crud_authorities.search.assert_awaited_with(
+            parent_id="^root$", status="active", fields=["id"]
+        )
+        self.crud_authorities.revoke.assert_not_called()
+
+    async def test_validation_update_skips_the_usage_check(self):
+        self.crud_spaces.search.return_value = _multi(
+            CASpaceGetMulti, [CASpaceGet(id="space-a")]
+        )
+        self.crud_authorities.update.return_value = CAAuthorityGet(id="sub")
+
+        await self.service.update_authority(
+            ca_id="sub", payload=CAAuthorityPut(validation_config={}), fields=[]
+        )
+
+        self.crud_spaces.search.assert_not_called()
+        self.crud_authorities.revoke.assert_not_called()
+
+    async def test_space_cannot_be_created_on_a_revoked_authority(self):
+        self.crud_authorities.get.return_value = CAAuthorityGet(
+            id="old", status="revoked"
+        )
+
+        with self.assertRaises(QueryParamValidationError):
+            await self.service.create_space(
+                _id="s1", payload=CASpacePost(ca_id="old"), fields=[]
+            )
+
+        self.crud_spaces.create.assert_not_called()
+
+    async def test_space_cannot_be_moved_to_a_revoked_authority(self):
+        self.crud_authorities.get.return_value = CAAuthorityGet(
+            id="old", status="revoked"
+        )
+
+        with self.assertRaises(QueryParamValidationError):
+            await self.service.update_space(
+                _id="s1", payload=CASpacePut(ca_id="old"), fields=[]
+            )
+
+        self.crud_spaces.update.assert_not_called()
+
+    async def test_space_update_without_ca_change_skips_the_check(self):
+        self.crud_spaces.update.return_value = MagicMock()
+
+        await self.service.update_space(
+            _id="s1", payload=CASpacePut(description="x"), fields=[]
+        )
+
+        self.crud_authorities.get.assert_not_called()
+
+    async def test_delete_rejected_while_spaces_use_the_authority(self):
+        self.crud_spaces.search.return_value = _multi(
+            CASpaceGetMulti, [CASpaceGet(id="space-b"), CASpaceGet(id="space-a")]
+        )
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.service.delete_authority("old")
+
+        self.assertEqual(
+            ctx.exception.detail,
+            "CA Authority 'old' is still used by spaces: space-a, space-b, cannot delete",
+        )
+        self.crud_authorities.delete.assert_not_called()
+
+    async def test_delete_space_rejected_while_it_holds_certificates(self):
+        self.crud_certificates.search.return_value = CACertificateGetMulti(
+            result=[], meta={"result_size": 3}
+        )
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.service.delete_space("s1")
+
+        self.assertEqual(
+            ctx.exception.detail, "Space 's1' still contains 3 certificates, cannot delete"
+        )
+        self.crud_certificates.search.assert_awaited_once_with(
+            space_id="s1", fields=["id"], limit=1
+        )
+        self.crud_spaces.delete.assert_not_called()
+
+    async def test_delete_empty_space(self):
+        self.crud_certificates.search.return_value = _multi(CACertificateGetMulti, [])
+
+        await self.service.delete_space("s1")
+
+        self.crud_spaces.delete.assert_awaited_once_with(_id="s1")
+
+    async def test_delete_authority_lists_sub_authorities_of_any_status(self):
+        self.crud_authorities.search.return_value = _multi(
+            CAAuthorityGetMulti,
+            [CAAuthorityGet(id="sub2", status="revoked"), CAAuthorityGet(id="sub1")],
+        )
+
+        with self.assertRaises(QueryParamValidationError) as ctx:
+            await self.service.delete_authority("root")
+
+        self.assertEqual(
+            ctx.exception.detail,
+            "CA Authority 'root' is still the parent of authorities: sub1, sub2, cannot delete",
+        )
+        self.crud_authorities.search.assert_awaited_with(
+            parent_id="^root$", status=None, fields=["id"]
+        )
+        self.crud_authorities.delete.assert_not_called()

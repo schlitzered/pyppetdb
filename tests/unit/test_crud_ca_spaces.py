@@ -18,21 +18,31 @@ import logging
 from pyppetdb.crud.ca_spaces import CrudCASpaces
 
 
+class _AsyncCursor:
+    def __init__(self, docs):
+        self._docs = list(docs)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._docs:
+            raise StopAsyncIteration
+        return self._docs.pop(0)
+
+
 class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
         self.mock_config = MagicMock()
         self.mock_coll = MagicMock()
         self.mock_protector = MagicMock()
-        self.mock_crud_secrets = AsyncMock()
-        self.mock_crud_secrets.existing_ids = AsyncMock(return_value=set())
 
         self.crud = CrudCASpaces(
             config=self.mock_config,
             log=self.log,
             coll=self.mock_coll,
             protector=self.mock_protector,
-            crud_secrets=self.mock_crud_secrets,
         )
 
     async def test_delete_success(self):
@@ -75,3 +85,59 @@ class TestCrudCASpacesUnit(unittest.IsolatedAsyncioTestCase):
         self.mock_coll.find.assert_called_once()
         args = self.mock_coll.find.call_args[0][0]
         self.assertIn("$or", args)
+
+    async def test_search_filters_on_exact_secret_ref(self):
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
+
+        await self.crud.search(secret_ref="TOK", fields=["id"])
+
+        query = self.crud._search.call_args.kwargs["query"]
+        self.assertEqual(query, {"secret_refs": "TOK"})
+
+    async def test_search_without_secret_ref_has_no_filter(self):
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
+
+        await self.crud.search(fields=["id"])
+
+        self.assertNotIn("secret_refs", self.crud._search.call_args.kwargs["query"])
+
+    def test_secret_refs_index_is_declared(self):
+        keys = {
+            index.document["name"]: dict(index.document["key"])
+            for index in self.crud._indices
+        }
+        self.assertEqual(keys["idx_secret_refs"], {"secret_refs": 1})
+
+    async def test_migrate_2_backfills_missing_secret_refs(self):
+        config = {
+            "san_validation": {
+                "http_checks": [
+                    {
+                        "url": "https://check.example.com",
+                        "headers": [{"name": "a", "value": "$secrets[B] $secrets[A]"}],
+                    }
+                ]
+            }
+        }
+        self.mock_coll.find = MagicMock(
+            return_value=_AsyncCursor(
+                [{"_id": "o1", "validation_config": config}, {"_id": "o2"}]
+            )
+        )
+        self.mock_coll.update_one = AsyncMock()
+
+        await self.crud.migrate_2()
+
+        self.assertEqual(
+            self.mock_coll.find.call_args.args[0], {"secret_refs": {"$exists": False}}
+        )
+        self.mock_coll.update_one.assert_any_await(
+            {"_id": "o1"}, {"$set": {"secret_refs": ["A", "B"]}}, session=None
+        )
+        self.mock_coll.update_one.assert_any_await(
+            {"_id": "o2"}, {"$set": {"secret_refs": []}}, session=None
+        )

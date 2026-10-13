@@ -13,37 +13,29 @@
 # limitations under the License.
 
 import asyncio
-from typing import Any
+from typing import Optional
+
 from uvicorn.protocols.http.httptools_impl import HttpToolsProtocol
 from uvicorn.protocols.websockets.websockets_sansio_impl import WebSocketsSansIOProtocol
 
 
-class ClientCertProtocol(HttpToolsProtocol):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._peer_cert_dict = None
+class PeerCertMixin:
+    _peer_cert_dict: Optional[dict] = None
 
     def connection_made(self, transport: asyncio.Transport) -> None:
         super().connection_made(transport)
         ssl_object = transport.get_extra_info("ssl_object")
         self._peer_cert_dict = ssl_object.getpeercert() if ssl_object else None
 
+
+class ClientCertProtocol(PeerCertMixin, HttpToolsProtocol):
     def on_headers_complete(self) -> None:
         if self._peer_cert_dict and isinstance(self.scope, dict):
             self.scope["client_cert_dict"] = self._peer_cert_dict
         super().on_headers_complete()
 
 
-class ClientCertWebSocketsProtocol(WebSocketsSansIOProtocol):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._peer_cert_dict = None
-
-    def connection_made(self, transport: asyncio.Transport) -> None:
-        super().connection_made(transport)
-        ssl_object = transport.get_extra_info("ssl_object")
-        self._peer_cert_dict = ssl_object.getpeercert() if ssl_object else None
-
+class ClientCertWebSocketsProtocol(PeerCertMixin, WebSocketsSansIOProtocol):
     async def run_asgi(self) -> None:
         if self.scope and isinstance(self.scope, dict):
             if self._peer_cert_dict and "client_cert_dict" not in self.scope:

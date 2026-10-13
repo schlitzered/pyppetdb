@@ -17,11 +17,17 @@ from typing import List
 from typing import Optional
 from typing import Literal
 from typing import get_args as typing_get_args
+from cryptography import x509
+from cryptography.hazmat.primitives.asymmetric.types import (
+    CertificateIssuerPrivateKeyTypes,
+)
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pyppetdb.model.common import MetaMulti
 from pyppetdb.model.common import Fingerprints
 from pyppetdb.model.ca_validation import CAValidationConfig
+from pyppetdb.model.ca_secret_refs import CASecretRefs
 
 # CA Status
 CAStatus = Literal["active", "revoked"]
@@ -41,6 +47,7 @@ filter_literal = Literal[
     "status",
     "crl",
     "validation_config",
+    "secret_refs",
 ]
 
 filter_list = set(typing_get_args(filter_literal))
@@ -80,7 +87,7 @@ class CACRL(BaseModel):
     locked_at: Optional[datetime] = None
 
 
-class CAAuthorityPostInternal(BaseModel):
+class CAAuthorityPostInternal(CASecretRefs):
     id: str
     parent_id: Optional[str] = None
     cn: str
@@ -115,6 +122,7 @@ class CAAuthorityGet(BaseModel):
     revocation_date: Optional[datetime] = None
     crl: Optional[CACRL] = None
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
+    secret_refs: List[str] = []
 
 
 class CAAuthorityGetMulti(BaseModel):
@@ -127,5 +135,28 @@ class CAAuthorityPut(BaseModel):
     validation_config: CAValidationConfig = Field(default_factory=CAValidationConfig)
 
 
-class CAAuthorityPutInternal(CAAuthorityPut):
+class CAAuthorityPutInternal(CASecretRefs, CAAuthorityPut):
     revocation_date: Optional[datetime] = None
+
+
+SignerSource = tuple[str, bytes]
+
+
+class CASigner(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    certificate: x509.Certificate
+    private_key: CertificateIssuerPrivateKeyTypes
+    source: SignerSource
+
+
+class CAAuthorityCacheEntry(BaseModel):
+    authority: CAAuthorityGet
+    private_key: Optional[bytes] = None
+    signer: Optional[CASigner] = None
+
+    @property
+    def source(self) -> Optional[SignerSource]:
+        if self.authority.certificate is None or self.private_key is None:
+            return None
+        return self.authority.certificate, self.private_key

@@ -30,12 +30,14 @@ from pyppetdb.errors import AdminError
 from pyppetdb.errors import ClientCertError
 from pyppetdb.errors import CredentialError
 from pyppetdb.errors import PermissionError
+from pyppetdb.errors import QueryParamValidationError
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import SessionCredentialError
 
 from pyppetdb.model.users import UserGet
 
 
+from pyppetdb.ca.service import CAService
 from pyppetdb.crud.ca_certificates import CrudCACertificates
 
 MTLS_AUTH_SPACE_ID = "puppet-ca"
@@ -127,11 +129,13 @@ class AuthorizeClientCert:
         config: Config,
         trusted_cns: list[str],
         crud_ca_certificates: CrudCACertificates,
+        ca_service: CAService,
     ):
         self._log = log
         self._config = config
         self._trusted_cns = trusted_cns
         self._crud_ca_certificates = crud_ca_certificates
+        self._ca_service = ca_service
         self._cert_serial_cache = TTLCache(
             maxsize=self.config.ca.verifyCertificateRegistrationCacheMaxsize,
             ttl=self.config.ca.verifyCertificateRegistrationCacheTtl,
@@ -201,17 +205,29 @@ class AuthorizeClientCert:
             return
 
         try:
-            object_id = await self.crud_ca_certificates.get_internal_object_id(
+            object_id, ca_id = await self.crud_ca_certificates.get_registration(
                 serial=serial, cn=cn, space_id=MTLS_AUTH_SPACE_ID
             )
-
-            self._cert_serial_cache[serial] = object_id
-
         except ResourceNotFound:
             self.log.error(
                 f"Access denied: certificate for {cn} (serial {serial}) not found in database, not signed or CN mismatch"
             )
             raise ClientCertError(detail="Certificate not found in database")
+        if await self._issuer_revoked(ca_id):
+            self.log.error(
+                f"Access denied: certificate for {cn} (serial {serial}) was issued by "
+                f"CA Authority '{ca_id}', whose chain is revoked or unknown"
+            )
+            raise ClientCertError(detail="Issuing CA Authority is revoked")
+        self._cert_serial_cache[serial] = object_id
+
+    async def _issuer_revoked(self, ca_id: str | None) -> bool:
+        if not ca_id:
+            return True
+        try:
+            return await self._ca_service.authority_chain_revoked(ca_id)
+        except (ResourceNotFound, QueryParamValidationError):
+            return True
 
     async def require_cn(self, request: Request | WebSocket):
         cert = await self.get_cert_info(request)

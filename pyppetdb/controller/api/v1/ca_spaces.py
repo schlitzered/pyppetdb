@@ -25,9 +25,10 @@ from pyppetdb.authorize import PERM_CA_SPACES_CREATE
 from pyppetdb.authorize import PERM_CA_SPACES_UPDATE
 from pyppetdb.authorize import PERM_CA_SPACES_DELETE
 from pyppetdb.authorize import PATTERN_CA_SPACES
+from pyppetdb.ca.secrets import validate_secret_references
 from pyppetdb.crud.ca_spaces import CrudCASpaces
+from pyppetdb.crud.ca_secrets import CrudCASecrets
 from pyppetdb.crud.ca_authorities import CrudCAAuthorities
-from pyppetdb.crud.ca_certificates import CrudCACertificates
 from pyppetdb.crud.teams import CrudTeams
 from pyppetdb.ca.service import CAService
 from pyppetdb.model.ca_spaces import CASpacePost
@@ -38,7 +39,6 @@ from pyppetdb.model.ca_spaces import filter_literal
 from pyppetdb.model.ca_spaces import filter_list
 from pyppetdb.model.ca_spaces import sort_literal
 from pyppetdb.model.common import sort_order_literal
-from pyppetdb.errors import QueryParamValidationError
 
 
 class ControllerApiV1CASpaces:
@@ -48,7 +48,7 @@ class ControllerApiV1CASpaces:
         authorize: AuthorizePyppetDB,
         crud_ca_spaces: CrudCASpaces,
         crud_ca_authorities: CrudCAAuthorities,
-        crud_ca_certificates: CrudCACertificates,
+        crud_ca_secrets: CrudCASecrets,
         crud_teams: CrudTeams,
         ca_service: CAService,
     ):
@@ -56,7 +56,7 @@ class ControllerApiV1CASpaces:
         self._authorize = authorize
         self._crud_ca_spaces = crud_ca_spaces
         self._crud_ca_authorities = crud_ca_authorities
-        self._crud_ca_certificates = crud_ca_certificates
+        self._crud_ca_secrets = crud_ca_secrets
         self._crud_teams = crud_teams
         self._ca_service = ca_service
         self._router = APIRouter(prefix="/ca/spaces", tags=["ca spaces"])
@@ -114,10 +114,6 @@ class ControllerApiV1CASpaces:
     def crud_ca_authorities(self):
         return self._crud_ca_authorities
 
-    @property
-    def crud_ca_certificates(self):
-        return self._crud_ca_certificates
-
     async def update(
         self,
         request: Request,
@@ -128,6 +124,7 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_perm(
             request=request, permission=PERM_CA_SPACES_UPDATE
         )
+        await validate_secret_references(data.validation_config, self._crud_ca_secrets)
         if data.ca_id:
             await self.crud_ca_authorities.get(data.ca_id, fields=["id"])
         res = await self._ca_service.update_space(
@@ -145,6 +142,7 @@ class ControllerApiV1CASpaces:
         await self.authorize.require_perm(
             request=request, permission=PERM_CA_SPACES_CREATE
         )
+        await validate_secret_references(data.validation_config, self._crud_ca_secrets)
         res = await self._ca_service.create_space(
             _id=space_id, payload=data, fields=list(fields)
         )
@@ -169,12 +167,6 @@ class ControllerApiV1CASpaces:
             request=request, permission=PERM_CA_SPACES_DELETE
         )
 
-        count = await self.crud_ca_certificates.count({"space_id": space_id})
-        if count > 0:
-            raise QueryParamValidationError(
-                msg=f"CA Space '{space_id}' still contains certificates"
-            )
-
         await self._ca_service.delete_space(_id=space_id)
         await self._crud_teams.drop_permissions_by_pattern(
             PATTERN_CA_SPACES.format(space_id=re.escape(space_id))
@@ -186,6 +178,9 @@ class ControllerApiV1CASpaces:
         request: Request,
         space_id: str = Query(description="filter: regular_expressions", default=None),
         ca_id: str = Query(description="filter: regular_expressions", default=None),
+        secret_ref: str = Query(
+            description="filter: exact id of a referenced secret", default=None
+        ),
         fields: Set[filter_literal] = Query(default=filter_list),
         sort: sort_literal = Query(default="id"),
         sort_order: sort_order_literal = Query(default="ascending"),
@@ -201,6 +196,7 @@ class ControllerApiV1CASpaces:
         res = await self.crud_ca_spaces.search(
             _id=space_id,
             ca_id=ca_id,
+            secret_ref=secret_ref,
             fields=list(fields),
             sort=sort,
             sort_order=sort_order,

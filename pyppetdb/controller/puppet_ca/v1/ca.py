@@ -146,8 +146,6 @@ class ControllerPuppetCaV1CA:
     async def submit_certificate_request(
         self, nodename: str, request: Request, background_tasks: BackgroundTasks
     ):
-        from pyppetdb.errors import QueryParamValidationError
-
         body = await request.body()
         csr_pem = body.decode()
 
@@ -178,7 +176,6 @@ class ControllerPuppetCaV1CA:
 
             if auto_sign:
                 self.log.info(f"Auto-signing CSR for {nodename} in space puppet-ca")
-                # Use shield to ensure signing finishes even if the client disconnects while waiting
                 cert = await asyncio.shield(
                     self._ca_service.sign_certificate(
                         space_id="puppet-ca",
@@ -210,6 +207,7 @@ class ControllerPuppetCaV1CA:
                 cn=nodename,
                 fields=[
                     "id",
+                    "ca_id",
                     "cn",
                     "status",
                     "fingerprint",
@@ -221,9 +219,13 @@ class ControllerPuppetCaV1CA:
         if not cert_doc:
             raise HTTPException(status_code=404, detail="Certificate not found")
 
+        state = cert_doc.status
+        if state == "signed" and await self._issuer_revoked(cert_doc.ca_id):
+            state = "revoked"
+
         return {
             "name": cert_doc.cn,
-            "state": cert_doc.status,
+            "state": state,
             "fingerprint": (
                 cert_doc.fingerprint.sha256 if cert_doc.fingerprint else None
             ),
@@ -235,6 +237,14 @@ class ControllerPuppetCaV1CA:
                 ),
             },
         }
+
+    async def _issuer_revoked(self, ca_id: str | None) -> bool:
+        if not ca_id:
+            return False
+        try:
+            return await self._ca_service.authority_chain_revoked(ca_id)
+        except (ResourceNotFound, QueryParamValidationError):
+            return True
 
     async def update_certificate_status(self, nodename: str, request: Request):
         await self.authorize_client_cert.require_cn_trusted(request)
@@ -314,6 +324,8 @@ class ControllerPuppetCaV1CA:
             return Response(content=new_cert.certificate, media_type="text/plain")
         except ResourceNotFound:
             raise HTTPException(status_code=404, detail="Certificate not found")
+        except (QueryParamValidationError, DuplicateResource) as e:
+            raise HTTPException(status_code=400, detail=e.detail)
         except asyncio.CancelledError:
             raise
         except Exception as e:

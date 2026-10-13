@@ -70,7 +70,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 422)
-        self.assertIn("still in use by one or more spaces", resp.json()["detail"])
+        self.assertIn(f"is still used by spaces: {space_id}", resp.json()["detail"])
 
         # 5. Try to delete Root CA (should fail: is parent of sub CA)
         # Delete Space first
@@ -84,7 +84,9 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/authorities/{ca_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 422)
-        self.assertIn("still a parent of", resp.json()["detail"])
+        self.assertIn(
+            f"is still the parent of authorities: {sub_ca_id}", resp.json()["detail"]
+        )
 
         # 6. Delete Sub CA
         resp = self.client.delete(
@@ -119,7 +121,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             f"/api/v1/ca/spaces/{space_id}", headers=self._auth_headers()
         )
         self.assertEqual(resp.status_code, 422)
-        self.assertIn("still contains certificates", resp.json()["detail"])
+        self.assertRegex(resp.json()["detail"], r"still contains \d+ certificates")
 
         # 9. Delete Certificate (Manual cleanup as there is no API endpoint for deletion)
         self._db["ca_certificates"].delete_one({"id": cert_id, "space_id": space_id})
@@ -137,9 +139,9 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
         self.assertEqual(resp.status_code, 200)
 
     def test_external_ca_upload(self):
-        from pyppetdb.ca.utils import CAUtils
+        from pyppetdb.ca import crypto
 
-        cert_pem, key_pem = CAUtils.generate_ca(cn="External CA")
+        cert_pem, key_pem = crypto.generate_ca(cn="External CA")
         ca_id = f"external-ca-{uuid.uuid4().hex}"
         external_chain = ["DUMMY CHAIN CERT 1", "DUMMY CHAIN CERT 2"]
 
@@ -187,29 +189,7 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             json={"ca_id": sub_ca_id},
         )
 
-        # 2. Revoke Sub CA
-        self.client.put(
-            f"/api/v1/ca/authorities/{sub_ca_id}",
-            headers=self._auth_headers(),
-            json={"status": "revoked"},
-        )
-        revoked_at = self._db["ca_authorities"].find_one({"id": sub_ca_id})[
-            "revocation_date"
-        ]
-        self.assertIsNotNone(revoked_at)
-        resp = self.client.put(
-            f"/api/v1/ca/authorities/{sub_ca_id}",
-            headers=self._auth_headers(),
-            json={"status": "revoked"},
-        )
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["status"], "revoked")
-        self.assertEqual(
-            self._db["ca_authorities"].find_one({"id": sub_ca_id})["revocation_date"],
-            revoked_at,
-        )
-
-        # 3. Create and Revoke a Certificate in the space
+        # 2. Create and Revoke a Certificate in the space
         from cryptography import x509
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import rsa
@@ -258,6 +238,48 @@ class ApiV1CAIntegrationTests(IntegrationTestBase):
             headers=self._auth_headers(),
             json={"status": "revoked"},
         )
+
+        # 3. Revoke Sub CA
+        revoke = {"status": "revoked"}
+        sub_url = f"/api/v1/ca/authorities/{sub_ca_id}"
+        resp = self.client.put(sub_url, headers=self._auth_headers(), json=revoke)
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("spaces", resp.json()["detail"])
+        resp = self.client.put(
+            f"/api/v1/ca/authorities/{root_ca_id}",
+            headers=self._auth_headers(),
+            json=revoke,
+        )
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("active authorities", resp.json()["detail"])
+
+        resp = self.client.put(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"ca_id": root_ca_id},
+        )
+        self.assertEqual(resp.status_code, 200)
+        resp = self.client.put(sub_url, headers=self._auth_headers(), json=revoke)
+        self.assertEqual(resp.status_code, 200)
+        revoked_at = self._db["ca_authorities"].find_one({"id": sub_ca_id})[
+            "revocation_date"
+        ]
+        self.assertIsNotNone(revoked_at)
+        resp = self.client.put(sub_url, headers=self._auth_headers(), json=revoke)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "revoked")
+        self.assertEqual(
+            self._db["ca_authorities"].find_one({"id": sub_ca_id})["revocation_date"],
+            revoked_at,
+        )
+
+        resp = self.client.put(
+            f"/api/v1/ca/spaces/{space_id}",
+            headers=self._auth_headers(),
+            json={"ca_id": sub_ca_id},
+        )
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn("revoked", resp.json()["detail"])
 
         # 4. Check CRL in CA Authority
         resp = self.client.get(

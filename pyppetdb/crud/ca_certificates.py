@@ -17,6 +17,7 @@ import logging
 from typing import Optional
 from typing import Protocol
 
+from motor.motor_asyncio import AsyncIOMotorClientSession
 from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
@@ -164,22 +165,50 @@ class CrudCACertificates(CrudMongo):
                     expireAfterSeconds=0,
                     name="ttl_not_after",
                 ),
+                pymongo.IndexModel(
+                    [("request_expires", pymongo.ASCENDING)],
+                    expireAfterSeconds=0,
+                    name="ttl_request_expires",
+                ),
             ]
         )
 
     def add_revocation_listener(self, listener: CacheInvalidationListener) -> None:
         self._revocation_watcher.add_listener(listener)
 
-    async def get_internal_object_id(
+    async def get_registration(
         self, serial: str, cn: str, space_id: str, status: str = "signed"
-    ) -> str:
+    ) -> tuple[str, Optional[str]]:
         doc = await self.coll.find_one(
             {"id": serial, "cn": cn, "space_id": space_id, "status": status},
-            {"_id": 1},
+            {"_id": 1, "ca_id": 1},
         )
         if not doc:
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")
-        return str(doc["_id"])
+        return str(doc["_id"]), doc.get("ca_id")
+
+    async def migrate_2(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        await super().migrate_2(session=session)
+        ttl_ms = self.config.ca.certificateRequestTtlDays * 86400 * 1000
+        res = await self.coll.update_many(
+            {"status": "requested", "request_expires": {"$exists": False}},
+            [
+                {
+                    "$set": {
+                        "request_expires": {
+                            "$add": [{"$ifNull": ["$created", "$$NOW"]}, ttl_ms]
+                        }
+                    }
+                }
+            ],
+            session=session,
+        )
+        if res.modified_count > 0:
+            self.log.info(
+                f"Migrated {res.modified_count} certificate requests with an expiry"
+            )
 
     @property
     def watcher(self) -> CollectionWatcher:
@@ -196,6 +225,7 @@ class CrudCACertificates(CrudMongo):
         fields: list,
         upsert: bool = False,
         set_on_insert: Optional[dict] = None,
+        unset: Optional[list] = None,
     ) -> CACertificateGet:
         data = payload.model_dump(exclude_unset=True)
         result = await self._update(
@@ -204,6 +234,7 @@ class CrudCACertificates(CrudMongo):
             fields=fields,
             upsert=upsert,
             set_on_insert=set_on_insert,
+            unset=unset,
         )
         return CACertificateGet(**result)
 
@@ -313,29 +344,6 @@ class CrudCACertificates(CrudMongo):
         await self._delete_many(
             query={"space_id": space_id, "cn": cn, "serial_number": None}
         )
-
-    async def count(self, query: dict) -> int:
-        return await self.coll.count_documents(query)
-
-    async def get_revoked_for_ca(self, ca_id: str) -> list[dict]:
-        cursor = self.coll.find(
-            {
-                "ca_id": {"$eq": ca_id},
-                "status": "revoked",
-                "serial_number": {"$exists": True},
-            },
-            {"serial_number": 1, "revocation_date": 1},
-        )
-        revoked = []
-        async for cert in cursor:
-            revoked.append(
-                {
-                    "serial_number": int(cert["serial_number"]),
-                    "revocation_date": cert.get("revocation_date")
-                    or datetime.datetime.now(datetime.timezone.utc),
-                }
-            )
-        return revoked
 
     async def search(
         self,

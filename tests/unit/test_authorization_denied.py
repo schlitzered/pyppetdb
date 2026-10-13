@@ -141,6 +141,7 @@ class TestAuthorizationDenied(unittest.IsolatedAsyncioTestCase):
             log=self.log,
             authorize=self.authorize,
             crud_authorities=MagicMock(),
+            crud_secrets=MagicMock(),
             crud_teams=MagicMock(),
             ca_service=ca_service,
         )
