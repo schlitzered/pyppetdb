@@ -1,0 +1,1302 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../nodes/">
+      
+      
+        <link rel="next" href="../hiera/">
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.5.3, mkdocs-material-9.5.17">
+    
+    
+      
+        <title>PuppetDB - pyppetdb</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.bcfcd587.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#puppetdb-compatibility" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="pyppetdb" class="md-header__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            pyppetdb
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PuppetDB
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var media,input,key,value,palette=__md_get("__palette");if(palette&&palette.color){"(prefers-color-scheme)"===palette.color.media&&(media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']"),palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent"));for([key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+    
+  
+  Introduction
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../setup/" class="md-tabs__link">
+        
+  
+    
+  
+  Setup
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../configuration_reference/" class="md-tabs__link">
+        
+  
+    
+  
+  Configuration Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../nodes/" class="md-tabs__link">
+        
+  
+    
+  
+  Nodes
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+    
+  
+  PuppetDB
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../hiera/" class="md-tabs__link">
+        
+  
+    
+  
+  Hiera
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../administration/" class="md-tabs__link">
+        
+  
+    
+  
+  Administration
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../ca/" class="md-tabs__link">
+        
+  
+    
+  
+  CA
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../jobs/" class="md-tabs__link">
+        
+  
+    
+  
+  Jobs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="pyppetdb" class="md-nav__button md-logo" aria-label="pyppetdb" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54Z"/></svg>
+
+    </a>
+    pyppetdb
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Introduction
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Architecture
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Setup
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_reference/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Configuration Reference
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nodes/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Nodes
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    PuppetDB
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    PuppetDB
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-answers-come-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where answers come from
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      Commands
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#request-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Request validation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#old-request-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      Old request format
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#waiting-for-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      Waiting for completion
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#size-limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      Size limit
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#write-queue" class="md-nav__link">
+    <span class="md-ellipsis">
+      Write queue
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Write queue">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-a-200-means" class="md-nav__link">
+    <span class="md-ellipsis">
+      What a 200 means
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fact-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fact index
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sizing" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sizing
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#query-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      Query endpoints
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#query-language" class="md-nav__link">
+    <span class="md-ellipsis">
+      Query language
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#migration-removed-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      Migration: removed extensions
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conformance-corpus" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conformance corpus
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-divergences-from-puppetdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      Known divergences from PuppetDB
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hiera/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Hiera
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../administration/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Administration
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ca/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    CA
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../jobs/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Jobs
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="puppetdb-compatibility">PuppetDB compatibility<a class="headerlink" href="#puppetdb-compatibility" title="Permanent link">&para;</a></h1>
+<p>pyppetdb serves the PuppetDB command and query API under <code>/pdb</code>, backed by its own
+MongoDB store. Agents and PuppetDB clients (Puppetboard, <code>puppet query</code>, exported
+resource collection, PE-style consoles) can talk to it directly.</p>
+<h2 id="where-answers-come-from">Where answers come from<a class="headerlink" href="#where-answers-come-from" title="Permanent link">&para;</a></h2>
+<p>Two independent decisions:</p>
+<ul>
+<li><strong>Writes</strong> — every <code>/pdb/cmd/v1</code> command is stored in pyppetdb's database. If
+  <code>app_puppetdb_serverurl</code> is set, the same command is <em>additionally</em> forwarded to that
+  upstream OpenVoxDB/PuppetDB. This is unconditional; there is no switch to turn it off
+  other than removing <code>serverurl</code>.</li>
+<li><strong>Queries</strong> — <code>app_puppetdb_querySource</code> decides who answers. <code>internal</code> (the default)
+  uses pyppetdb's own query engine; <code>upstream</code> proxies every query to
+  <code>app_puppetdb_serverurl</code> and passes the response through unchanged, including the
+  <code>X-Records</code> header.</li>
+</ul>
+<div class="highlight"><pre><span></span><code>app_puppetdb_serverurl = https://openvoxdb.example.com:8081
+app_puppetdb_querySource = upstream
+</code></pre></div>
+<p>Setting <code>querySource = upstream</code> without a <code>serverurl</code> is a configuration error and the
+process refuses to start.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<p><code>POST /pdb/cmd/v1?certname=&amp;command=&amp;version=&amp;producer-timestamp=</code></p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Minimum version</th>
+<th>Stored as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>replace_facts</code></td>
+<td>4</td>
+<td>node facts, <code>producer</code>, <code>producer_timestamp</code>, <code>package_inventory</code></td>
+</tr>
+<tr>
+<td><code>replace_catalog</code></td>
+<td>6</td>
+<td>catalog resources (with per-resource hash, <code>file</code>, <code>line</code>), edges, <code>version</code>, <code>transaction_uuid</code>, <code>code_id</code>, catalog hash</td>
+</tr>
+<tr>
+<td><code>replace_catalog_inputs</code></td>
+<td>1</td>
+<td><code>catalog_inputs</code> on the node</td>
+</tr>
+<tr>
+<td><code>store_report</code></td>
+<td>5</td>
+<td>report history entry, marked as the node's latest report</td>
+</tr>
+<tr>
+<td><code>deactivate_node</code></td>
+<td>3</td>
+<td>sets the node inactive</td>
+</tr>
+<tr>
+<td><code>configure_expiration</code></td>
+<td>1</td>
+<td><code>facts_expiration</code> (<code>expire</code>, <code>updated</code>) on the node, also visible on the management API</td>
+</tr>
+</tbody>
+</table>
+<p>The response is <code>200</code> with <code>{"uuid": "..."}</code>, matching PuppetDB.</p>
+<h3 id="request-validation">Request validation<a class="headerlink" href="#request-validation" title="Permanent link">&para;</a></h3>
+<p>The endpoint validates a command the way OpenVoxDB's <code>http/command.clj</code> does, before
+anything is queued, and answers <code>400</code> with <code>{"error": "Command \"&lt;command&gt;\" for certname
+\"&lt;certname&gt;\" is invalid. &lt;reason&gt;"}</code>:</p>
+<ul>
+<li>The only query parameters accepted are <code>certname</code>, <code>command</code>, <code>version</code>,
+  <code>producer-timestamp</code>, <code>checksum</code> (accepted and ignored, as upstream) and
+  <code>secondsToWaitForCompletion</code>; anything else is <code>Command has invalid parameters: &lt;names&gt;.</code></li>
+<li><code>certname</code>, <code>version</code> and <code>command</code> are required (<code>Command is missing required
+  parameters: &lt;names&gt;.</code>), and the certname must not be blank.</li>
+<li>Command names are normalised by replacing <code>_</code> with a space, so <code>replace_facts</code> and
+  <code>replace facts</code> are the same command; an unknown name gets <code>Command must be one of:
+  configure expiration, deactivate node, replace catalog, replace catalog inputs,
+  replace facts, store report.</code></li>
+<li><code>version</code> must be an integer, and at least the minimum in the table above; an older
+  one gets <code>Version &lt;v&gt; of command "&lt;command&gt;" is retired. The minimum supported version
+  is &lt;min&gt;.</code></li>
+</ul>
+<p><code>Content-Type</code> must be <code>application/json</code> (parameters such as <code>charset=utf-8</code> are fine);
+anything else is <code>415</code> with <code>{"kind": "unsupported-type", "msg": ...}</code>. <code>Content-Encoding</code>
+may be <code>gzip</code> or <code>identity</code> (or absent); any other encoding is <code>415</code> with the plain-text
+body <code>content encoding &lt;enc&gt; not supported</code>. A gzipped body without the header is still
+detected by its magic bytes.</p>
+<h3 id="old-request-format">Old request format<a class="headerlink" href="#old-request-format" title="Permanent link">&para;</a></h3>
+<p>A POST without a <code>command</code> query parameter is the pre-PuppetDB-3 format: the body is
+<code>{"command": ..., "version": ..., "payload": {...}}</code>, the certname is read from
+<code>payload.certname</code>, and <code>payload</code> is processed as the command body. A body without all
+three keys answers <code>400</code> with <code>... Command was submitted without query parameters (old
+format). The request body must be a JSON map with required keys: command, version,
+payload.</code>; a payload that is not a map with <code>... The payload value must be a JSON map.</code>
+Every other key of the body is treated as a query parameter and validated as above.</p>
+<h3 id="waiting-for-completion">Waiting for completion<a class="headerlink" href="#waiting-for-completion" title="Permanent link">&para;</a></h3>
+<p><code>secondsToWaitForCompletion=&lt;seconds&gt;</code> makes the request block until the command's write
+has run, up to that many seconds, and reports what happened instead of only <em>accepted</em>:</p>
+<table>
+<thead>
+<tr>
+<th>Outcome</th>
+<th>Status</th>
+<th>Body</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>written</td>
+<td><code>200</code></td>
+<td><code>{"uuid": ..., "processed": true, "timed_out": false}</code></td>
+</tr>
+<tr>
+<td>still queued or running when the time is up</td>
+<td><code>503</code></td>
+<td><code>{"uuid": ..., "processed": false, "timed_out": true}</code></td>
+</tr>
+<tr>
+<td>the worker raised</td>
+<td><code>503</code></td>
+<td><code>{"uuid": ..., "processed": true, "timed_out": false, "error": "Command processing failed, see the server log for details."}</code></td>
+</tr>
+</tbody>
+</table>
+<p>The error body is deliberately generic — the exception itself is logged with the command
+uuid, so internal details never reach the client.</p>
+<p>A timed-out command is not withdrawn — it stays queued and is written when its turn
+comes. The wait covers the local write only; the forward to <code>app_puppetdb_serverurl</code>
+runs on its own and its result is never reported. Without the parameter (or with <code>0</code>)
+the endpoint answers as soon as the command is queued, as before.</p>
+<h3 id="size-limit">Size limit<a class="headerlink" href="#size-limit" title="Permanent link">&para;</a></h3>
+<p><code>app_puppetdb_maxCommandSize</code> (bytes, <code>0</code> = unlimited) rejects oversized commands with
+<code>413</code> and the plain-text body <code>Command size exceeds max-command-size</code>. The size is the
+uncompressed payload: the <code>X-Uncompressed-Length</code> header when the client sends it (the
+Puppet agent does for gzipped commands), else <code>Content-Length</code>, else the decoded body.</p>
+<p>Commands for one node must arrive in the order of a Puppet run: <code>replace_facts</code> first,
+then <code>replace_catalog</code>, then <code>store_report</code>. A catalog for a node that has no facts yet
+and a report for a node that has no catalog yet are <strong>discarded</strong> by the worker (logged
+as a warning; the client still received its <code>200</code>). There is no buffering or reordering —
+the agent's next run repairs the state. Because commands are processed asynchronously,
+a report submitted while its catalog is still queued can hit this rule; with a normal
+queue depth the seconds between the agent's catalog request and its report are ample.</p>
+<p><code>replace_catalog</code> computes a content hash over the resources and edges only. When it
+matches what is stored, the resources and edges are not rewritten; only the metadata
+(<code>change_catalog</code>, <code>environment</code>, <code>producer</code>, <code>catalog_uuid</code>, <code>transaction_uuid</code>, ...) is
+updated, so <code>catalog_timestamp</code> still reflects when the catalog was last <em>received</em>,
+matching PuppetDB. Catalog history is written once per <code>catalog_uuid</code>, so a recompile
+with identical content still gets its history entry while a retried command does not.</p>
+<p>The comparison happens in the background task, not on the request path, so it does not
+add latency to the agent's command submission.</p>
+<h2 id="write-queue">Write queue<a class="headerlink" href="#write-queue" title="Permanent link">&para;</a></h2>
+<p>A command is parsed and normalised on the request path — CPU work only, roughly 1.5 ms
+for a 200-resource catalog — and everything that touches MongoDB is handed to a bounded
+queue drained by <code>app_puppetdb_writeQueueWorkers</code> workers. One command becomes one queued
+job, so the queue depth is the number of pending commands.</p>
+<p>When the queue is full the endpoint answers <code>503</code> with <code>Retry-After</code> rather than letting
+the backlog grow. The agent logs the failure and submits again on its next run; nothing
+is buffered on disk. This is deliberate: the alternative is unbounded memory growth under
+sustained overload, with the client never feeling any pressure.</p>
+<h3 id="what-a-200-means">What a <code>200</code> means<a class="headerlink" href="#what-a-200-means" title="Permanent link">&para;</a></h3>
+<p>A <code>200</code> with <code>{"uuid": ...}</code> means <em>accepted into the in-memory queue</em>, not <em>persisted</em>.
+The write happens later, on a worker, and the client is already gone by then:</p>
+<ul>
+<li>If the worker fails — MongoDB unreachable, or a payload that only fails validation once
+  the full model is built — the command is <strong>lost</strong>. The failure is logged and counted in
+  <code>failed</code> under <code>/status/v1/services</code>; there is no retry and the client is never told.</li>
+<li>On a graceful shutdown the queue is drained first, bounded by <code>app_puppetdb_writeQueueDrainTimeout</code> (default 30 s); whatever
+  is still queued when that expires is discarded (and logged). On a crash or <code>SIGKILL</code>
+  the whole in-memory queue is gone.</li>
+</ul>
+<p>This is a deliberate trade: a persistent queue would make every command survive a
+restart at the cost of a second durable store on the write path. Puppet agents resend
+their facts, catalog and report on every run, so a lost command is repaired by the next
+run — but monitoring <code>failed</code> and <code>dropped</code> is the only way to notice that it happened.</p>
+<p>A filter that pins the fact <code>name</code> to one or a few constants (<code>["=", "name", "osfamily"]</code>
+or an <code>in</code> over an array) bypasses the fact-map expansion entirely: the key is known, so
+the value is read straight from <code>facts.&lt;name&gt;</code> instead of turning the whole map into an
+array and unwinding it.</p>
+<h2 id="fact-index">Fact index<a class="headerlink" href="#fact-index" title="Permanent link">&para;</a></h2>
+<p>Facts are stored embedded on the node document, so only the facts listed in
+<code>app_main_facts_index</code> get a dedicated index; everything else would be a collection scan.
+Every fact write therefore also stores a flat companion array <code>facts_index</code>, one entry per
+indexable fact path, covered by a single compound multikey index
+<code>(facts_index.p, facts_index.v)</code>. One index serves every fact instead of one index per
+configured fact, and the planner picks the most selective fact of a multi-fact query
+itself.</p>
+<p>Every top-level fact name is present in the index — that is what <code>/fact-names</code> reads —
+and costs exactly one entry when its value is an indexable scalar: <code>{p: &lt;name&gt;, v: &lt;value&gt;}</code>.
+A fact whose value is structured, denied or too long to index keeps a bare <code>{p: &lt;name&gt;}</code>
+entry instead, so the name stays visible without the value ever churning. A value is
+indexable when its path is no deeper than <code>app_main_facts_indexDepth</code>, is not matched by
+<code>app_main_facts_indexDeny</code>, and the value is a bool, a number, or a string no longer than
+<code>app_main_facts_indexMaxValueLen</code> characters. Any key is a valid path segment — including
+<code>mountpoints</code> keys such as <code>/boot</code> — except an empty one, one containing a NUL byte or
+starting with <code>$</code> (not addressable as a MongoDB field), and a purely numeric one: under a
+dotted path MongoDB reads <code>roles.0</code> as an array index as well as a key, so indexing it
+would let the pre-filter drop rows. Lists do not consume a depth level; their
+scalar elements are indexed under the path of the list itself, mirroring MongoDB's implicit
+array traversal, so <code>{"facts.roles": "web"}</code> and the index agree on a list-valued fact.</p>
+<p>A fact equality compiles to <strong>both</strong> an <code>$elemMatch</code> on <code>facts_index</code> and the direct
+<code>facts.&lt;path&gt;</code> predicate. The <code>$elemMatch</code> is what the generic index can serve; the direct
+predicate is an O(1) residual check that also uses a dedicated <code>app_main_facts_index</code>
+index when one exists. Emitting only the <code>$elemMatch</code> form is measurably slower on
+multi-fact queries, so both are always emitted.</p>
+<p>The document pre-filter may only over-match — it runs before the exact <code>$match</code> and
+anything it drops is gone. An <code>$elemMatch</code> is therefore only emitted when the engine's
+indexability check says ingest is guaranteed to have written that entry, using exactly the
+same rule (type, length, depth, deny list) as the ingest side. Everything else — regular
+expressions, ranges, <code>null?</code>, oversized or denied values, paths deeper than the configured
+depth — falls back to the direct predicate alone.</p>
+<p>There is no backfill: changing <code>indexDepth</code>, <code>indexMaxValueLen</code> or <code>indexDeny</code> only takes
+effect for nodes that send facts again afterwards.</p>
+<p><code>fact-names</code> is served by a <code>distinct</code> on <code>facts_index.p</code> (a covered <code>DISTINCT_SCAN</code> that
+examines no documents), <code>environments</code> and <code>producers</code> by a <code>distinct</code> on their own indexed
+fields. A filtered, projected or aggregated query on those entities still runs the full
+pipeline.</p>
+<h2 id="sizing">Sizing<a class="headerlink" href="#sizing" title="Permanent link">&para;</a></h2>
+<p>Size the deployment for the case where <em>every</em> catalog has changed — a module rollout
+touching all nodes — and treat the unchanged-catalog skip as a saving rather than as
+capacity.</p>
+<h2 id="query-endpoints">Query endpoints<a class="headerlink" href="#query-endpoints" title="Permanent link">&para;</a></h2>
+<p>The route tree is PuppetDB's, including every child route: all endpoints accept <code>GET</code>
+(with a <code>query</code> URL parameter) and <code>POST</code> (with a JSON map body whose keys are the
+parameters). <code>/pdb/query/v1</code>, <code>v2</code> and <code>v3</code> answer 404 "has been retired".</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/pdb/query/v4</code></td>
+<td>root endpoint, requires a <code>["from", &lt;entity&gt;, ...]</code> query; <code>ast_only=true</code> echoes the query</td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/nodes</code>, <code>/nodes/{certname}</code></td>
+<td>plus <code>/facts[/{name}[/{value}]]</code> and <code>/resources[/{type}[/{title}]]</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/facts</code>, <code>/facts/{name}</code>, <code>/facts/{name}/{value}</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/fact-names</code>, <code>/fact-paths</code>, <code>/fact-contents</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/factsets</code>, <code>/factsets/{certname}</code>, <code>/factsets/{certname}/facts</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/inventory</code></td>
+<td>dotted access to <code>facts.</code> and <code>trusted.</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/resources</code>, <code>/resources/{type}</code>, <code>/resources/{type}/{title}</code></td>
+<td>all resources, not just exported ones</td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/edges</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/catalogs</code>, <code>/catalogs/{certname}</code></td>
+<td>plus <code>/edges</code> and <code>/resources[/{type}[/{title}]]</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/catalog-inputs</code>, <code>/catalog-input-contents</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/packages</code>, <code>/package-inventory</code>, <code>/package-inventory/{certname}</code></td>
+<td>from <code>package_inventory</code> in <code>replace_facts</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/reports</code>, <code>/reports/{hash}/events</code>, <code>/reports/{hash}/metrics</code>, <code>/reports/{hash}/logs</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/events</code></td>
+<td><code>distinct_resources</code> with <code>distinct_start_time</code>/<code>distinct_end_time</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/event-counts</code>, <code>/aggregate-event-counts</code></td>
+<td><code>summarize_by</code>, <code>count_by</code>, <code>counts_filter</code>, <code>distinct_*</code></td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/environments</code>, <code>/environments/{name}</code></td>
+<td>plus the <code>facts</code>, <code>resources</code>, <code>reports</code> and <code>events</code> subtrees</td>
+</tr>
+<tr>
+<td><code>/pdb/query/v4/producers</code>, <code>/producers/{name}</code></td>
+<td>plus the <code>factsets</code>, <code>catalogs</code> and <code>reports</code> subtrees</td>
+</tr>
+<tr>
+<td><code>/pdb/meta/v1/version</code>, <code>/pdb/meta/v1/server-time</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/status/v1/services</code></td>
+<td>unauthenticated service status</td>
+</tr>
+</tbody>
+</table>
+<p>Behaviour shared with PuppetDB:</p>
+<ul>
+<li>Entity listings that carry a certname (<code>nodes</code>, <code>facts</code>, <code>fact-contents</code>, <code>factsets</code>,
+  <code>inventory</code>, <code>resources</code>, <code>edges</code>, <code>catalog-inputs</code>, <code>catalog-input-contents</code>,
+  <code>package-inventory</code>, and the root endpoint for every entity except <code>fact_paths</code>,
+  <code>environments</code> and <code>packages</code>) are restricted to <strong>active nodes</strong> unless the query
+  already mentions <code>node_state</code> or <code>["node", "active"]</code>. <code>reports</code>, <code>events</code> and
+  <code>catalogs</code> are not restricted.</li>
+<li>Child routes check that the parent exists and answer
+  <code>404 {"error": "No information is known about &lt;node|report|catalog|factset|environment|producer&gt; &lt;id&gt;"}</code>;
+  the single-object routes answer the same 404.</li>
+<li>Query parameters are validated per endpoint: <code>query</code>, <code>limit</code>, <code>offset</code>, <code>order_by</code>,
+  <code>include_total</code>, <code>pretty</code>, <code>timeout</code> (integer or float seconds, <code>0</code> for none),
+  <code>explain=analyze</code> (answers with MongoDB's execution plan instead of rows), <code>origin</code>,
+  <code>optimize_drop_unused_joins</code> (accepted, no effect), <code>include_facts_expiration</code> (adds
+  <code>expires_facts</code>/<code>expires_facts_updated</code> to <code>nodes</code> listings), <code>include_package_inventory</code>
+  (adds <code>package_inventory</code> to <code>factsets</code>/<code>inventory</code> listings), <code>ast_only</code> (root only),
+  <code>distinct_resources</code>/<code>distinct_start_time</code>/<code>distinct_end_time</code> (events and counts) and
+  the counts parameters. Anything else is a 400 <code>Unsupported query parameter 'x'</code>, a
+  missing required one a 400 <code>Missing required query parameter 'x'</code>; the single-object
+  routes and <code>aggregate-event-counts</code> take no paging parameters.</li>
+</ul>
+<h2 id="query-language">Query language<a class="headerlink" href="#query-language" title="Permanent link">&para;</a></h2>
+<p>The AST dialect is supported:</p>
+<ul>
+<li>boolean <code>and</code>, <code>or</code>, <code>not</code></li>
+<li>comparison <code>=</code>, <code>~</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, <code>null?</code>, <code>~&gt;</code> (regexp match on fact paths)</li>
+<li><code>in</code> against an <code>array</code> literal or a subquery (<code>select_&lt;entity&gt;</code> or a nested <code>from</code>)</li>
+<li><code>subquery</code> for implicit relationships between entities</li>
+<li><code>extract</code> with column lists, <code>group_by</code>, and the <code>count</code>, <code>avg</code>, <code>sum</code>, <code>min</code>, <code>max</code>
+  and <code>to_string</code> functions</li>
+<li>field forms <code>["fact", "&lt;name&gt;"]</code>, <code>["parameter", "&lt;name&gt;"]</code>, <code>["node", "active"]</code>, and
+  dotted paths such as <code>parameters.owner</code> or <code>facts.os.family</code></li>
+<li>paging via <code>limit</code>, <code>offset</code> and <code>order_by</code> — both as AST clauses and as URL
+  parameters — plus <code>include_total</code>, which sets the <code>X-Records</code> response header</li>
+</ul>
+<p>Unknown fields, unknown operators and malformed paging parameters are answered with
+HTTP 400 and an explanatory message rather than an empty result.</p>
+<p>Subqueries are materialised: the inner query runs first, its distinct values (at most
+100,000) become an <code>$in</code> on the outer query, and MongoDB serves that from the index.
+A single-column subquery such as <code>["extract", "certname", ["select_resources", ...]]</code>
+is answered by a distinct scan when the inner filter is indexable (<code>type</code>, <code>type</code> plus
+<code>title</code>, or <code>certname</code> on resources), so it costs one index seek per distinct value
+rather than one per matching resource. A multi-column <code>in</code> checks the tuples with a
+computed key and a set lookup, so its cost grows with the page, not with the number of
+tuples. When the inner result exceeds MongoDB's 16 MB command limit the query is
+rejected with HTTP 400 (<code>subquery result too large</code>).</p>
+<p>Events are stored twice: embedded in the report document, which is what the <code>reports</code>
+entity serves, and once per event in the <code>nodes_events</code> collection, which serves
+<code>/events</code>, <code>/event-counts</code> and <code>/aggregate-event-counts</code>. The collection is indexed on
+<code>certname</code>, <code>report</code>, <code>status</code>, <code>latest_report?</code> and <code>resource</code>, each combined with
+<code>timestamp</code>, so the usual dashboard queries (events of the latest reports ordered by
+time, failed events, events of one node or report) are index range scans. The counts
+endpoints are aggregated in MongoDB with PuppetDB's semantics (<code>count_by=resource</code>
+counts events, <code>count_by=certname</code> collapses identical certname/status/corrective_change
+rows first); a query that pins <code>latest_report? = true</code> is answered from a covering index
+without touching the documents. A report whose hash is already stored is not stored
+again. Storing a report therefore costs one extra insert per event plus index
+maintenance; a run with 40 changed resources measured about 20 % lower report
+throughput than the embedded-only model.</p>
+<p><strong>PQL is not supported.</strong> A <code>query</code> parameter that is not a JSON array is rejected with
+a 400 explaining that an AST query is required.</p>
+<p><code>distinct_resources</code> keeps, for every <code>(certname, resource, property, name)</code>, the events
+with the latest timestamp inside the window and applies the query afterwards, exactly like
+upstream's <code>latest_events</code> — including its tie handling: events with equal latest
+timestamps are all kept, and the counts endpoints then count events rather than distinct
+resources, as upstream does on that path.</p>
+<h2 id="migration-removed-extensions">Migration: removed extensions<a class="headerlink" href="#migration-removed-extensions" title="Permanent link">&para;</a></h2>
+<p><code>/pdb/query/v4/resources</code> used to be served by a hand-written translator with
+pyppetdb-specific extensions. It has been replaced by the shared query engine, which
+speaks standard PuppetDB AST only.</p>
+<p><strong><code>fact_&lt;name&gt;__&lt;sub&gt;</code> pseudo-fields are gone.</strong> The old translator accepted a field name
+starting with <code>fact_</code>, stripped the prefix and turned <code>__</code> into <code>.</code>, so
+<code>fact_os__release__major</code> matched the node's <code>facts.os.release.major</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="s2">&quot;and&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;type&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;File&quot;</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;fact_os__release__major&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;12&quot;</span><span class="p">]]</span>
+</code></pre></div>
+<p>That field does not exist in PuppetDB, and the engine now answers <code>400</code> with
+<code>'fact_os__release__major' is not a queryable object for resources.</code> Express it as a
+subquery against <code>facts</code> instead — <code>value</code> accepts dotted paths into structured facts:</p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="s2">&quot;and&quot;</span><span class="p">,</span>
+<span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;type&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;File&quot;</span><span class="p">],</span>
+<span class="w"> </span><span class="p">[</span><span class="s2">&quot;in&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;certname&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="p">[</span><span class="s2">&quot;extract&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;certname&quot;</span><span class="p">,</span>
+<span class="w">   </span><span class="p">[</span><span class="s2">&quot;select_facts&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="p">[</span><span class="s2">&quot;and&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;os&quot;</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;value.release.major&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;12&quot;</span><span class="p">]]]]]]</span>
+</code></pre></div>
+<p>For a flat fact the inner filter is just <code>name</code> and <code>value</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="s2">&quot;in&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;certname&quot;</span><span class="p">,</span>
+<span class="w"> </span><span class="p">[</span><span class="s2">&quot;extract&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;certname&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="p">[</span><span class="s2">&quot;select_facts&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;and&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;osfamily&quot;</span><span class="p">],</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;=&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;value&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Debian&quot;</span><span class="p">]]]]]</span>
+</code></pre></div>
+<p><code>["extract", ..., ["from", "facts", ...]]</code> and the <code>subquery</code> operator work as well, and
+<code>/inventory</code> takes dotted fact paths directly (<code>["=", "facts.os.release.major", "12"]</code>)
+when the resource columns are not needed.</p>
+<p>Two more differences at the same endpoint:</p>
+<ul>
+<li>It used to return <strong>only exported</strong> resources. It now returns all of them; add
+  <code>["=", "exported", true]</code> to get the old result set.</li>
+<li>A query it could not translate used to yield an empty list. Unknown fields and
+  operators are now a <code>400</code> with a message.</li>
+</ul>
+<p><code>app_puppetdb_resourceQueryInternal=false</code> still forces this one endpoint upstream, but
+it is deprecated in favour of <code>app_puppetdb_querySource</code>.</p>
+<h2 id="conformance-corpus">Conformance corpus<a class="headerlink" href="#conformance-corpus" title="Permanent link">&para;</a></h2>
+<p><code>tests/conformance/</code> holds a query corpus extracted from upstream OpenVoxDB — its HTTP
+test suite and the load profiles of real consumers — plus a tool that reports which
+parts of it the current implementation accepts:</p>
+<div class="highlight"><pre><span></span><code>venv/bin/python<span class="w"> </span>tests/conformance/coverage.py
+</code></pre></div>
+<p><code>tests/unit/test_pdb_query_corpus.py</code> runs the same corpus as a regression test.</p>
+<p><code>tests/conformance/diff_api.py</code> goes further: it runs the same queries against pyppetdb
+and a real OpenVoxDB holding identical data and compares the responses field by field.</p>
+<h2 id="known-divergences-from-puppetdb">Known divergences from PuppetDB<a class="headerlink" href="#known-divergences-from-puppetdb" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Hashes differ.</strong> <code>hash</code>, <code>latest_report_hash</code>, <code>report</code> and <code>resource</code> are computed
+  from the same content but with a different algorithm, so they never match upstream.
+  Anything embedding them (the <code>href</code> of a child collection) differs too.</li>
+<li><strong><code>corrective_change</code> is populated.</strong> Upstream gates it behind a flag that is off in the
+  open-source build and returns <code>null</code>; pyppetdb returns the value the agent sent, on
+  events and on <code>latest_report_corrective_change</code>. <code>event-counts</code> with <code>count_by=certname</code>
+  inherit this: upstream's distinct step includes <code>corrective_change</code>, which is always
+  <code>null</code> there, so a certname with both corrective and intentional events of one status
+  counts once upstream and twice here.</li>
+<li><strong><code>/catalogs/&lt;certname&gt;/edges</code> is restricted to that certname.</strong> Upstream forgets the
+  restriction on this one child route (its <code>/resources</code> sibling has it) and answers with
+  every edge of every node; pyppetdb answers with the edges the <code>href</code> refers to.</li>
+<li><strong>Two upstream routes are broken upstream.</strong> <code>/environments/&lt;env&gt;/reports/&lt;hash&gt;/metrics</code>
+  (and <code>/logs</code>) answer 400 with a PostgreSQL type error, and <code>/reports/&lt;hash&gt;/events</code>
+  answers 500 as soon as <code>order_by</code> is given. pyppetdb serves both; the conformance corpus
+  lists them under divergences.</li>
+<li><strong><code>explain=analyze</code> returns a MongoDB plan</strong>, not a PostgreSQL one.</li>
+<li><strong><code>/producers/&lt;p&gt;/catalogs/&lt;node&gt;/edges</code> cannot work</strong> on either side: neither
+  implementation has a <code>producer</code> column on edges, both answer 400.</li>
+<li><strong><code>resource_events.data</code> is always <code>null</code>.</strong> The <code>href</code> resolves to the full event list.
+  Upstream inlines the data for small result sets; computing it on every report query cost
+  roughly a factor of seven.</li>
+<li><strong>Order within child collections is not stable.</strong> <code>factsets.facts</code>, <code>catalogs.resources</code>
+  and resource <code>tags</code> hold the same members as upstream but not necessarily in the same
+  order.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.b8dbb3d2.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.1e8ae164.min.js"></script>
+      
+        <script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+      
+    
+  </body>
+</html>
