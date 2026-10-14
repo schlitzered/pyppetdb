@@ -654,8 +654,11 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.mock_coll.drop_index.await_count, 2)
 
     async def test_disabled_ttl_index_is_not_declared(self):
-        await self.crud._create_ttl_index("created", None, "ttl_created")
+        self.mock_coll.create_index = AsyncMock()
+        for ttl_seconds in (None, 0):
+            await self.crud._create_ttl_index("created", ttl_seconds, "ttl_created")
         self.assertNotIn("ttl_created", self.crud._declared_indexes)
+        self.mock_coll.create_index.assert_not_awaited()
 
     async def test_init_drops_undeclared_indexes_after_sync(self):
         calls = []

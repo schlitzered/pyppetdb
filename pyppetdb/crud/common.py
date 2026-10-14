@@ -355,7 +355,7 @@ class CrudMongo(
     async def _create_ttl_index(
         self, field: str, ttl_seconds: int, index_name: str
     ) -> None:
-        if ttl_seconds is None:
+        if not ttl_seconds:
             return
         self._declared_indexes.add(index_name)
 
