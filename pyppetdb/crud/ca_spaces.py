@@ -23,6 +23,7 @@ import pymongo
 from pyppetdb.model.ca_secret_refs import secret_refs_of
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.migrations import Migration
 from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.errors import QueryParamValidationError
@@ -171,10 +172,12 @@ class CrudCASpaces(CrudMongo):
         await super()._create_index()
         await self.cache.run()
 
-    async def migrate_1(
+    def _migrations(self) -> list[Migration]:
+        return [self._add_default_validation_config, self._add_secret_refs]
+
+    async def _add_default_validation_config(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_1(session=session)
         default_config = CAValidationConfig().model_dump()
         res = await self.coll.update_many(
             {"validation_config": {"$exists": False}},
@@ -186,10 +189,9 @@ class CrudCASpaces(CrudMongo):
                 f"Migrated {res.modified_count} CA Spaces with default validation config"
             )
 
-    async def migrate_2(
+    async def _add_secret_refs(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_2(session=session)
         cursor = self.coll.find(
             {"secret_refs": {"$exists": False}},
             {"validation_config": 1},

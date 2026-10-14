@@ -45,6 +45,28 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, {"id": "r1"})
         self.mock_coll.insert_one.assert_called_once()
 
+    async def test_create_without_fetch_returns_none(self):
+        self.mock_coll.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id="obj1")
+        )
+        self.crud._get_by_obj_id = AsyncMock()
+
+        result = await self.crud._create(payload={"id": "r1"}, fetch=False)
+
+        self.assertIsNone(result)
+        self.mock_coll.insert_one.assert_awaited_once_with({"id": "r1"})
+        self.crud._get_by_obj_id.assert_not_awaited()
+
+    async def test_create_does_not_stamp_a_version(self):
+        self.mock_coll.insert_one = AsyncMock(
+            return_value=MagicMock(inserted_id="obj1")
+        )
+        payload = {"id": "r1"}
+
+        await self.crud._create(payload=payload, fetch=False)
+
+        self.assertEqual(payload, {"id": "r1"})
+
     async def test_create_duplicate(self):
         self.mock_coll.insert_one = AsyncMock(
             side_effect=pymongo.errors.DuplicateKeyError("msg")
@@ -607,8 +629,10 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         return config_coll
 
     async def test_drop_undeclared_indexes(self):
+        self.crud._indices.append(pymongo.IndexModel([("a", 1)], name="idx_a"))
         self._existing_indexes(
             ("_id_", {"_id": 1}),
+            ("idx_a", {"a": 1}),
             ("idx_version_common", {"_version": 1}),
             ("idx_old", {"old": 1}),
             ("ttl_created", {"created": 1}),
@@ -623,7 +647,10 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         await self.crud._create_ttl_index("created", 60, "ttl_created")
         await self.crud._drop_undeclared_indexes()
 
-        self.mock_coll.drop_index.assert_awaited_once_with("idx_old")
+        self.assertEqual(
+            sorted(call.args[0] for call in self.mock_coll.drop_index.await_args_list),
+            ["idx_old", "idx_version_common"],
+        )
 
     async def test_drop_undeclared_indexes_keeps_shard_key_index(self):
         self._existing_indexes(

@@ -24,6 +24,7 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.crud.migrations import Migration
 from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.errors import BackendError
 from pyppetdb.errors import ResourceNotFound
@@ -199,10 +200,12 @@ class CrudCACertificates(CrudMongo):
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")
         return str(doc["_id"]), doc.get("ca_id")
 
-    async def migrate_2(
+    def _migrations(self) -> list[Migration]:
+        return [self._add_request_expiry]
+
+    async def _add_request_expiry(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_2(session=session)
         ttl_ms = self.config.ca.certificateRequestTtlDays * 86400 * 1000
         res = await self.coll.update_many(
             {"status": "requested", "request_expires": {"$exists": False}},

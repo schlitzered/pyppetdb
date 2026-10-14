@@ -132,7 +132,13 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         }
         self.assertEqual(keys["idx_secret_refs"], {"secret_refs": 1})
 
-    async def test_migrate_2_backfills_missing_secret_refs(self):
+    def test_migrations_in_schema_order(self):
+        self.assertEqual(
+            [migration.__name__ for migration in self.crud._migrations()],
+            ["_add_default_validation_config", "_add_secret_refs"],
+        )
+
+    async def test_add_secret_refs_backfills_missing_secret_refs(self):
         config = {
             "san_validation": {
                 "http_checks": [
@@ -150,7 +156,7 @@ class TestCrudCAAuthoritiesUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_coll.update_one = AsyncMock()
 
-        await self.crud.migrate_2()
+        await self.crud._add_secret_refs()
 
         self.assertEqual(
             self.mock_coll.find.call_args.args[0], {"secret_refs": {"$exists": False}}

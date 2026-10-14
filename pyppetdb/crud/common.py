@@ -19,13 +19,15 @@ import typing
 from typing import List, Optional, Type
 
 from bson.objectid import ObjectId
-from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
+from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
 from pydantic import BaseModel
 
 from pyppetdb.config import Config
 
+from pyppetdb.crud.migrations import Migration
+from pyppetdb.crud.migrations import SchemaMigrator
 from pyppetdb.crud.mixins import FilterMixIn
 from pyppetdb.crud.mixins import Format
 from pyppetdb.crud.mixins import PaginationSkipMixIn
@@ -71,11 +73,7 @@ class CrudMongo(
         self._schema_model = schema_model
         self._sort_tiebreaker: Optional[str] = "id"
         self._declared_indexes: set[str] = {"_id_"}
-        self._indices: List[pymongo.IndexModel] = [
-            pymongo.IndexModel(
-                [("_version", pymongo.ASCENDING)], name="idx_version_common"
-            )
-        ]
+        self._indices: List[pymongo.IndexModel] = []
 
     @property
     def coll(self):
@@ -285,72 +283,10 @@ class CrudMongo(
         return list(collection["key"])
 
     async def _migrate(self) -> None:
-        self.log.info(f"Checking for migrations for {self.resource_type}")
-        # Add future migrations to this list
-        migrations = [
-            self.migrate_1,
-            self.migrate_2,
-        ]
-        for migration in migrations:
-            await self._run_migration_transactional(migration)
+        await SchemaMigrator(self.log, self.coll, self._migrations()).run()
 
-    async def _run_migration_transactional(self, migration_func: typing.Callable):
-        try:
-            # Try to use a session for transactions (requires Replica Set)
-            async with await self.coll.database.client.start_session() as session:
-                try:
-                    async with session.start_transaction():
-                        await migration_func(session=session)
-                except pymongo.errors.OperationFailure as e:
-                    # If transactions are not supported (e.g. standalone Mongo)
-                    if e.code == 20:  # IllegalOperation
-                        self.log.debug(
-                            f"Transactions not supported for {self.resource_type}, running without"
-                        )
-                        await migration_func()
-                    else:
-                        raise
-        except (pymongo.errors.OperationFailure, pymongo.errors.ConfigurationError):
-            # Fallback if sessions are not supported at all
-            await migration_func()
-
-    async def migrate_1(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
-        # Migration 1: Set _version to 1 for all objects that have a _version field.
-        query = {"_version": {"$exists": True, "$lt": 1}}
-
-        count = await self.coll.count_documents(query, session=session)
-        if count == 0:
-            return
-
-        self.log.info(
-            f"Migrating {count} {self.resource_type} objects to version 1 in chunks"
-        )
-
-        modified_total = 0
-        while True:
-            # Find a batch of documents to update
-            cursor = self.coll.find(query, session=session).limit(1000)
-            batch = await cursor.to_list(length=1000)
-            if not batch:
-                break
-
-            ids = [doc["_id"] for doc in batch]
-            res = await self.coll.update_many(
-                {"_id": {"$in": ids}}, {"$set": {"_version": 1}}, session=session
-            )
-            modified_total += res.modified_count
-
-        if modified_total > 0:
-            self.log.info(
-                f"Migrated {modified_total} {self.resource_type} objects to version 1"
-            )
-
-    async def migrate_2(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
-        return None
+    def _migrations(self) -> list[Migration]:
+        return []
 
     async def _create_ttl_index(
         self, field: str, ttl_seconds: int, index_name: str
@@ -399,27 +335,22 @@ class CrudMongo(
             name=index_name,
         )
 
-    async def _create_base(
+    async def _create(
         self,
         payload: dict,
-    ) -> ObjectId:
-        payload["_version"] = 1
+        fields: Optional[list] = None,
+        fetch: bool = True,
+    ) -> Optional[dict]:
         try:
-            _id = await self._coll.insert_one(payload)
-            return _id.inserted_id
+            result = await self._coll.insert_one(payload)
         except pymongo.errors.DuplicateKeyError:
             raise DuplicateResource
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError()
-
-    async def _create(
-        self,
-        payload: dict,
-        fields: list,
-    ) -> dict:
-        _id = await self._create_base(payload)
-        return await self._get_by_obj_id(_id=_id, fields=fields)
+        if not fetch:
+            return None
+        return await self._get_by_obj_id(_id=result.inserted_id, fields=fields)
 
     async def _delete(self, query: dict) -> dict:
         try:

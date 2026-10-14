@@ -217,7 +217,7 @@ class CrudNodesReports(CrudMongo):
         data["created"] = _id
 
         if return_none:
-            await self._create_base(payload=data)
+            await self._create(payload=data, fetch=False)
             return None
         result = await self._create(fields=fields, payload=data)
         return NodeReportGet(**result)
@@ -358,7 +358,6 @@ class CrudNodesReports(CrudMongo):
         data["node_id"] = node_id
         data["created"] = _id
         data["disabled"] = False
-        data["_version"] = 1
         try:
             latest = await self._create_latest_transactional(
                 data=data,

@@ -40,6 +40,26 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_coll.delete_many.assert_called_once_with(filter={"node_id": "node1"})
 
+    async def test_create_without_result_does_not_read_back(self):
+        from datetime import datetime
+
+        from pyppetdb.model.nodes_catalogs import NodeCatalogPostInternal
+
+        now = datetime.now()
+        self.crud._create = AsyncMock(return_value=None)
+
+        result = await self.crud.create(
+            _id=now,
+            node_id="node1",
+            payload=NodeCatalogPostInternal(catalog={"resources": []}),
+            fields=[],
+            return_none=True,
+        )
+
+        self.assertIsNone(result)
+        self.assertFalse(self.crud._create.call_args.kwargs["fetch"])
+        self.assertEqual(self.crud._create.call_args.kwargs["payload"]["id"], now)
+
     async def test_create(self):
         from datetime import datetime
 
