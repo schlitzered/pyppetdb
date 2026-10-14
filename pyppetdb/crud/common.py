@@ -476,29 +476,30 @@ class CrudMongo(
         ] = None,
     ) -> dict:
         count = count or self._search_count
-        skip = 0
-        if isinstance(page, int) and page and limit:
-            skip = self._pagination_skip(page, limit)
         index = self._sort_index(query, sort) if sort and sort_order else None
-        projection = self._projection(fields)
         try:
+            if index and limit:
+                return await self._search_from_end(
+                    query, fields, sort, sort_order, page, limit, count
+                )
+            projection = self._projection(fields)
             if not limit:
                 result = await self._search_page(
                     query, projection, sort, sort_order, 0, None, index
                 )
                 return self._format_multi(result, count=len(result))
-            if index:
-                total = await count(query)
-                result = await self._search_from_end(
-                    query, projection, sort, sort_order, skip, limit, index, total
-                )
-            else:
-                total, result = await asyncio.gather(
-                    count(query),
-                    self._search_page(
-                        query, projection, sort, sort_order, skip, limit, index
-                    ),
-                )
+            total, result = await asyncio.gather(
+                count(query),
+                self._search_page(
+                    query,
+                    projection,
+                    sort,
+                    sort_order,
+                    self._search_skip(page, limit),
+                    limit,
+                    index,
+                ),
+            )
             return self._format_multi(result, count=total)
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
@@ -507,26 +508,45 @@ class CrudMongo(
     async def _search_count(self, query: dict) -> int:
         return await self._coll.count_documents(filter=query)
 
+    def _search_skip(
+        self, page: typing.Optional[int], limit: typing.Optional[int]
+    ) -> int:
+        if isinstance(page, int) and page and limit:
+            return self._pagination_skip(page, limit)
+        return 0
+
     async def _search_from_end(
         self,
         query: dict,
-        projection: typing.Optional[dict],
-        sort: str,
-        sort_order: str,
-        skip: int,
-        limit: int,
-        index: dict,
-        count: int,
-    ) -> list:
-        if skip >= count:
-            return []
-        reverse_skip = max(count - skip - limit, 0)
-        if reverse_skip >= skip:
-            return await self._search_page(
+        fields: typing.Optional[list] = None,
+        sort: typing.Optional[str] = None,
+        sort_order: typing.Optional[str] = None,
+        page: typing.Optional[int] = None,
+        limit: typing.Optional[int] = None,
+        count: typing.Optional[
+            typing.Callable[[dict], typing.Awaitable[int]]
+        ] = None,
+    ) -> dict:
+        count = count or self._search_count
+        index = self._sort_index(query, sort) if sort and sort_order else None
+        projection = self._projection(fields)
+        skip = self._search_skip(page, limit)
+        total = await count(query)
+        if not index or not limit:
+            result = await self._search_page(
                 query, projection, sort, sort_order, skip, limit, index
             )
+            return self._format_multi(result, count=total)
+        if skip >= total:
+            return self._format_multi([], count=total)
+        reverse_skip = max(total - skip - limit, 0)
+        if reverse_skip >= skip:
+            result = await self._search_page(
+                query, projection, sort, sort_order, skip, limit, index
+            )
+            return self._format_multi(result, count=total)
         reverse_order = "descending" if sort_order == "ascending" else "ascending"
-        reverse_limit = min(limit, count - skip)
+        reverse_limit = min(limit, total - skip)
         try:
             result = await self._search_cursor(
                 query,
@@ -539,11 +559,12 @@ class CrudMongo(
             ).to_list(reverse_limit)
         except pymongo.errors.OperationFailure as err:
             self._log_hint_failure(index, err)
-            return await self._search_cursor(
+            result = await self._search_cursor(
                 query, projection, sort, sort_order, skip, limit, None
             ).to_list(limit)
+            return self._format_multi(result, count=total)
         result.reverse()
-        return result
+        return self._format_multi(result, count=total)
 
     async def _search_page(
         self,

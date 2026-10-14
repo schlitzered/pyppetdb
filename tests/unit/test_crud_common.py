@@ -499,6 +499,49 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         )
         mock_cursor.hint.assert_not_called()
 
+    async def test_search_from_end_takes_the_search_signature(self):
+        mock_cursor = self._scoped_search_setup(100000, [{"id": "b"}, {"id": "a"}])
+
+        result = await self.crud._search_from_end(
+            query={"space_id": "s"},
+            fields=["id"],
+            sort="id",
+            sort_order="ascending",
+            page=9000,
+            limit=10,
+            count=None,
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "result": [{"id": "a"}, {"id": "b"}],
+                "meta": {"result_size": 100000},
+            },
+        )
+        mock_cursor.sort.assert_called_once_with([("id", pymongo.DESCENDING)])
+        mock_cursor.skip.assert_called_once_with(9990)
+        self.mock_coll.find.assert_called_once_with(
+            filter={"space_id": "s"}, projection={"id": 1}
+        )
+
+    async def test_search_from_end_without_index_counts_and_reads_forward(self):
+        self.mock_coll.count_documents = AsyncMock(return_value=100000)
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[])
+        self.mock_coll.find.return_value = mock_cursor
+
+        result = await self.crud._search_from_end(
+            {"space_id": "s"}, sort="cn", sort_order="ascending", page=9000, limit=10
+        )
+
+        self.assertEqual(result["meta"]["result_size"], 100000)
+        mock_cursor.sort.assert_called_once_with(
+            [("cn", pymongo.ASCENDING), ("id", pymongo.ASCENDING)]
+        )
+        mock_cursor.skip.assert_called_once_with(90000)
+        mock_cursor.hint.assert_not_called()
+
     async def test_search_from_end_reads_forward_when_hint_fails(self):
         self.crud._indices.append(
             pymongo.IndexModel([("space_id", 1), ("cn", 1)], name="idx_space_cn")
