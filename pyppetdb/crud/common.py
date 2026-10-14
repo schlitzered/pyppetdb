@@ -36,8 +36,6 @@ from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import BackendError
 
-REVERSE_PAGE_MIN_SKIP = 10000
-
 
 class Crud:
     def __init__(
@@ -489,7 +487,7 @@ class CrudMongo(
                     query, projection, sort, sort_order, 0, None, index
                 )
                 return self._format_multi(result, count=len(result))
-            if index and skip >= REVERSE_PAGE_MIN_SKIP:
+            if index:
                 total = await count(query)
                 result = await self._search_from_end(
                     query, projection, sort, sort_order, skip, limit, index, total
