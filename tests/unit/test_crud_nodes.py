@@ -252,54 +252,15 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(query["disabled"], False)
         self.assertEqual(query["id"], {"$regex": "node1"})
 
-    async def test_search_without_filter_counts_from_indexes(self):
-        self._search_returning([], [])
-        threshold = datetime(2026, 3, 6)
-        outdated = {"disabled": {"$ne": True}, "change_report": {"$lt": threshold}}
-        answers = {
-            "{}": 100,
-            repr(outdated): 40,
-        }
-        for status, total, stale in (
-            ("changed", 20, 5),
-            ("unchanged", 30, 10),
-            ("failed", 15, 5),
-            (None, 30, 20),
-        ):
-            answers[repr({"report.status": status})] = total
-            answers[repr({"report.status": status, **outdated})] = stale
-
-        async def count_documents(query, **kwargs):
-            return answers[repr(query)]
-
-        self.mock_coll.count_documents = AsyncMock(side_effect=count_documents)
-
-        result = await self.crud.search(
-            outdated_threshold="2026-03-06T00:00:00Z", limit=10
-        )
-
-        self.mock_coll.aggregate.assert_not_called()
-        self.assertEqual(result.meta.result_size, 100)
-        self.assertEqual(result.meta.status_outdated, 40)
-        self.assertEqual(result.meta.status_changed, 15)
-        self.assertEqual(result.meta.status_unchanged, 20)
-        self.assertEqual(result.meta.status_failed, 10)
-        self.assertEqual(result.meta.status_unreported, 10)
-        self.mock_coll.count_documents.assert_any_await({}, hint="idx_id")
-        self.mock_coll.count_documents.assert_any_await(
-            outdated, hint="idx_disabled_report_status"
-        )
-        self.mock_coll.count_documents.assert_any_await(
-            {"report.status": "failed"}, hint="idx_report_status"
-        )
-
-    async def test_search_with_filter_counts_by_grouping(self):
+    async def test_search_counts_by_grouping(self):
         self._search_returning([], [])
         self.mock_coll.count_documents = AsyncMock()
 
-        await self.crud.search(disabled=True, limit=10)
-
-        self.mock_coll.aggregate.assert_called_once()
+        for kwargs in ({}, {"disabled": True}):
+            self.mock_coll.aggregate.reset_mock()
+            await self.crud.search(limit=10, **kwargs)
+            self.mock_coll.aggregate.assert_called_once()
+            self.assertEqual(self.mock_coll.aggregate.call_args[1], {})
         self.mock_coll.count_documents.assert_not_called()
 
     async def test_search_without_limit_counts_rows_in_python(self):
@@ -329,7 +290,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
     async def test_search_fetches_report_status_sources(self):
         self._search_returning([], [])
 
-        await self.crud.search(fields=["id"], disabled=False, limit=10)
+        await self.crud.search(fields=["id"], limit=10)
 
         fields = self.crud._search.call_args[1]["fields"]
         self.assertEqual(
@@ -590,14 +551,7 @@ class TestCrudNodesUnit(unittest.IsolatedAsyncioTestCase):
             if index.document["name"] == "idx_disabled_report_status"
         )
         self.assertEqual(
-            list(model.document["key"].items()),
-            [("disabled", 1), ("report.status", 1), ("change_report", 1)],
-        )
-
-    def test_status_counts_hint_declared_indexes(self):
-        names = {index.document["name"] for index in self.crud._indices}
-        self.assertLessEqual(
-            {"idx_id", "idx_report_status", "idx_disabled_report_status"}, names
+            list(model.document["key"].items()), [("disabled", 1), ("report.status", 1)]
         )
 
     def test_disabled_index_covers_active_counts(self):

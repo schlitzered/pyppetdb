@@ -24,12 +24,11 @@ log_levels = typing.Literal[
 
 
 class ConfigAppFacts(BaseModel):
-    index: typing.Optional[typing.List[str]] = None
     indexMaxValueLen: int = 256
     indexDepth: int = 3
     indexDeny: typing.List[str] = []
 
-    @field_validator("index", "indexDeny", mode="before")
+    @field_validator("indexDeny", mode="before")
     @classmethod
     def parse_index(cls, v):
         if isinstance(v, str):

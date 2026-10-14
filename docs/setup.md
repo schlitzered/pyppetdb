@@ -102,7 +102,6 @@ app_main_port=8140  # take over the puppetserver agent port
 app_main_ssl_ca=/etc/puppetlabs/puppet/ssl/certs/ca.pem
 app_main_ssl_cert=/etc/puppetlabs/puppet/ssl/certs/puppetsrv-1.example.com.pem
 app_main_ssl_key=/etc/puppetlabs/puppet/ssl/private_keys/puppetsrv-1.example.com.pem
-app_main_facts_index=[ "role", "stage", "location", "provider" ]
 
 # Puppet proxy: forward catalog compilation to the local puppetserver
 app_puppet_serverurl=http://127.0.0.1:8144  # the puppetserver instance on the same node

@@ -17,15 +17,16 @@ from pyppetdb.config import ConfigAppFacts, ConfigAppPuppet
 
 
 class TestConfigUnit(unittest.TestCase):
-    def test_parse_index(self):
-        # Test that JSON string is parsed into list
-        json_str = '["role", "stage"]'
-        config = ConfigAppFacts(index=json_str)
-        self.assertEqual(config.index, ["role", "stage"])
+    def test_parse_index_deny(self):
+        config = ConfigAppFacts(indexDeny='["role", "stage"]')
+        self.assertEqual(config.indexDeny, ["role", "stage"])
 
-        # Test that list remains list
-        config = ConfigAppFacts(index=["a", "b"])
-        self.assertEqual(config.index, ["a", "b"])
+        config = ConfigAppFacts(indexDeny=["a", "b"])
+        self.assertEqual(config.indexDeny, ["a", "b"])
+
+    def test_removed_dedicated_fact_index_setting_is_ignored(self):
+        config = ConfigAppFacts(index='["role"]')
+        self.assertFalse(hasattr(config, "index"))
 
     def test_parse_catalog_cache_facts(self):
         json_str = '["fact1", "fact2"]'

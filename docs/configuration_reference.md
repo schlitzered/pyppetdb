@@ -8,7 +8,7 @@ directory). Configuration is powered by Pydantic Settings.
 * **Nested delimiter:** settings map to a nested model using `_` as the delimiter, e.g.
   `app_main_port` sets `app.main.port`.
 * **List / JSON values:** list-typed settings are provided as a JSON string, e.g.
-  `app_main_facts_index=["role","stage"]`.
+  `app_main_facts_indexDeny=["mountpoints"]`.
 * **Booleans:** use `true` / `false`.
 * **Required values:** `app_secretkey` has **no default** and must be set, otherwise the process
   will not start.
@@ -37,7 +37,6 @@ A pyppetdb process always binds on the `app_main_host` / `app_main_port` pair an
 | `app_main_ssl_cert` | *(unset)* | Path to the server certificate (PEM). Required to enable TLS. |
 | `app_main_ssl_key` | *(unset)* | Path to the server private key (PEM). Required to enable TLS. |
 | `app_main_ssl_ca` | *(unset)* | Path to the CA bundle used to validate client certificates (enables mTLS). |
-| `app_main_facts_index` | *(unset)* | JSON list of facts that get a dedicated single-field index (`facts.<name>`). An optional fast path — every fact is already reachable through the generic `facts_index` described below. |
 | `app_main_facts_indexMaxValueLen` | `256` | Maximum character length of a fact value that is value-indexed in `facts_index`. Longer strings still appear by name, but a query for them falls back to a scan. |
 | `app_main_facts_indexDepth` | `3` | How deep into structured facts the value index reaches. `1` indexes top-level facts only; `2` also indexes the scalar leaves of a nested map under dotted paths such as `os.family`, `3` reaches `os.release.major`. Deep, wide subtrees such as `kmods` or `mountpoints` multiply the entries per node and change every run; put them on `indexDeny` rather than lowering the depth. Lists do not consume a level: their scalar elements are indexed under the path of the list itself. Each level multiplies the number of index entries per node. |
 | `app_main_facts_indexDeny` | `[]` | JSON list of fact names, dotted path prefixes or globs whose *values* are never indexed. A plain entry matches the path and everything below it (`["os"]` also covers `os.family`); an entry containing `*`, `?` or `[` is a shell-style glob matched against the full dotted path and each of its ancestors, with `*` crossing dots — `["*.available", "*.used", "*.capacity"]` strips the per-run counters of every mount from the index while `mountpoints.*.filesystem` stays queryable. Volatile facts are indexed by default; this is the opt-out for facts that change on every run and are never filtered on. The fact name itself stays visible in `/pdb/query/v4/fact-names`. |

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 import re
 from datetime import datetime
@@ -78,11 +77,7 @@ class CrudNodes(CrudMongo):
                     [("disabled", pymongo.ASCENDING)], name="idx_disabled"
                 ),
                 pymongo.IndexModel(
-                    [
-                        ("disabled", pymongo.ASCENDING),
-                        ("report.status", pymongo.ASCENDING),
-                        ("change_report", pymongo.ASCENDING),
-                    ],
+                    [("disabled", pymongo.ASCENDING), ("report.status", pymongo.ASCENDING)],
                     name="idx_disabled_report_status",
                 ),
                 pymongo.IndexModel(
@@ -143,20 +138,6 @@ class CrudNodes(CrudMongo):
                 ),
             ]
         )
-
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        if self.config.app.main.facts.index:
-            for fact in self.config.app.main.facts.index:
-                await self._sync_index(
-                    pymongo.IndexModel(
-                        [
-                            (f"facts.{fact}", pymongo.ASCENDING),
-                            ("node_groups", pymongo.ASCENDING),
-                        ],
-                        name=f"idx_fact_{fact}",
-                    )
-                )
 
     async def delete(
         self,
@@ -270,8 +251,6 @@ class CrudNodes(CrudMongo):
     async def _report_status_counts(
         self, query: dict, threshold: datetime
     ) -> tuple[dict, int]:
-        if not query:
-            return await self._report_status_counts_from_indexes(threshold)
         outdated = {
             "$and": [
                 {"$ne": ["$disabled", True]},
@@ -484,27 +463,6 @@ class CrudNodes(CrudMongo):
         self._filter_boolean(query, "remote_agent.connected", remote_agent_connected)
         self._filter_re(query, "remote_agent.via", remote_agent_via)
         return await self.coll.count_documents(query)
-
-    async def _report_status_counts_from_indexes(
-        self, threshold: datetime
-    ) -> tuple[dict, int]:
-        outdated = self._outdated_query(threshold)
-        stored = ("changed", "unchanged", "failed", None)
-        queries = [({}, "idx_id"), (outdated, "idx_disabled_report_status")]
-        for status in stored:
-            queries += [
-                ({"report.status": status}, "idx_report_status"),
-                ({"report.status": status, **outdated}, "idx_disabled_report_status"),
-            ]
-        total, outdated_count, *per_status = await asyncio.gather(
-            *(self.coll.count_documents(query, hint=hint) for query, hint in queries)
-        )
-        counts = {"outdated": outdated_count}
-        for position, status in enumerate(stored):
-            with_status = per_status[2 * position]
-            stale = per_status[2 * position + 1]
-            counts[status or "unreported"] = with_status - stale
-        return counts, total
 
     async def ids(self, query: dict) -> list[str]:
         try:

@@ -155,13 +155,11 @@ array and unwinding it.
 
 ## Fact index
 
-Facts are stored embedded on the node document, so only the facts listed in
-`app_main_facts_index` get a dedicated index; everything else would be a collection scan.
-Every fact write therefore also stores a flat companion array `facts_index`, one entry per
-indexable fact path, covered by a single compound multikey index
-`(facts_index.p, facts_index.v)`. One index serves every fact instead of one index per
-configured fact, and the planner picks the most selective fact of a multi-fact query
-itself.
+Facts are stored embedded on the node document and have no index of their own, so a filter
+on `facts.<path>` alone is a collection scan. Every fact write therefore also stores a flat
+companion array `facts_index`, one entry per indexable fact path, covered by a single
+compound multikey index `(facts_index.p, facts_index.v)`. One index serves every fact, and
+the planner picks the most selective fact of a multi-fact query itself.
 
 Every top-level fact name is present in the index — that is what `/fact-names` reads —
 and costs exactly one entry when its value is an indexable scalar: `{p: <name>, v: <value>}`.
@@ -179,8 +177,7 @@ array traversal, so `{"facts.roles": "web"}` and the index agree on a list-value
 
 A fact equality compiles to **both** an `$elemMatch` on `facts_index` and the direct
 `facts.<path>` predicate. The `$elemMatch` is what the generic index can serve; the direct
-predicate is an O(1) residual check that also uses a dedicated `app_main_facts_index`
-index when one exists. Emitting only the `$elemMatch` form is measurably slower on
+predicate is an O(1) residual check. Emitting only the `$elemMatch` form is measurably slower on
 multi-fact queries, so both are always emitted.
 
 The document pre-filter may only over-match — it runs before the exact `$match` and
