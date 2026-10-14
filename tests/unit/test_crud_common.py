@@ -301,7 +301,30 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         self.mock_coll.find.return_value = mock_cursor
 
         with self.assertRaises(BackendError):
-            await self.crud._search({})
+            await self.crud._search({}, limit=10)
+
+    async def test_search_without_limit_counts_the_rows(self):
+        self.mock_coll.count_documents = AsyncMock(return_value=99)
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[{"id": "a"}, {"id": "b"}])
+        self.mock_coll.find.return_value = mock_cursor
+
+        result = await self.crud._search({"x": 1}, page=3)
+
+        self.assertEqual(result["meta"]["result_size"], 2)
+        self.mock_coll.count_documents.assert_not_called()
+        mock_cursor.skip.assert_not_called()
+
+    async def test_search_uses_custom_count(self):
+        mock_cursor = MagicMock()
+        mock_cursor.to_list = AsyncMock(return_value=[])
+        self.mock_coll.find.return_value = mock_cursor
+        count = AsyncMock(return_value=42)
+
+        result = await self.crud._search({"x": 1}, limit=10, count=count)
+
+        self.assertEqual(result["meta"]["result_size"], 42)
+        count.assert_awaited_once_with({"x": 1})
 
     def _index_name(self, query, sort):
         index = self.crud._sort_index(query, sort)

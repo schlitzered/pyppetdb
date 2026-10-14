@@ -473,29 +473,41 @@ class CrudMongo(
         sort_order: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
+        count: typing.Optional[
+            typing.Callable[[dict], typing.Awaitable[int]]
+        ] = None,
     ) -> dict:
+        count = count or self._search_count
         skip = 0
         if isinstance(page, int) and page and limit:
             skip = self._pagination_skip(page, limit)
         index = self._sort_index(query, sort) if sort and sort_order else None
         projection = self._projection(fields)
         try:
-            if index and limit and skip >= REVERSE_PAGE_MIN_SKIP:
-                count = await self._coll.count_documents(filter=query)
+            if not limit:
+                result = await self._search_page(
+                    query, projection, sort, sort_order, 0, None, index
+                )
+                return self._format_multi(result, count=len(result))
+            if index and skip >= REVERSE_PAGE_MIN_SKIP:
+                total = await count(query)
                 result = await self._search_from_end(
-                    query, projection, sort, sort_order, skip, limit, index, count
+                    query, projection, sort, sort_order, skip, limit, index, total
                 )
             else:
-                count, result = await asyncio.gather(
-                    self._coll.count_documents(filter=query),
+                total, result = await asyncio.gather(
+                    count(query),
                     self._search_page(
                         query, projection, sort, sort_order, skip, limit, index
                     ),
                 )
-            return self._format_multi(result, count=count)
+            return self._format_multi(result, count=total)
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError
+
+    async def _search_count(self, query: dict) -> int:
+        return await self._coll.count_documents(filter=query)
 
     async def _search_from_end(
         self,
