@@ -161,6 +161,18 @@ class CrudCACertificates(CrudMongo):
                     name="idx_ca_status_cn",
                 ),
                 pymongo.IndexModel(
+                    [("space_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_space_id",
+                ),
+                pymongo.IndexModel(
+                    [("ca_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_ca_id",
+                ),
+                pymongo.IndexModel(
+                    [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)],
+                    name="idx_space_cn",
+                ),
+                pymongo.IndexModel(
                     [("not_after", pymongo.ASCENDING)],
                     expireAfterSeconds=0,
                     name="ttl_not_after",

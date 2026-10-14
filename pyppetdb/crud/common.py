@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
+import re
 import typing
 from typing import List, Optional, Type
 
@@ -434,21 +436,80 @@ class CrudMongo(
         limit: typing.Optional[int] = None,
     ) -> dict:
         try:
-            count = await self._coll.count_documents(
-                filter=query,
+            count, result = await asyncio.gather(
+                self._coll.count_documents(filter=query),
+                self._search_page(query, fields, sort, sort_order, page, limit),
             )
-            cursor = self._coll.find(filter=query, projection=self._projection(fields))
-            if sort and sort_order:
-                cursor.sort(self._sort(sort=sort, sort_order=sort_order))
-            if isinstance(page, int) and page and limit:
-                cursor.skip(self._pagination_skip(page, limit))
-            return self._format_multi(
-                list(await cursor.to_list(limit)),
-                count=count,
-            )
+            return self._format_multi(result, count=count)
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError
+
+    async def _search_page(
+        self,
+        query: dict,
+        fields: typing.Optional[list],
+        sort: typing.Optional[str],
+        sort_order: typing.Optional[str],
+        page: typing.Optional[int],
+        limit: typing.Optional[int],
+    ) -> list:
+        hint = self._sort_hint(query, sort) if sort and sort_order else None
+        try:
+            return await self._search_cursor(
+                query, fields, sort, sort_order, page, limit, hint
+            ).to_list(limit)
+        except pymongo.errors.OperationFailure as err:
+            if not hint:
+                raise
+            self.log.warning(f"search with index hint {hint} failed, retrying: {err}")
+            return await self._search_cursor(
+                query, fields, sort, sort_order, page, limit, None
+            ).to_list(limit)
+
+    def _search_cursor(
+        self,
+        query: dict,
+        fields: typing.Optional[list],
+        sort: typing.Optional[str],
+        sort_order: typing.Optional[str],
+        page: typing.Optional[int],
+        limit: typing.Optional[int],
+        hint: typing.Optional[str],
+    ):
+        cursor = self._coll.find(filter=query, projection=self._projection(fields))
+        if sort and sort_order:
+            cursor.sort(self._sort(sort=sort, sort_order=sort_order))
+        if hint:
+            cursor.hint(hint)
+        if isinstance(page, int) and page and limit:
+            cursor.skip(self._pagination_skip(page, limit))
+        if limit:
+            cursor.limit(limit)
+        return cursor
+
+    def _sort_hint(self, query: dict, sort: str) -> typing.Optional[str]:
+        pinned = {field for field, value in query.items() if self._is_equality(value)}
+        best = None
+        for index in self._indices:
+            document = index.document
+            if document.get("sparse") or "partialFilterExpression" in document:
+                continue
+            keys = list(document["key"])
+            scope = keys[:-1]
+            if keys[-1] != sort or not scope or not set(scope) <= pinned:
+                continue
+            if best is None or len(scope) > len(best[0]):
+                best = (scope, document["name"])
+        return best[1] if best else None
+
+    @classmethod
+    def _is_equality(cls, value) -> bool:
+        if isinstance(value, dict):
+            if "$eq" in value:
+                return cls._is_equality(value["$eq"])
+            return not any(key.startswith("$") for key in value)
+        return not isinstance(value, (list, re.Pattern))
 
     async def _update(
         self,
