@@ -166,6 +166,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
         self.assertFalse(self.crud._create.call_args.kwargs["fetch"])
+        self.assertEqual(self.crud._create.call_args.kwargs["fields"], ["id"])
         self.assertEqual(self.crud._create.call_args.kwargs["payload"]["id"], now)
 
     async def test_get_redacts_on_read(self):

@@ -134,7 +134,7 @@ class CrudNodesCatalogs(CrudMongo):
             data[CONTENT_FIELD] = content
 
         if return_none:
-            await self._create(payload=data, fetch=False)
+            await self._create(payload=data, fields=["id"], fetch=False)
             return None
         result = await self._create(fields=fields, payload=data)
         return NodeCatalogGet(**self._inflate(result))

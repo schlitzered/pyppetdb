@@ -217,7 +217,7 @@ class CrudNodesReports(CrudMongo):
         data["created"] = _id
 
         if return_none:
-            await self._create(payload=data, fetch=False)
+            await self._create(payload=data, fields=["id"], fetch=False)
             return None
         result = await self._create(fields=fields, payload=data)
         return NodeReportGet(**result)

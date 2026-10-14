@@ -338,7 +338,7 @@ class CrudMongo(
     async def _create(
         self,
         payload: dict,
-        fields: Optional[list] = None,
+        fields: list,
         fetch: bool = True,
     ) -> Optional[dict]:
         try:

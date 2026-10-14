@@ -51,7 +51,9 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         )
         self.crud._get_by_obj_id = AsyncMock()
 
-        result = await self.crud._create(payload={"id": "r1"}, fetch=False)
+        result = await self.crud._create(
+            payload={"id": "r1"}, fields=["id"], fetch=False
+        )
 
         self.assertIsNone(result)
         self.mock_coll.insert_one.assert_awaited_once_with({"id": "r1"})
@@ -63,7 +65,7 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         )
         payload = {"id": "r1"}
 
-        await self.crud._create(payload=payload, fetch=False)
+        await self.crud._create(payload=payload, fields=["id"], fetch=False)
 
         self.assertEqual(payload, {"id": "r1"})
 
