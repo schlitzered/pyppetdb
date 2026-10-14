@@ -102,7 +102,7 @@ class TestHieraUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results[0].level, "level1/doc1")
 
         mock_crud.search.assert_called_once_with(
-            key_id="mykey",
+            query={"key_id": "mykey"},
             _id_list=["level1"],
             sort="priority",
             sort_order="descending",

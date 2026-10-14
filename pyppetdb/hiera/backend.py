@@ -60,7 +60,7 @@ class PyHieraBackendCrudHieraLevelDataAsync(PyHieraBackendAsync):
     async def _key_data_get(self, key, levels) -> list[PyHieraModelBackendData]:
         _results = list()
         _result = await self.crud_hiera_level_data.search(
-            key_id=key,
+            query={"key_id": key},
             _id_list=levels,
             sort="priority",
             sort_order="descending",

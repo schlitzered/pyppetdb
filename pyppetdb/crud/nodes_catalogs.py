@@ -87,6 +87,10 @@ class CrudNodesCatalogs(CrudMongo):
                     name="idx_placement_node_id_catalog_uuid",
                 ),
                 pymongo.IndexModel(
+                    [("node_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_node_id_catalog_id",
+                ),
+                pymongo.IndexModel(
                     [("catalog.status", pymongo.ASCENDING)], name="idx_catalog_status"
                 ),
             ]

@@ -36,6 +36,8 @@ from pyppetdb.errors import DuplicateResource
 from pyppetdb.errors import ResourceNotFound
 from pyppetdb.errors import BackendError
 
+REVERSE_PAGE_MIN_SKIP = 10000
+
 
 class Crud:
     def __init__(
@@ -69,6 +71,8 @@ class CrudMongo(
         self._resource_type = coll.name
         self._coll = coll
         self._schema_model = schema_model
+        self._sort_tiebreaker: Optional[str] = "id"
+        self._declared_indexes: set[str] = {"_id_"}
         self._indices: List[pymongo.IndexModel] = [
             pymongo.IndexModel(
                 [("_version", pymongo.ASCENDING)], name="idx_version_common"
@@ -87,6 +91,7 @@ class CrudMongo(
         await self._setup_schema_validation()
         await self._migrate()
         await self._create_index()
+        await self._drop_undeclared_indexes()
 
     async def _setup_schema_validation(self) -> None:
         if not self._schema_model:
@@ -223,6 +228,7 @@ class CrudMongo(
             await self._sync_index(index)
 
     async def _sync_index(self, index: pymongo.IndexModel) -> None:
+        self._declared_indexes.add(index.document["name"])
         try:
             await self.coll.create_indexes([index])
         except pymongo.errors.OperationFailure as e:
@@ -247,6 +253,38 @@ class CrudMongo(
             await self.coll.create_indexes([index])
         except Exception as e:
             self.log.error(f"Failed to sync index for {self.resource_type}: {e}")
+
+    async def _drop_undeclared_indexes(self) -> None:
+        try:
+            existing = await self.coll.list_indexes().to_list(length=None)
+        except pymongo.errors.PyMongoError as e:
+            self.log.error(f"Failed to list indices for {self.resource_type}: {e}")
+            return
+        shard_key = await self._shard_key()
+        for index in existing:
+            name = index["name"]
+            if name in self._declared_indexes:
+                continue
+            if shard_key and list(index["key"])[: len(shard_key)] == shard_key:
+                continue
+            self.log.info(f"Dropping undeclared index {name} of {self.resource_type}")
+            try:
+                await self.coll.drop_index(name)
+            except pymongo.errors.PyMongoError as e:
+                self.log.error(
+                    f"Failed to drop index {name} of {self.resource_type}: {e}"
+                )
+
+    async def _shard_key(self) -> Optional[list[str]]:
+        try:
+            collection = await self.coll.database.client["config"][
+                "collections"
+            ].find_one({"_id": self.coll.full_name}, projection={"key": 1})
+        except pymongo.errors.PyMongoError:
+            return None
+        if not collection or not collection.get("key"):
+            return None
+        return list(collection["key"])
 
     async def _migrate(self) -> None:
         self.log.info(f"Checking for migrations for {self.resource_type}")
@@ -321,6 +359,7 @@ class CrudMongo(
     ) -> None:
         if ttl_seconds is None:
             return
+        self._declared_indexes.add(index_name)
 
         indexes = await self.coll.list_indexes().to_list(length=None)
         existing_index = None
@@ -435,73 +474,158 @@ class CrudMongo(
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
     ) -> dict:
+        skip = 0
+        if isinstance(page, int) and page and limit:
+            skip = self._pagination_skip(page, limit)
+        index = self._sort_index(query, sort) if sort and sort_order else None
+        projection = self._projection(fields)
         try:
-            count, result = await asyncio.gather(
-                self._coll.count_documents(filter=query),
-                self._search_page(query, fields, sort, sort_order, page, limit),
-            )
+            if index and limit and skip >= REVERSE_PAGE_MIN_SKIP:
+                count = await self._coll.count_documents(filter=query)
+                result = await self._search_from_end(
+                    query, projection, sort, sort_order, skip, limit, index, count
+                )
+            else:
+                count, result = await asyncio.gather(
+                    self._coll.count_documents(filter=query),
+                    self._search_page(
+                        query, projection, sort, sort_order, skip, limit, index
+                    ),
+                )
             return self._format_multi(result, count=count)
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError
 
+    async def _search_from_end(
+        self,
+        query: dict,
+        projection: typing.Optional[dict],
+        sort: str,
+        sort_order: str,
+        skip: int,
+        limit: int,
+        index: dict,
+        count: int,
+    ) -> list:
+        if skip >= count:
+            return []
+        reverse_skip = max(count - skip - limit, 0)
+        if reverse_skip >= skip:
+            return await self._search_page(
+                query, projection, sort, sort_order, skip, limit, index
+            )
+        reverse_order = "descending" if sort_order == "ascending" else "ascending"
+        reverse_limit = min(limit, count - skip)
+        try:
+            result = await self._search_cursor(
+                query,
+                projection,
+                sort,
+                reverse_order,
+                reverse_skip,
+                reverse_limit,
+                index,
+            ).to_list(reverse_limit)
+        except pymongo.errors.OperationFailure as err:
+            self._log_hint_failure(index, err)
+            return await self._search_cursor(
+                query, projection, sort, sort_order, skip, limit, None
+            ).to_list(limit)
+        result.reverse()
+        return result
+
     async def _search_page(
         self,
         query: dict,
-        fields: typing.Optional[list],
+        projection: typing.Optional[dict],
         sort: typing.Optional[str],
         sort_order: typing.Optional[str],
-        page: typing.Optional[int],
+        skip: int,
         limit: typing.Optional[int],
+        index: typing.Optional[dict],
     ) -> list:
-        hint = self._sort_hint(query, sort) if sort and sort_order else None
         try:
             return await self._search_cursor(
-                query, fields, sort, sort_order, page, limit, hint
+                query, projection, sort, sort_order, skip, limit, index
             ).to_list(limit)
         except pymongo.errors.OperationFailure as err:
-            if not hint:
+            if not index:
                 raise
-            self.log.warning(f"search with index hint {hint} failed, retrying: {err}")
+            self._log_hint_failure(index, err)
             return await self._search_cursor(
-                query, fields, sort, sort_order, page, limit, None
+                query, projection, sort, sort_order, skip, limit, None
             ).to_list(limit)
+
+    def _log_hint_failure(self, index: dict, err: Exception) -> None:
+        self.log.warning(
+            f"search with index hint {index['name']} failed, retrying without: {err}"
+        )
 
     def _search_cursor(
         self,
         query: dict,
-        fields: typing.Optional[list],
+        projection: typing.Optional[dict],
         sort: typing.Optional[str],
         sort_order: typing.Optional[str],
-        page: typing.Optional[int],
+        skip: int,
         limit: typing.Optional[int],
-        hint: typing.Optional[str],
+        index: typing.Optional[dict],
     ):
-        cursor = self._coll.find(filter=query, projection=self._projection(fields))
+        cursor = self._coll.find(filter=query, projection=projection)
         if sort and sort_order:
-            cursor.sort(self._sort(sort=sort, sort_order=sort_order))
-        if hint:
-            cursor.hint(hint)
-        if isinstance(page, int) and page and limit:
-            cursor.skip(self._pagination_skip(page, limit))
+            cursor.sort(self._sort_spec(sort, sort_order, index))
+        if index:
+            cursor.hint(index["name"])
+        if skip:
+            cursor.skip(skip)
         if limit:
             cursor.limit(limit)
         return cursor
 
-    def _sort_hint(self, query: dict, sort: str) -> typing.Optional[str]:
+    def _sort_spec(
+        self, sort: str, sort_order: str, index: typing.Optional[dict]
+    ) -> list:
+        direction = (
+            pymongo.ASCENDING if sort_order == "ascending" else pymongo.DESCENDING
+        )
+        spec = [(sort, direction)]
+        tiebreaker = self._sort_tiebreaker
+        if not tiebreaker or sort == tiebreaker:
+            return spec
+        if index is None:
+            spec.append((tiebreaker, direction))
+            return spec
+        keys = index["key"]
+        names = list(keys)
+        position = names.index(sort) + 1
+        if position < len(names) and names[position] == tiebreaker:
+            spec.append((tiebreaker, direction * keys[sort] * keys[tiebreaker]))
+        return spec
+
+    def _sort_index(self, query: dict, sort: str) -> typing.Optional[dict]:
         pinned = {field for field, value in query.items() if self._is_equality(value)}
         best = None
-        for index in self._indices:
-            document = index.document
-            if document.get("sparse") or "partialFilterExpression" in document:
+        for model in self._indices:
+            document = model.document
+            scope = self._sort_scope(document, sort)
+            if scope is None or not set(scope) <= pinned or (not scope and query):
                 continue
-            keys = list(document["key"])
-            scope = keys[:-1]
-            if keys[-1] != sort or not scope or not set(scope) <= pinned:
-                continue
-            if best is None or len(scope) > len(best[0]):
-                best = (scope, document["name"])
+            rank = (len(scope), -len(document["key"]))
+            if best is None or rank > best[0]:
+                best = (rank, document)
         return best[1] if best else None
+
+    def _sort_scope(self, document: dict, sort: str) -> typing.Optional[list]:
+        if document.get("sparse") or "partialFilterExpression" in document:
+            return None
+        keys = document["key"]
+        if any(direction not in (1, -1) for direction in keys.values()):
+            return None
+        names = list(keys)
+        if sort not in names:
+            return None
+        return names[: names.index(sort)]
 
     @classmethod
     def _is_equality(cls, value) -> bool:

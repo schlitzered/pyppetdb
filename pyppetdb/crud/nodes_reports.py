@@ -124,7 +124,8 @@ class CrudNodesReports(CrudMongo):
                     [("report.status", pymongo.ASCENDING)], name="idx_report_status"
                 ),
                 pymongo.IndexModel(
-                    [("node_id", pymongo.ASCENDING)], name="idx_node_id"
+                    [("node_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_node_id_report_id",
                 ),
                 pymongo.IndexModel(
                     [("report.hash", pymongo.ASCENDING)], name="idx_report_hash"

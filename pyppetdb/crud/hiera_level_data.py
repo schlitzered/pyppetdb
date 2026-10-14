@@ -55,11 +55,6 @@ class CrudHieraLevelData(CrudMongo):
                 unique=True,
             )
         )
-        self._indices.append(
-            pymongo.IndexModel(
-                [("key", pymongo.ASCENDING)],
-            )
-        )
         self._formatter = HieraLevelFormatter()
 
     async def _create_index(self) -> None:
