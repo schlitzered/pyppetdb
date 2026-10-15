@@ -77,6 +77,16 @@ class CrudNodesCatalogs(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
+                    [("created_no_report_ttl", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.catalogNoReportTtl,
+                    name="ttl_catalog_no_report",
+                ),
+                pymongo.IndexModel(
+                    [("created", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.ttl,
+                    name="ttl_catalog_history",
+                ),
+                pymongo.IndexModel(
                     [
                         ("placement", pymongo.ASCENDING),
                         ("node_id", pymongo.ASCENDING),
@@ -94,20 +104,6 @@ class CrudNodesCatalogs(CrudMongo):
                     [("catalog.status", pymongo.ASCENDING)], name="idx_catalog_status"
                 ),
             ]
-        )
-
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        await self._create_ttl_index(
-            field="created_no_report_ttl",
-            ttl_seconds=self.config.app.main.storeHistory.catalogNoReportTtl,
-            index_name="ttl_catalog_no_report",
-        )
-
-        await self._create_ttl_index(
-            field="created",
-            ttl_seconds=self.config.app.main.storeHistory.ttl,
-            index_name="ttl_catalog_history",
         )
 
     def encode_content(self, catalog: dict) -> bytes:

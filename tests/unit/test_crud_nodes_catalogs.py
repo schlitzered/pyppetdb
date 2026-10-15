@@ -20,6 +20,17 @@ from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 
 
+def _ttl(crud) -> dict:
+    return {
+        index.document["name"]: (
+            dict(index.document["key"]),
+            index.document["expireAfterSeconds"],
+        )
+        for index in crud._indices
+        if "expireAfterSeconds" in index.document
+    }
+
+
 class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -30,6 +41,21 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
         self.protector = NodesDataProtector("unit-test-key", self.log)
         self.crud = CrudNodesCatalogs(
             self.mock_config, self.log, self.mock_coll, self.mock_redactor, self.protector
+        )
+
+    def test_history_ttls_follow_the_config(self):
+        config = MagicMock()
+        config.app.main.storeHistory.ttl = 3600
+        config.app.main.storeHistory.catalogNoReportTtl = 60
+        crud = CrudNodesCatalogs(
+            config, self.log, self.mock_coll, self.mock_redactor, self.protector
+        )
+        self.assertEqual(
+            _ttl(crud),
+            {
+                "ttl_catalog_history": ({"created": 1}, 3600),
+                "ttl_catalog_no_report": ({"created_no_report_ttl": 1}, 60),
+            },
         )
 
     async def test_delete_all_from_node(self):

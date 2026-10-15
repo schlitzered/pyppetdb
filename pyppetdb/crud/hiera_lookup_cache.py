@@ -87,7 +87,7 @@ class CrudHieraLookupCache(CrudMongo):
             "facts": self._normalize_facts(facts),
             "result": result,
         }
-        await self.coll.update_one(filter=query, update={"$set": payload}, upsert=True)
+        await self._update(query=query, payload=payload, fields=[], upsert=True, fetch=False)
 
     async def delete_by_key_and_facts(
         self,

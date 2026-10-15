@@ -24,7 +24,6 @@ import pymongo.errors
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
-from pyppetdb.crud.migrations import Migration
 from pyppetdb.crud.watcher import CollectionWatcher
 from pyppetdb.errors import BackendError
 from pyppetdb.errors import ResourceNotFound
@@ -121,10 +120,16 @@ class CertRevocationWatcher:
 
 
 class CrudCACertificates(CrudMongo):
+    schema_version = 2
+
     def __init__(
         self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection
     ):
         super().__init__(config, log, coll, schema_model=CACertificateGet)
+        self._migrations = {
+            1: self.migrate_1,
+            2: self.migrate_2,
+        }
         self._revocation_watcher = CertRevocationWatcher(log=log, coll=coll)
         self._indices.extend(
             [
@@ -200,10 +205,12 @@ class CrudCACertificates(CrudMongo):
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")
         return str(doc["_id"]), doc.get("ca_id")
 
-    def _migrations(self) -> list[Migration]:
-        return [self._add_request_expiry]
+    async def migrate_1(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        return None
 
-    async def _add_request_expiry(
+    async def migrate_2(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
         ttl_ms = self.config.ca.certificateRequestTtlDays * 86400 * 1000

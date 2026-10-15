@@ -112,6 +112,11 @@ class CrudNodesReports(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
+                    [("created", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.ttl,
+                    name="ttl_report_history",
+                ),
+                pymongo.IndexModel(
                     [
                         ("placement", pymongo.ASCENDING),
                         ("node_id", pymongo.ASCENDING),
@@ -177,14 +182,6 @@ class CrudNodesReports(CrudMongo):
                     name="idx_node_id_disabled",
                 ),
             ]
-        )
-
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        await self._create_ttl_index(
-            field="created",
-            ttl_seconds=self.config.app.main.storeHistory.ttl,
-            index_name="ttl_report_history",
         )
 
     async def set_node_disabled(self, node_id: str, disabled: bool) -> int:
@@ -424,7 +421,7 @@ class CrudNodesReports(CrudMongo):
                 update={"$set": {"report.latest": False}},
                 session=session,
             )
-        await self.coll.insert_one(data, session=session)
+        await self._insert_one(data, session=session)
         return latest
 
     async def update_placement(

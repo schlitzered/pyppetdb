@@ -56,18 +56,8 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIsNone(result)
-        self.mock_coll.insert_one.assert_awaited_once_with({"id": "r1"})
+        self.mock_coll.insert_one.assert_awaited_once_with({"id": "r1", "_version": 0})
         self.crud._get_by_obj_id.assert_not_awaited()
-
-    async def test_create_does_not_stamp_a_version(self):
-        self.mock_coll.insert_one = AsyncMock(
-            return_value=MagicMock(inserted_id="obj1")
-        )
-        payload = {"id": "r1"}
-
-        await self.crud._create(payload=payload, fields=["id"], fetch=False)
-
-        self.assertEqual(payload, {"id": "r1"})
 
     async def test_create_duplicate(self):
         self.mock_coll.insert_one = AsyncMock(
@@ -642,11 +632,14 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         existing = self.mock_coll.list_indexes.return_value.to_list.return_value
         existing[-1]["expireAfterSeconds"] = 60
         self._shard_key(None)
+        self.crud._indices.append(
+            pymongo.IndexModel(
+                [("created", 1)], expireAfterSeconds=60, name="ttl_created"
+            )
+        )
         self.mock_coll.create_indexes = AsyncMock()
-        self.mock_coll.create_index = AsyncMock()
 
         await self.crud._create_index()
-        await self.crud._create_ttl_index("created", 60, "ttl_created")
         await self.crud._drop_undeclared_indexes()
 
         self.assertEqual(
@@ -682,13 +675,6 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.mock_coll.drop_index.await_count, 2)
 
-    async def test_disabled_ttl_index_is_not_declared(self):
-        self.mock_coll.create_index = AsyncMock()
-        for ttl_seconds in (None, 0):
-            await self.crud._create_ttl_index("created", ttl_seconds, "ttl_created")
-        self.assertNotIn("ttl_created", self.crud._declared_indexes)
-        self.mock_coll.create_index.assert_not_awaited()
-
     async def test_init_drops_undeclared_indexes_after_sync(self):
         calls = []
         self.crud._setup_schema_validation = AsyncMock()
@@ -709,38 +695,258 @@ class TestCrudCommon(unittest.IsolatedAsyncioTestCase):
         result = await self.crud._update({"id": "r1"}, {"val": "new"}, fields=[])
         self.assertEqual(result["val"], "new")
 
+    async def test_update_upsert_without_fetch(self):
+        self.mock_coll.update_one = AsyncMock()
+        result = await self.crud._update(
+            {"id": "r1"}, {"val": "new"}, fields=[], upsert=True, fetch=False
+        )
+        self.assertEqual(result, {})
+        self.mock_coll.update_one.assert_called_once_with(
+            filter={"id": "r1"},
+            update={"$set": {"val": "new"}, "$setOnInsert": {"_version": 0}},
+            upsert=True,
+        )
+
     async def test_update_not_found(self):
         self.mock_coll.find_one_and_update = AsyncMock(return_value=None)
         with self.assertRaises(ResourceNotFound):
             await self.crud._update({"id": "r1"}, {"val": "new"}, fields=[])
 
-    async def test_create_ttl_index(self):
-        self.mock_coll.list_indexes.return_value.to_list = AsyncMock(return_value=[])
-        self.mock_coll.create_index = AsyncMock()
 
-        await self.crud._create_ttl_index("field1", 3600, "idx1")
-        self.mock_coll.create_index.assert_called_once()
+class _Transaction:
+    def __init__(self, session):
+        self._session = session
 
-    async def test_create_ttl_index_exists_matching(self):
-        self.mock_coll.list_indexes.return_value.to_list = AsyncMock(
-            return_value=[
-                {"name": "idx1", "expireAfterSeconds": 3600, "key": {"field1": 1}}
-            ]
+    async def __aenter__(self):
+        self._session.transactions += 1
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _Session:
+    def __init__(self):
+        self.transactions = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def start_transaction(self):
+        return _Transaction(self)
+
+
+class _Migrating(CrudMongo):
+    schema_version = 4
+
+    def __init__(self, config, log, coll):
+        super().__init__(config, log, coll)
+        self._migrations = {3: self.migrate_3, 4: self.migrate_4}
+
+    async def migrate_3(self, session=None):
+        return None
+
+    async def migrate_4(self, session=None):
+        return None
+
+
+class TestCrudMongoMigrate(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.log = logging.getLogger("test")
+        self.coll = MagicMock()
+        self.coll.name = "things"
+        self.coll.find_one = AsyncMock(return_value={"_id": "x"})
+        self.coll.update_many = AsyncMock()
+        self.session = _Session()
+        self.coll.database.client.start_session = AsyncMock(return_value=self.session)
+        self.calls = []
+
+    def _migration(self, name, error=None):
+        async def migration(session=None):
+            self.calls.append((name, session))
+            if error is not None and session is not None:
+                raise error
+
+        migration.__name__ = name
+        return migration
+
+    async def _run(self, schema_version, migrations):
+        crud = CrudMongo(MagicMock(), self.log, self.coll)
+        crud.schema_version = schema_version
+        crud._migrations = migrations
+        await crud._migrate()
+
+    def _stamps(self):
+        return [
+            (call.args[0], call.args[1], call.kwargs["session"])
+            for call in self.coll.update_many.await_args_list
+        ]
+
+    async def test_runs_pending_migrations_in_version_order_and_stamps_them(self):
+        migrations = {3: self._migration("migrate_3"), 2: self._migration("migrate_2")}
+
+        await self._run(3, migrations)
+
+        self.assertEqual(
+            self.calls, [("migrate_2", self.session), ("migrate_3", self.session)]
         )
-        self.mock_coll.create_index = AsyncMock()
-
-        await self.crud._create_ttl_index("field1", 3600, "idx1")
-        self.mock_coll.create_index.assert_not_called()
-
-    async def test_create_ttl_index_exists_mismatch(self):
-        self.mock_coll.list_indexes.return_value.to_list = AsyncMock(
-            return_value=[
-                {"name": "idx1", "expireAfterSeconds": 1800, "key": {"field1": 1}}
-            ]
+        self.assertEqual(self.session.transactions, 2)
+        self.assertEqual(
+            self._stamps(),
+            [
+                ({"_version": 1}, {"$set": {"_version": 2}}, self.session),
+                ({"_version": 2}, {"$set": {"_version": 3}}, self.session),
+            ],
         )
-        self.mock_coll.drop_index = AsyncMock()
-        self.mock_coll.create_index = AsyncMock()
 
-        await self.crud._create_ttl_index("field1", 3600, "idx1")
-        self.mock_coll.drop_index.assert_called_once_with("idx1")
-        self.mock_coll.create_index.assert_called_once()
+    async def test_skips_versions_without_older_documents(self):
+        self.coll.find_one = AsyncMock(side_effect=[None, {"_id": "x"}])
+        migrations = {2: self._migration("migrate_2"), 3: self._migration("migrate_3")}
+
+        await self._run(3, migrations)
+
+        self.assertEqual([name for name, _ in self.calls], ["migrate_3"])
+        self.assertEqual(
+            [call.args[0] for call in self.coll.find_one.await_args_list],
+            [{"_version": 1}, {"_version": 2}],
+        )
+
+    async def test_without_migrations_nothing_is_read(self):
+        await self._run(0, {})
+
+        self.coll.find_one.assert_not_awaited()
+        self.coll.update_many.assert_not_awaited()
+
+    async def test_migrations_must_run_without_gaps_up_to_the_schema_version(self):
+        for schema_version, versions in (
+            (3, [2, 5]),
+            (4, [2, 4]),
+            (3, [2]),
+            (1, [0, 1]),
+        ):
+            migrations = {v: self._migration(f"migrate_{v}") for v in versions}
+            with self.assertRaises(ValueError, msg=f"{schema_version} {versions}"):
+                await self._run(schema_version, migrations)
+        self.assertEqual(self.calls, [])
+
+    async def test_deleted_old_migrations_are_allowed(self):
+        migrations = {3: self._migration("migrate_3")}
+
+        await self._run(3, migrations)
+
+        self.assertEqual(self._stamps(), [({"_version": 2}, {"$set": {"_version": 3}}, self.session)])
+
+    async def test_first_migration_lifts_unversioned_documents(self):
+        migrations = {1: self._migration("migrate_1")}
+
+        await self._run(1, migrations)
+
+        self.assertEqual(
+            self.coll.find_one.await_args.args[0], {"_version": {"$in": [0, None]}}
+        )
+        self.assertEqual(
+            self._stamps(),
+            [({"_version": {"$in": [0, None]}}, {"$set": {"_version": 1}}, self.session)],
+        )
+
+    async def test_failing_migration_runs_once_and_is_not_stamped(self):
+        error = pymongo.errors.OperationFailure("boom", code=11000)
+        migrations = {2: self._migration("migrate_2", error=error)}
+
+        with self.assertRaises(pymongo.errors.OperationFailure):
+            await self._run(2, migrations)
+
+        self.assertEqual(self.calls, [("migrate_2", self.session)])
+        self.coll.update_many.assert_not_awaited()
+
+
+class TestCrudMongoSchemaVersion(unittest.IsolatedAsyncioTestCase):
+    def _crud(self, cls):
+        coll = MagicMock()
+        coll.name = "things"
+        coll.insert_one = AsyncMock(return_value=MagicMock(inserted_id="obj1"))
+        coll.find_one_and_update = AsyncMock(return_value={"id": "a"})
+        return cls(MagicMock(), logging.getLogger("test"), coll), coll
+
+    async def test_unversioned_crud_stamps_version_zero_and_has_no_index(self):
+        crud, coll = self._crud(CrudMongo)
+
+        await crud._create(payload={"id": "a"}, fields=["id"], fetch=False)
+        await crud._update({"id": "a"}, {"x": 1}, fields=["id"], upsert=True)
+
+        self.assertEqual(coll.insert_one.await_args.args[0], {"id": "a", "_version": 0})
+        self.assertEqual(
+            coll.find_one_and_update.await_args.kwargs["update"]["$setOnInsert"],
+            {"_version": 0},
+        )
+        self.assertEqual(crud._indices, [])
+
+    async def test_bulk_and_upsert_helpers_stamp_the_version(self):
+        crud, coll = self._crud(_Migrating)
+        coll.insert_many = AsyncMock()
+        coll.find_one_and_update = AsyncMock(return_value={"id": "a"})
+
+        await crud._insert_many([{"id": "a"}, {"id": "b"}], ordered=False)
+        await crud._update(
+            {"id": "a"},
+            {"x": 1},
+            fields=[],
+            upsert=True,
+            set_on_insert={"since": 1},
+            fetch=False,
+        )
+
+        coll.insert_many.assert_awaited_once_with(
+            [{"id": "a", "_version": 4}, {"id": "b", "_version": 4}], ordered=False
+        )
+        coll.find_one_and_update.assert_awaited_once_with(
+            filter={"id": "a"},
+            update={"$set": {"x": 1}, "$setOnInsert": {"since": 1, "_version": 4}},
+            projection={},
+            return_document=1,
+            upsert=True,
+        )
+
+    async def test_versioned_crud_stamps_created_documents(self):
+        crud, coll = self._crud(_Migrating)
+
+        await crud._create(payload={"id": "a"}, fields=["id"], fetch=False)
+
+        self.assertEqual(coll.insert_one.await_args.args[0], {"id": "a", "_version": 4})
+        self.assertEqual(
+            [index.document for index in crud._indices],
+            [{"key": {"_version": 1}, "name": "idx_schema_version"}],
+        )
+
+    async def test_versioned_crud_stamps_only_the_insert_of_an_upsert(self):
+        crud, coll = self._crud(_Migrating)
+        set_on_insert = {"created": "now"}
+
+        await crud._update(
+            {"id": "a"},
+            {"x": 1},
+            fields=["id"],
+            upsert=True,
+            set_on_insert=set_on_insert,
+        )
+        upserted = coll.find_one_and_update.await_args.kwargs["update"]
+        await crud._update({"id": "a"}, {"x": 2}, fields=["id"])
+        updated = coll.find_one_and_update.await_args.kwargs["update"]
+
+        self.assertEqual(upserted["$setOnInsert"], {"created": "now", "_version": 4})
+        self.assertEqual(upserted["$set"], {"x": 1})
+        self.assertEqual(set_on_insert, {"created": "now"})
+        self.assertNotIn("$setOnInsert", updated)
+
+    async def test_migrate_hands_the_numbered_methods_to_the_migrator(self):
+        crud, coll = self._crud(_Migrating)
+        coll.find_one = AsyncMock(return_value=None)
+
+        await crud._migrate()
+
+        self.assertEqual(
+            [call.args[0] for call in coll.find_one.await_args_list],
+            [{"_version": 2}, {"_version": 3}],
+        )

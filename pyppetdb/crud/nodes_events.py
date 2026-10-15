@@ -35,6 +35,11 @@ class CrudNodesEvents(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
+                    [("created", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.ttl,
+                    name="ttl_event_history",
+                ),
+                pymongo.IndexModel(
                     [("node_id", pymongo.ASCENDING), ("timestamp", pymongo.ASCENDING)],
                     name="idx_node_id_timestamp",
                 ),
@@ -74,17 +79,9 @@ class CrudNodesEvents(CrudMongo):
             ]
         )
 
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        await self._create_ttl_index(
-            field="created",
-            ttl_seconds=self.config.app.main.storeHistory.ttl,
-            index_name="ttl_event_history",
-        )
-
     async def insert_for_report(self, docs: List[dict]) -> None:
         if docs:
-            await self._coll.insert_many(docs, ordered=False)
+            await self._insert_many(docs, ordered=False)
 
     async def set_latest(self, node_id: str, latest: bool) -> None:
         await self._coll.update_many(

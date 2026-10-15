@@ -61,8 +61,8 @@ Controls how historical catalogs/reports are retained.
 |----------|---------|-------------|
 | `app_main_storeHistory_catalog` | `true` | Store historical catalogs. |
 | `app_main_storeHistory_catalogUnchanged` | `false` | Also store catalogs that did not change. |
-| `app_main_storeHistory_catalogNoReportTtl` | `3600` | TTL (seconds) for a stored catalog that never received a matching report. `0` disables it. |
-| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds) for stored history (default 90 days); `0` disables it and keeps history forever. Reports and their events expire by receive time; reports stored before the `created` field existed are never expired. |
+| `app_main_storeHistory_catalogNoReportTtl` | `3600` | TTL (seconds, > 0) for a stored catalog that never received a matching report. |
+| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds, > 0) for stored history (default 90 days). Reports and their events expire by receive time; reports stored before the `created` field existed are never expired. |
 
 ## Puppet Proxy (`app_puppet_`)
 
@@ -75,7 +75,7 @@ Serves `/puppet` and `/puppet-ca`. Binding and TLS are configured via `app_main_
 | `app_puppet_timeout` | `60` | Upstream request timeout (seconds). |
 | `app_puppet_trustedCns` | `[]` | JSON list of trusted client CNs allowed for privileged proxy operations. |
 | `app_puppet_catalogCache` | `true` | Enable catalog caching. |
-| `app_puppet_catalogCacheTTL` | `86400` | TTL (seconds) for cached catalogs. |
+| `app_puppet_catalogCacheTTL` | `86400` | TTL (seconds, > 0) for cached catalogs. |
 | `app_puppet_catalogCacheFacts` | `[]` | JSON list of facts used for granular, fact-based cache invalidation. |
 
 ## PuppetDB Proxy (`app_puppetdb_`)
@@ -120,13 +120,13 @@ pyppetdb's own database as well. The switch only decides who answers *queries*.
 | `ca_autoSign` | `false` | Automatically sign incoming certificate requests. |
 | `ca_autoSignNodeIfExists` | `false` | Auto-sign only if the node already exists in the database. |
 | `ca_certificateValidityDays` | `365` | Validity period (days) for issued certificates. |
-| `ca_certificateRequestTtlDays` | `30` | Pending certificate requests are deleted this many days after their last submission. |
+| `ca_certificateRequestTtlDays` | `30` | Pending certificate requests are deleted this many days (> 0) after their last submission. |
 | `ca_concurrentWorkers` | `5` | Number of concurrent workers for CA signing operations. |
 | `ca_enableCrlRefresh` | `true` | Run the background CRL refresh worker. |
 | `ca_crlRefreshInterval` | `3600` | Interval (seconds) between CRL refresh runs. |
 | `ca_crlValidityDays` | `30` | Validity period (days) of generated CRLs. |
 | `ca_verifyCertificateRegistration` | `true` | Require client certificates presented over mTLS to exist (signed) in the database. |
-| `ca_verifyCertificateRegistrationCacheTtl` | `300` | TTL (seconds) of the certificate-registration verification cache. |
+| `ca_verifyCertificateRegistrationCacheTtl` | `300` | TTL (seconds, > 0) of the certificate-registration verification cache. |
 | `ca_verifyCertificateRegistrationCacheMaxsize` | `1024` | Maximum number of entries in that cache. |
 
 ## Jobs (`jobs_`)

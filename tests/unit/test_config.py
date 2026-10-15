@@ -13,10 +13,27 @@
 # limitations under the License.
 
 import unittest
-from pyppetdb.config import ConfigAppFacts, ConfigAppPuppet
+from pyppetdb.config import ConfigAppFacts
+from pyppetdb.config import ConfigAppPuppet
+from pyppetdb.config import ConfigAppStoreHistory
+from pyppetdb.config import ConfigCA
 
 
 class TestConfigUnit(unittest.TestCase):
+    def test_ttls_must_be_positive(self):
+        ttls = (
+            (ConfigAppStoreHistory, "ttl", 7776000),
+            (ConfigAppStoreHistory, "catalogNoReportTtl", 3600),
+            (ConfigAppPuppet, "catalogCacheTTL", 86400),
+            (ConfigCA, "certificateRequestTtlDays", 30),
+            (ConfigCA, "verifyCertificateRegistrationCacheTtl", 300),
+        )
+        for model, field, default in ttls:
+            self.assertEqual(getattr(model(), field), default, field)
+            for value in (0, -1, None):
+                with self.assertRaises(Exception, msg=f"{field}={value}"):
+                    model(**{field: value})
+
     def test_parse_index_deny(self):
         config = ConfigAppFacts(indexDeny='["role", "stage"]')
         self.assertEqual(config.indexDeny, ["role", "stage"])

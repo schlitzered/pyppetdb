@@ -57,9 +57,9 @@ class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
             key_id="k1", facts={"os": "linux"}, merge=True, result={"foo": "bar"}
         )
         self.mock_coll.update_one.assert_called_once()
-        call_args = self.mock_coll.update_one.call_args[1]
-        self.assertEqual(call_args["update"]["$set"]["result"], {"foo": "bar"})
-        self.assertTrue(call_args["upsert"])
+        kwargs = self.mock_coll.update_one.call_args[1]
+        self.assertEqual(kwargs["update"]["$set"]["result"], {"foo": "bar"})
+        self.assertTrue(kwargs["upsert"])
 
     async def test_delete_by_key_and_facts(self):
         self.mock_coll.delete_many = AsyncMock()
