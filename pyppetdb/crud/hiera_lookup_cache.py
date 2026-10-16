@@ -20,6 +20,7 @@ import pymongo
 
 from pyppetdb.config import Config
 from pyppetdb.crud.common import CrudMongo
+from pyppetdb.errors import ResourceNotFound
 
 
 class CrudHieraLookupCache(CrudMongo):
@@ -64,10 +65,10 @@ class CrudHieraLookupCache(CrudMongo):
             "merge": merge,
             "facts": self._normalize_facts(facts),
         }
-        result = await self.coll.find_one(filter=query)
-        if result is None:
+        try:
+            return await self._get(query=query, fields=["result"])
+        except ResourceNotFound:
             return None
-        return self._format(result)
 
     async def set_cached(
         self,
@@ -87,7 +88,7 @@ class CrudHieraLookupCache(CrudMongo):
             "facts": self._normalize_facts(facts),
             "result": result,
         }
-        await self.coll.update_one(filter=query, update={"$set": payload}, upsert=True)
+        await self._update(query=query, payload=payload, fields=[], upsert=True, fetch=False)
 
     async def delete_by_key_and_facts(
         self,

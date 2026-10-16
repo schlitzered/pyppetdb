@@ -174,14 +174,7 @@ class ControllerApiV1NodesGroups:
         query = self.crud_nodes_groups.compile_filters_from_node_group(
             node_group=node_group
         )
-        nodes = await self.crud_nodes.search(
-            query=query,
-            fields=["id"],
-        )
-        result = list()
-        for node in nodes.result:
-            result.append(node.id)
-        node_group.nodes = result
+        node_group.nodes = await self.crud_nodes.ids(query=query)
 
     async def get(
         self,

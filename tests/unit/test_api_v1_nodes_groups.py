@@ -41,6 +41,18 @@ class TestApiV1NodesGroupsUnit(unittest.IsolatedAsyncioTestCase):
             crud_teams=self.mock_crud_teams,
         )
 
+    async def test_add_nodes_from_filter_uses_node_ids(self):
+        self.mock_crud_groups.compile_filters_from_node_group = MagicMock(
+            return_value={"$or": []}
+        )
+        self.mock_crud_nodes.ids = AsyncMock(return_value=["n1", "n2"])
+        node_group = MagicMock()
+
+        await self.controller.add_nodes_from_filter(node_group=node_group)
+
+        self.mock_crud_nodes.ids.assert_awaited_once_with(query={"$or": []})
+        self.assertEqual(node_group.nodes, ["n1", "n2"])
+
     async def test_create_group_calls_upsert(self):
         self.mock_authorize.require_perm = AsyncMock()
         self.controller._upsert_data = AsyncMock(return_value=MagicMock())

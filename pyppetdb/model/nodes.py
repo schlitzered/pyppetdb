@@ -59,6 +59,7 @@ filter_list = set(typing_get_args(filter_literal))
 
 sort_literal = Literal[
     "id",
+    "environment",
     "change_catalog",
     "change_facts",
     "change_last",

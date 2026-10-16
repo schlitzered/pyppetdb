@@ -15,7 +15,7 @@
 import typing
 import json
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, PositiveInt, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log_levels = typing.Literal[
@@ -24,12 +24,11 @@ log_levels = typing.Literal[
 
 
 class ConfigAppFacts(BaseModel):
-    index: typing.Optional[typing.List[str]] = None
     indexMaxValueLen: int = 256
     indexDepth: int = 3
     indexDeny: typing.List[str] = []
 
-    @field_validator("index", "indexDeny", mode="before")
+    @field_validator("indexDeny", mode="before")
     @classmethod
     def parse_index(cls, v):
         if isinstance(v, str):
@@ -46,8 +45,8 @@ class ConfigAppSSL(BaseModel):
 class ConfigAppStoreHistory(BaseModel):
     catalog: typing.Optional[bool] = True
     catalogUnchanged: typing.Optional[bool] = False
-    catalogNoReportTtl: typing.Optional[int] = 3600
-    ttl: typing.Optional[int] = 7776000
+    catalogNoReportTtl: PositiveInt = 3600
+    ttl: PositiveInt = 7776000
 
 
 class ConfigAppHiera(BaseModel):
@@ -76,7 +75,7 @@ class ConfigAppPuppet(BaseModel):
     enable: bool = True
     catalogCache: typing.Optional[bool] = True
     catalogCacheFacts: typing.Optional[list[str]] = []
-    catalogCacheTTL: typing.Optional[int] = 86400
+    catalogCacheTTL: PositiveInt = 86400
     serverurl: typing.Optional[str] = None
     timeout: int = 60
     trustedCns: typing.Optional[list[str]] = []
@@ -197,10 +196,10 @@ class ConfigCA(BaseModel):
     autoSign: bool = False
     autoSignNodeIfExists: bool = False
     certificateValidityDays: int = 365
-    certificateRequestTtlDays: int = 30
+    certificateRequestTtlDays: PositiveInt = 30
     concurrentWorkers: int = 5
     verifyCertificateRegistration: bool = True
-    verifyCertificateRegistrationCacheTtl: int = 300
+    verifyCertificateRegistrationCacheTtl: PositiveInt = 300
     verifyCertificateRegistrationCacheMaxsize: int = 1024
 
 

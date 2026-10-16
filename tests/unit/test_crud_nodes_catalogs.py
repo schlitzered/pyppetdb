@@ -20,6 +20,17 @@ from pyppetdb.crud.nodes_catalog_cache import NodesDataProtector
 from pyppetdb.crud.nodes_catalogs import CrudNodesCatalogs
 
 
+def _ttl(crud) -> dict:
+    return {
+        index.document["name"]: (
+            dict(index.document["key"]),
+            index.document["expireAfterSeconds"],
+        )
+        for index in crud._indices
+        if "expireAfterSeconds" in index.document
+    }
+
+
 class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.log = logging.getLogger("test")
@@ -32,6 +43,21 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
             self.mock_config, self.log, self.mock_coll, self.mock_redactor, self.protector
         )
 
+    def test_history_ttls_follow_the_config(self):
+        config = MagicMock()
+        config.app.main.storeHistory.ttl = 3600
+        config.app.main.storeHistory.catalogNoReportTtl = 60
+        crud = CrudNodesCatalogs(
+            config, self.log, self.mock_coll, self.mock_redactor, self.protector
+        )
+        self.assertEqual(
+            _ttl(crud),
+            {
+                "ttl_catalog_history": ({"created": 1}, 3600),
+                "ttl_catalog_no_report": ({"created_no_report_ttl": 1}, 60),
+            },
+        )
+
     async def test_delete_all_from_node(self):
         self.mock_coll.delete_many = AsyncMock()
         await self.crud.delete_all_from_node(
@@ -39,6 +65,27 @@ class TestCrudNodesCatalogsUnit(unittest.IsolatedAsyncioTestCase):
             placement={},
         )
         self.mock_coll.delete_many.assert_called_once_with(filter={"node_id": "node1"})
+
+    async def test_create_without_result_does_not_read_back(self):
+        from datetime import datetime
+
+        from pyppetdb.model.nodes_catalogs import NodeCatalogPostInternal
+
+        now = datetime.now()
+        self.crud._create = AsyncMock(return_value=None)
+
+        result = await self.crud.create(
+            _id=now,
+            node_id="node1",
+            payload=NodeCatalogPostInternal(catalog={"resources": []}),
+            fields=[],
+            return_none=True,
+        )
+
+        self.assertIsNone(result)
+        self.assertFalse(self.crud._create.call_args.kwargs["fetch"])
+        self.assertEqual(self.crud._create.call_args.kwargs["fields"], ["id"])
+        self.assertEqual(self.crud._create.call_args.kwargs["payload"]["id"], now)
 
     async def test_create(self):
         from datetime import datetime

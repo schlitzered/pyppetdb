@@ -24,6 +24,17 @@ from pyppetdb.crud.nodes_reports import LATEST_TRANSACTION_ATTEMPTS
 from pyppetdb.model.nodes_reports import NodeReportPostInternal
 
 
+def _ttl(crud) -> dict:
+    return {
+        index.document["name"]: (
+            dict(index.document["key"]),
+            index.document["expireAfterSeconds"],
+        )
+        for index in crud._indices
+        if "expireAfterSeconds" in index.document
+    }
+
+
 class FakeTransaction:
     async def __aenter__(self):
         return self
@@ -38,6 +49,12 @@ class TestCrudNodesReportsNodeState(unittest.IsolatedAsyncioTestCase):
         self.crud = CrudNodesReports(
             MagicMock(), logging.getLogger("test"), self.coll, MagicMock()
         )
+
+    def test_history_ttl_follows_the_config(self):
+        config = MagicMock()
+        config.app.main.storeHistory.ttl = 3600
+        crud = CrudNodesReports(config, logging.getLogger("test"), self.coll, MagicMock())
+        self.assertEqual(_ttl(crud), {"ttl_report_history": ({"created": 1}, 3600)})
 
     async def test_only_touches_reports_that_disagree(self):
         self.coll.update_many = AsyncMock(
@@ -152,6 +169,23 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         stored = self.crud._create.call_args.kwargs["payload"]
         self.assertEqual(stored["report"]["status"], "changed")
 
+    async def test_create_without_result_does_not_read_back(self):
+        now = datetime.now()
+        self.crud._create = AsyncMock(return_value=None)
+
+        result = await self.crud.create(
+            _id=now,
+            node_id="node1",
+            payload=NodeReportPostInternal(report={"status": "changed"}),
+            fields=[],
+            return_none=True,
+        )
+
+        self.assertIsNone(result)
+        self.assertFalse(self.crud._create.call_args.kwargs["fetch"])
+        self.assertEqual(self.crud._create.call_args.kwargs["fields"], ["id"])
+        self.assertEqual(self.crud._create.call_args.kwargs["payload"]["id"], now)
+
     async def test_get_redacts_on_read(self):
         now = datetime.now()
         self.crud._get = AsyncMock(return_value={"id": now, "node_id": "node1"})
@@ -236,7 +270,7 @@ class TestCrudNodesReportsUnit(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(document["report"]["latest"])
         self.assertEqual(document["node_id"], "node1")
         self.assertEqual(document["id"], now)
-        self.assertEqual(document["_version"], 1)
+        self.assertEqual(document["_version"], 0)
         self.assertEqual(
             self.mock_coll.insert_one.call_args.kwargs["session"], session
         )

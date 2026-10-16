@@ -172,6 +172,13 @@ class TestCrudCACertificatesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(dict(ttl["key"]), {"request_expires": 1})
         self.assertEqual(ttl["expireAfterSeconds"], 0)
 
+    def test_schema_version_and_migrations(self):
+        self.assertEqual(self.crud.schema_version, 2)
+        self.assertEqual(
+            {version: m.__name__ for version, m in self.crud._migrations.items()},
+            {1: "migrate_1", 2: "migrate_2"},
+        )
+
     async def test_migrate_2_gives_pending_requests_an_expiry(self):
         self.crud._config.ca.certificateRequestTtlDays = 2
         self.mock_coll.update_many = AsyncMock(return_value=MagicMock(modified_count=3))

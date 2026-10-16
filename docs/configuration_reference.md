@@ -8,7 +8,7 @@ directory). Configuration is powered by Pydantic Settings.
 * **Nested delimiter:** settings map to a nested model using `_` as the delimiter, e.g.
   `app_main_port` sets `app.main.port`.
 * **List / JSON values:** list-typed settings are provided as a JSON string, e.g.
-  `app_main_facts_index=["role","stage"]`.
+  `app_main_facts_indexDeny=["mountpoints"]`.
 * **Booleans:** use `true` / `false`.
 * **Required values:** `app_secretkey` has **no default** and must be set, otherwise the process
   will not start.
@@ -37,7 +37,6 @@ A pyppetdb process always binds on the `app_main_host` / `app_main_port` pair an
 | `app_main_ssl_cert` | *(unset)* | Path to the server certificate (PEM). Required to enable TLS. |
 | `app_main_ssl_key` | *(unset)* | Path to the server private key (PEM). Required to enable TLS. |
 | `app_main_ssl_ca` | *(unset)* | Path to the CA bundle used to validate client certificates (enables mTLS). |
-| `app_main_facts_index` | *(unset)* | JSON list of facts that get a dedicated single-field index (`facts.<name>`). An optional fast path — every fact is already reachable through the generic `facts_index` described below. |
 | `app_main_facts_indexMaxValueLen` | `256` | Maximum character length of a fact value that is value-indexed in `facts_index`. Longer strings still appear by name, but a query for them falls back to a scan. |
 | `app_main_facts_indexDepth` | `3` | How deep into structured facts the value index reaches. `1` indexes top-level facts only; `2` also indexes the scalar leaves of a nested map under dotted paths such as `os.family`, `3` reaches `os.release.major`. Deep, wide subtrees such as `kmods` or `mountpoints` multiply the entries per node and change every run; put them on `indexDeny` rather than lowering the depth. Lists do not consume a level: their scalar elements are indexed under the path of the list itself. Each level multiplies the number of index entries per node. |
 | `app_main_facts_indexDeny` | `[]` | JSON list of fact names, dotted path prefixes or globs whose *values* are never indexed. A plain entry matches the path and everything below it (`["os"]` also covers `os.family`); an entry containing `*`, `?` or `[` is a shell-style glob matched against the full dotted path and each of its ancestors, with `*` crossing dots — `["*.available", "*.used", "*.capacity"]` strips the per-run counters of every mount from the index while `mountpoints.*.filesystem` stays queryable. Volatile facts are indexed by default; this is the opt-out for facts that change on every run and are never filtered on. The fact name itself stays visible in `/pdb/query/v4/fact-names`. |
@@ -62,8 +61,8 @@ Controls how historical catalogs/reports are retained.
 |----------|---------|-------------|
 | `app_main_storeHistory_catalog` | `true` | Store historical catalogs. |
 | `app_main_storeHistory_catalogUnchanged` | `false` | Also store catalogs that did not change. |
-| `app_main_storeHistory_catalogNoReportTtl` | `3600` | TTL (seconds) for a stored catalog that never received a matching report. |
-| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds) for stored history (default 90 days). Reports and their events expire by receive time; reports stored before the `created` field existed are never expired. |
+| `app_main_storeHistory_catalogNoReportTtl` | `3600` | TTL (seconds, > 0) for a stored catalog that never received a matching report. |
+| `app_main_storeHistory_ttl` | `7776000` | TTL (seconds, > 0) for stored history (default 90 days). Reports and their events expire by receive time; reports stored before the `created` field existed are never expired. |
 
 ## Puppet Proxy (`app_puppet_`)
 
@@ -76,7 +75,7 @@ Serves `/puppet` and `/puppet-ca`. Binding and TLS are configured via `app_main_
 | `app_puppet_timeout` | `60` | Upstream request timeout (seconds). |
 | `app_puppet_trustedCns` | `[]` | JSON list of trusted client CNs allowed for privileged proxy operations. |
 | `app_puppet_catalogCache` | `true` | Enable catalog caching. |
-| `app_puppet_catalogCacheTTL` | `86400` | TTL (seconds) for cached catalogs. |
+| `app_puppet_catalogCacheTTL` | `86400` | TTL (seconds, > 0) for cached catalogs. |
 | `app_puppet_catalogCacheFacts` | `[]` | JSON list of facts used for granular, fact-based cache invalidation. |
 
 ## PuppetDB Proxy (`app_puppetdb_`)
@@ -121,13 +120,13 @@ pyppetdb's own database as well. The switch only decides who answers *queries*.
 | `ca_autoSign` | `false` | Automatically sign incoming certificate requests. |
 | `ca_autoSignNodeIfExists` | `false` | Auto-sign only if the node already exists in the database. |
 | `ca_certificateValidityDays` | `365` | Validity period (days) for issued certificates. |
-| `ca_certificateRequestTtlDays` | `30` | Pending certificate requests are deleted this many days after their last submission. |
+| `ca_certificateRequestTtlDays` | `30` | Pending certificate requests are deleted this many days (> 0) after their last submission. |
 | `ca_concurrentWorkers` | `5` | Number of concurrent workers for CA signing operations. |
 | `ca_enableCrlRefresh` | `true` | Run the background CRL refresh worker. |
 | `ca_crlRefreshInterval` | `3600` | Interval (seconds) between CRL refresh runs. |
 | `ca_crlValidityDays` | `30` | Validity period (days) of generated CRLs. |
 | `ca_verifyCertificateRegistration` | `true` | Require client certificates presented over mTLS to exist (signed) in the database. |
-| `ca_verifyCertificateRegistrationCacheTtl` | `300` | TTL (seconds) of the certificate-registration verification cache. |
+| `ca_verifyCertificateRegistrationCacheTtl` | `300` | TTL (seconds, > 0) of the certificate-registration verification cache. |
 | `ca_verifyCertificateRegistrationCacheMaxsize` | `1024` | Maximum number of entries in that cache. |
 
 ## Jobs (`jobs_`)

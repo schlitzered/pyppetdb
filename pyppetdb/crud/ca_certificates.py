@@ -120,10 +120,16 @@ class CertRevocationWatcher:
 
 
 class CrudCACertificates(CrudMongo):
+    schema_version = 2
+
     def __init__(
         self, config: Config, log: logging.Logger, coll: AsyncIOMotorCollection
     ):
         super().__init__(config, log, coll, schema_model=CACertificateGet)
+        self._migrations = {
+            1: self.migrate_1,
+            2: self.migrate_2,
+        }
         self._revocation_watcher = CertRevocationWatcher(log=log, coll=coll)
         self._indices.extend(
             [
@@ -161,6 +167,18 @@ class CrudCACertificates(CrudMongo):
                     name="idx_ca_status_cn",
                 ),
                 pymongo.IndexModel(
+                    [("space_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_space_id",
+                ),
+                pymongo.IndexModel(
+                    [("ca_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_ca_id",
+                ),
+                pymongo.IndexModel(
+                    [("space_id", pymongo.ASCENDING), ("cn", pymongo.ASCENDING)],
+                    name="idx_space_cn",
+                ),
+                pymongo.IndexModel(
                     [("not_after", pymongo.ASCENDING)],
                     expireAfterSeconds=0,
                     name="ttl_not_after",
@@ -187,10 +205,14 @@ class CrudCACertificates(CrudMongo):
             raise ResourceNotFound(details=f"Certificate '{serial}' not found")
         return str(doc["_id"]), doc.get("ca_id")
 
+    async def migrate_1(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
+        return None
+
     async def migrate_2(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_2(session=session)
         ttl_ms = self.config.ca.certificateRequestTtlDays * 86400 * 1000
         res = await self.coll.update_many(
             {"status": "requested", "request_expires": {"$exists": False}},

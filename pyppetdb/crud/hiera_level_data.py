@@ -55,11 +55,6 @@ class CrudHieraLevelData(CrudMongo):
                 unique=True,
             )
         )
-        self._indices.append(
-            pymongo.IndexModel(
-                [("key", pymongo.ASCENDING)],
-            )
-        )
         self._formatter = HieraLevelFormatter()
 
     async def _create_index(self) -> None:
@@ -179,6 +174,7 @@ class CrudHieraLevelData(CrudMongo):
         self,
         _id: Optional[str] = None,
         key_id: Optional[str] = None,
+        key_id_re: Optional[str] = None,
         level_id: Optional[str] = None,
         _id_list: Optional[list[str]] = None,
         fact: Optional[set[str]] = None,
@@ -187,13 +183,12 @@ class CrudHieraLevelData(CrudMongo):
         sort_order: Optional[sort_order_literal] = None,
         page: Optional[int] = None,
         limit: Optional[int] = None,
-        query: Optional[dict] = None,
     ) -> HieraLevelDataGetMulti:
-        if not query:
-            query = {}
+        query = {}
         self._filter_complex_search(query, base_attribute="facts", complex_search=fact)
         self._filter_re(query, "id", _id)
-        self._filter_re(query, "key_id", key_id)
+        self._filter_literal(query, "key_id", key_id)
+        self._filter_re(query, "key_id", key_id_re)
         self._filter_re(query, "level_id", level_id)
         self._filter_list(query, "id", _id_list)
         result = await self._search(

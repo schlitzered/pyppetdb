@@ -77,6 +77,16 @@ class CrudNodesCatalogs(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
+                    [("created_no_report_ttl", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.catalogNoReportTtl,
+                    name="ttl_catalog_no_report",
+                ),
+                pymongo.IndexModel(
+                    [("created", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.ttl,
+                    name="ttl_catalog_history",
+                ),
+                pymongo.IndexModel(
                     [
                         ("placement", pymongo.ASCENDING),
                         ("node_id", pymongo.ASCENDING),
@@ -87,23 +97,13 @@ class CrudNodesCatalogs(CrudMongo):
                     name="idx_placement_node_id_catalog_uuid",
                 ),
                 pymongo.IndexModel(
+                    [("node_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_node_id_catalog_id",
+                ),
+                pymongo.IndexModel(
                     [("catalog.status", pymongo.ASCENDING)], name="idx_catalog_status"
                 ),
             ]
-        )
-
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        await self._create_ttl_index(
-            field="created_no_report_ttl",
-            ttl_seconds=self.config.app.main.storeHistory.catalogNoReportTtl,
-            index_name="ttl_catalog_no_report",
-        )
-
-        await self._create_ttl_index(
-            field="created",
-            ttl_seconds=self.config.app.main.storeHistory.ttl,
-            index_name="ttl_catalog_history",
         )
 
     def encode_content(self, catalog: dict) -> bytes:
@@ -130,7 +130,7 @@ class CrudNodesCatalogs(CrudMongo):
             data[CONTENT_FIELD] = content
 
         if return_none:
-            await self._create_base(payload=data)
+            await self._create(payload=data, fields=["id"], fetch=False)
             return None
         result = await self._create(fields=fields, payload=data)
         return NodeCatalogGet(**self._inflate(result))

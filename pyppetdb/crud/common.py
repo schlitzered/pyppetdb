@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
+import re
 import typing
 from typing import List, Optional, Type
 
 from bson.objectid import ObjectId
-from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorClientSession
+from motor.motor_asyncio import AsyncIOMotorCollection
 import pymongo
 import pymongo.errors
 from pydantic import BaseModel
@@ -56,6 +58,8 @@ class Crud:
 class CrudMongo(
     Crud, FilterMixIn, Format, PaginationSkipMixIn, ProjectionMixIn, SortMixIn
 ):
+    schema_version: int = 0
+
     def __init__(
         self,
         config: Config,
@@ -67,11 +71,18 @@ class CrudMongo(
         self._resource_type = coll.name
         self._coll = coll
         self._schema_model = schema_model
-        self._indices: List[pymongo.IndexModel] = [
-            pymongo.IndexModel(
-                [("_version", pymongo.ASCENDING)], name="idx_version_common"
+        self._sort_tiebreaker: Optional[str] = "id"
+        self._declared_indexes: set[str] = {"_id_"}
+        self._indices: List[pymongo.IndexModel] = []
+        self._migrations: dict[
+            int, typing.Callable[..., typing.Awaitable[None]]
+        ] = {}
+        if self.schema_version:
+            self._indices.append(
+                pymongo.IndexModel(
+                    [("_version", pymongo.ASCENDING)], name="idx_schema_version"
+                )
             )
-        ]
 
     @property
     def coll(self):
@@ -85,6 +96,7 @@ class CrudMongo(
         await self._setup_schema_validation()
         await self._migrate()
         await self._create_index()
+        await self._drop_undeclared_indexes()
 
     async def _setup_schema_validation(self) -> None:
         if not self._schema_model:
@@ -221,6 +233,7 @@ class CrudMongo(
             await self._sync_index(index)
 
     async def _sync_index(self, index: pymongo.IndexModel) -> None:
+        self._declared_indexes.add(index.document["name"])
         try:
             await self.coll.create_indexes([index])
         except pymongo.errors.OperationFailure as e:
@@ -246,141 +259,96 @@ class CrudMongo(
         except Exception as e:
             self.log.error(f"Failed to sync index for {self.resource_type}: {e}")
 
+    async def _drop_undeclared_indexes(self) -> None:
+        try:
+            existing = await self.coll.list_indexes().to_list(length=None)
+        except pymongo.errors.PyMongoError as e:
+            self.log.error(f"Failed to list indices for {self.resource_type}: {e}")
+            return
+        shard_key = await self._shard_key()
+        for index in existing:
+            name = index["name"]
+            if name in self._declared_indexes:
+                continue
+            if shard_key and list(index["key"])[: len(shard_key)] == shard_key:
+                continue
+            self.log.info(f"Dropping undeclared index {name} of {self.resource_type}")
+            try:
+                await self.coll.drop_index(name)
+            except pymongo.errors.PyMongoError as e:
+                self.log.error(
+                    f"Failed to drop index {name} of {self.resource_type}: {e}"
+                )
+
+    async def _shard_key(self) -> Optional[list[str]]:
+        try:
+            collection = await self.coll.database.client["config"][
+                "collections"
+            ].find_one({"_id": self.coll.full_name}, projection={"key": 1})
+        except pymongo.errors.PyMongoError:
+            return None
+        if not collection or not collection.get("key"):
+            return None
+        return list(collection["key"])
+
+    def _validate_migrations(self) -> None:
+        if not self._migrations and not self.schema_version:
+            return
+        versions = sorted(self._migrations)
+        first = versions[0] if versions else self.schema_version + 1
+        if first < 1 or versions != list(range(first, self.schema_version + 1)):
+            raise ValueError(
+                f"{self.resource_type}: migrations {versions} must run without gaps "
+                f"up to schema version {self.schema_version}"
+            )
+
     async def _migrate(self) -> None:
-        self.log.info(f"Checking for migrations for {self.resource_type}")
-        # Add future migrations to this list
-        migrations = [
-            self.migrate_1,
-            self.migrate_2,
-        ]
-        for migration in migrations:
-            await self._run_migration_transactional(migration)
-
-    async def _run_migration_transactional(self, migration_func: typing.Callable):
-        try:
-            # Try to use a session for transactions (requires Replica Set)
-            async with await self.coll.database.client.start_session() as session:
-                try:
-                    async with session.start_transaction():
-                        await migration_func(session=session)
-                except pymongo.errors.OperationFailure as e:
-                    # If transactions are not supported (e.g. standalone Mongo)
-                    if e.code == 20:  # IllegalOperation
-                        self.log.debug(
-                            f"Transactions not supported for {self.resource_type}, running without"
-                        )
-                        await migration_func()
-                    else:
-                        raise
-        except (pymongo.errors.OperationFailure, pymongo.errors.ConfigurationError):
-            # Fallback if sessions are not supported at all
-            await migration_func()
-
-    async def migrate_1(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
-        # Migration 1: Set _version to 1 for all objects that have a _version field.
-        query = {"_version": {"$exists": True, "$lt": 1}}
-
-        count = await self.coll.count_documents(query, session=session)
-        if count == 0:
-            return
-
-        self.log.info(
-            f"Migrating {count} {self.resource_type} objects to version 1 in chunks"
-        )
-
-        modified_total = 0
-        while True:
-            # Find a batch of documents to update
-            cursor = self.coll.find(query, session=session).limit(1000)
-            batch = await cursor.to_list(length=1000)
-            if not batch:
-                break
-
-            ids = [doc["_id"] for doc in batch]
-            res = await self.coll.update_many(
-                {"_id": {"$in": ids}}, {"$set": {"_version": 1}}, session=session
-            )
-            modified_total += res.modified_count
-
-        if modified_total > 0:
+        self._validate_migrations()
+        for version in sorted(self._migrations):
+            previous = version - 1
+            pending = {"_version": previous or {"$in": [0, None]}}
+            if not await self.coll.find_one(pending, projection={"_id": 1}):
+                continue
+            migration = self._migrations[version]
             self.log.info(
-                f"Migrated {modified_total} {self.resource_type} objects to version 1"
+                f"migrating {self.resource_type} to schema version {version} "
+                f"({migration.__name__})"
             )
+            async with await self.coll.database.client.start_session() as session:
+                async with session.start_transaction():
+                    await migration(session=session)
+                    await self.coll.update_many(
+                        pending, {"$set": {"_version": version}}, session=session
+                    )
 
-    async def migrate_2(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> None:
-        return None
+    def _stamp(self, document: dict) -> dict:
+        document["_version"] = self.schema_version
+        return document
 
-    async def _create_ttl_index(
-        self, field: str, ttl_seconds: int, index_name: str
-    ) -> None:
-        if ttl_seconds is None:
-            return
+    async def _insert_one(self, document: dict, **kwargs):
+        return await self._coll.insert_one(self._stamp(document), **kwargs)
 
-        indexes = await self.coll.list_indexes().to_list(length=None)
-        existing_index = None
-        for index in indexes:
-            # Check by name OR by key (to find autogenerated names like field_1)
-            key_spec = index.get("key", {})
-            if index.get("name") == index_name or key_spec == {field: 1}:
-                existing_index = index
-                break
-
-        if existing_index:
-            current_ttl = existing_index.get("expireAfterSeconds")
-            current_name = existing_index["name"]
-            key_spec = existing_index.get("key", {})
-            current_field = next(iter(key_spec.keys()), None)
-
-            # Check if both field and TTL match
-            if (
-                current_field == field
-                and current_ttl == ttl_seconds
-                and current_name == index_name
-            ):
-                self.log.debug(
-                    f"TTL index {index_name} already exists with correct field '{field}' and TTL ({ttl_seconds}s)"
-                )
-                return
-            else:
-                self.log.info(
-                    f"Dropping index {current_name} (current field: '{current_field}', current TTL: {current_ttl}s) to recreate as {index_name} with TTL {ttl_seconds}s"
-                )
-                await self.coll.drop_index(current_name)
-
-        self.log.info(
-            f"Creating TTL index {index_name} on field '{field}' with TTL {ttl_seconds}s"
+    async def _insert_many(self, documents: list[dict], **kwargs):
+        return await self._coll.insert_many(
+            [self._stamp(document) for document in documents], **kwargs
         )
-        await self.coll.create_index(
-            [(field, pymongo.ASCENDING)],
-            expireAfterSeconds=ttl_seconds,
-            name=index_name,
-        )
-
-    async def _create_base(
-        self,
-        payload: dict,
-    ) -> ObjectId:
-        payload["_version"] = 1
-        try:
-            _id = await self._coll.insert_one(payload)
-            return _id.inserted_id
-        except pymongo.errors.DuplicateKeyError:
-            raise DuplicateResource
-        except pymongo.errors.ConnectionFailure as err:
-            self.log.error(f"backend error: {err}")
-            raise BackendError()
 
     async def _create(
         self,
         payload: dict,
         fields: list,
-    ) -> dict:
-        _id = await self._create_base(payload)
-        return await self._get_by_obj_id(_id=_id, fields=fields)
+        fetch: bool = True,
+    ) -> Optional[dict]:
+        try:
+            result = await self._insert_one(payload)
+        except pymongo.errors.DuplicateKeyError:
+            raise DuplicateResource
+        except pymongo.errors.ConnectionFailure as err:
+            self.log.error(f"backend error: {err}")
+            raise BackendError()
+        if not fetch:
+            return None
+        return await self._get_by_obj_id(_id=result.inserted_id, fields=fields)
 
     async def _delete(self, query: dict) -> dict:
         try:
@@ -432,23 +400,200 @@ class CrudMongo(
         sort_order: typing.Optional[str] = None,
         page: typing.Optional[int] = None,
         limit: typing.Optional[int] = None,
+        count: typing.Optional[
+            typing.Callable[[dict], typing.Awaitable[int]]
+        ] = None,
     ) -> dict:
+        count = count or self._search_count
+        index = self._sort_index(query, sort) if sort and sort_order else None
         try:
-            count = await self._coll.count_documents(
-                filter=query,
+            if index and limit:
+                return await self._search_from_end(
+                    query, fields, sort, sort_order, page, limit, count
+                )
+            projection = self._projection(fields)
+            if not limit:
+                result = await self._search_page(
+                    query, projection, sort, sort_order, 0, None, index
+                )
+                return self._format_multi(result, count=len(result))
+            total, result = await asyncio.gather(
+                count(query),
+                self._search_page(
+                    query,
+                    projection,
+                    sort,
+                    sort_order,
+                    self._search_skip(page, limit),
+                    limit,
+                    index,
+                ),
             )
-            cursor = self._coll.find(filter=query, projection=self._projection(fields))
-            if sort and sort_order:
-                cursor.sort(self._sort(sort=sort, sort_order=sort_order))
-            if isinstance(page, int) and page and limit:
-                cursor.skip(self._pagination_skip(page, limit))
-            return self._format_multi(
-                list(await cursor.to_list(limit)),
-                count=count,
-            )
+            return self._format_multi(result, count=total)
         except pymongo.errors.ConnectionFailure as err:
             self.log.error(f"backend error: {err}")
             raise BackendError
+
+    async def _search_count(self, query: dict) -> int:
+        return await self._coll.count_documents(filter=query)
+
+    def _search_skip(
+        self, page: typing.Optional[int], limit: typing.Optional[int]
+    ) -> int:
+        if isinstance(page, int) and page and limit:
+            return self._pagination_skip(page, limit)
+        return 0
+
+    async def _search_from_end(
+        self,
+        query: dict,
+        fields: typing.Optional[list] = None,
+        sort: typing.Optional[str] = None,
+        sort_order: typing.Optional[str] = None,
+        page: typing.Optional[int] = None,
+        limit: typing.Optional[int] = None,
+        count: typing.Optional[
+            typing.Callable[[dict], typing.Awaitable[int]]
+        ] = None,
+    ) -> dict:
+        count = count or self._search_count
+        index = self._sort_index(query, sort) if sort and sort_order else None
+        projection = self._projection(fields)
+        skip = self._search_skip(page, limit)
+        total = await count(query)
+        if not index or not limit:
+            result = await self._search_page(
+                query, projection, sort, sort_order, skip, limit, index
+            )
+            return self._format_multi(result, count=total)
+        if skip >= total:
+            return self._format_multi([], count=total)
+        reverse_skip = max(total - skip - limit, 0)
+        if reverse_skip >= skip:
+            result = await self._search_page(
+                query, projection, sort, sort_order, skip, limit, index
+            )
+            return self._format_multi(result, count=total)
+        reverse_order = "descending" if sort_order == "ascending" else "ascending"
+        reverse_limit = min(limit, total - skip)
+        try:
+            result = await self._search_cursor(
+                query,
+                projection,
+                sort,
+                reverse_order,
+                reverse_skip,
+                reverse_limit,
+                index,
+            ).to_list(reverse_limit)
+        except pymongo.errors.OperationFailure as err:
+            self._log_hint_failure(index, err)
+            result = await self._search_cursor(
+                query, projection, sort, sort_order, skip, limit, None
+            ).to_list(limit)
+            return self._format_multi(result, count=total)
+        result.reverse()
+        return self._format_multi(result, count=total)
+
+    async def _search_page(
+        self,
+        query: dict,
+        projection: typing.Optional[dict],
+        sort: typing.Optional[str],
+        sort_order: typing.Optional[str],
+        skip: int,
+        limit: typing.Optional[int],
+        index: typing.Optional[dict],
+    ) -> list:
+        try:
+            return await self._search_cursor(
+                query, projection, sort, sort_order, skip, limit, index
+            ).to_list(limit)
+        except pymongo.errors.OperationFailure as err:
+            if not index:
+                raise
+            self._log_hint_failure(index, err)
+            return await self._search_cursor(
+                query, projection, sort, sort_order, skip, limit, None
+            ).to_list(limit)
+
+    def _log_hint_failure(self, index: dict, err: Exception) -> None:
+        self.log.warning(
+            f"search with index hint {index['name']} failed, retrying without: {err}"
+        )
+
+    def _search_cursor(
+        self,
+        query: dict,
+        projection: typing.Optional[dict],
+        sort: typing.Optional[str],
+        sort_order: typing.Optional[str],
+        skip: int,
+        limit: typing.Optional[int],
+        index: typing.Optional[dict],
+    ):
+        cursor = self._coll.find(filter=query, projection=projection)
+        if sort and sort_order:
+            cursor.sort(self._sort_spec(sort, sort_order, index))
+        if index:
+            cursor.hint(index["name"])
+        if skip:
+            cursor.skip(skip)
+        if limit:
+            cursor.limit(limit)
+        return cursor
+
+    def _sort_spec(
+        self, sort: str, sort_order: str, index: typing.Optional[dict]
+    ) -> list:
+        direction = (
+            pymongo.ASCENDING if sort_order == "ascending" else pymongo.DESCENDING
+        )
+        spec = [(sort, direction)]
+        tiebreaker = self._sort_tiebreaker
+        if not tiebreaker or sort == tiebreaker:
+            return spec
+        if index is None:
+            spec.append((tiebreaker, direction))
+            return spec
+        keys = index["key"]
+        names = list(keys)
+        position = names.index(sort) + 1
+        if position < len(names) and names[position] == tiebreaker:
+            spec.append((tiebreaker, direction * keys[sort] * keys[tiebreaker]))
+        return spec
+
+    def _sort_index(self, query: dict, sort: str) -> typing.Optional[dict]:
+        pinned = {field for field, value in query.items() if self._is_equality(value)}
+        best = None
+        for model in self._indices:
+            document = model.document
+            scope = self._sort_scope(document, sort)
+            if scope is None or not set(scope) <= pinned or (not scope and query):
+                continue
+            rank = (len(scope), -len(document["key"]))
+            if best is None or rank > best[0]:
+                best = (rank, document)
+        return best[1] if best else None
+
+    def _sort_scope(self, document: dict, sort: str) -> typing.Optional[list]:
+        if document.get("sparse") or "partialFilterExpression" in document:
+            return None
+        keys = document["key"]
+        if any(direction not in (1, -1) for direction in keys.values()):
+            return None
+        names = list(keys)
+        if sort not in names:
+            return None
+        return names[: names.index(sort)]
+
+    @classmethod
+    def _is_equality(cls, value) -> bool:
+        if isinstance(value, dict):
+            if "$eq" in value:
+                return cls._is_equality(value["$eq"])
+            return not any(key.startswith("$") for key in value)
+        return not isinstance(value, (list, re.Pattern))
 
     async def _update(
         self,
@@ -458,17 +603,29 @@ class CrudMongo(
         upsert=False,
         set_on_insert: Optional[dict] = None,
         unset: Optional[list] = None,
+        fetch: bool = True,
     ) -> dict:
         update = {"$set": {}}
         for k, v in payload.items():
             if v is None:
                 continue
             update["$set"][k] = v
+        if upsert:
+            set_on_insert = self._stamp(dict(set_on_insert or {}))
         if set_on_insert:
             update["$setOnInsert"] = set_on_insert
         if unset:
             update["$unset"] = {field: "" for field in unset}
         try:
+            if not fetch:
+                result = await self._coll.update_one(
+                    filter=query,
+                    update=update,
+                    upsert=upsert,
+                )
+                if not upsert and result.matched_count == 0:
+                    raise ResourceNotFound
+                return {}
             result = await self._coll.find_one_and_update(
                 filter=query,
                 update=update,

@@ -21,6 +21,17 @@ from unittest.mock import MagicMock
 from pyppetdb.crud.nodes_events import CrudNodesEvents
 
 
+def _ttl(crud) -> dict:
+    return {
+        index.document["name"]: (
+            dict(index.document["key"]),
+            index.document["expireAfterSeconds"],
+        )
+        for index in crud._indices
+        if "expireAfterSeconds" in index.document
+    }
+
+
 class TestCrudNodesEvents(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.coll = MagicMock()
@@ -28,6 +39,12 @@ class TestCrudNodesEvents(unittest.IsolatedAsyncioTestCase):
         self.coll.update_many = AsyncMock()
         self.coll.delete_many = AsyncMock()
         self.crud = CrudNodesEvents(MagicMock(), logging.getLogger("test"), self.coll)
+
+    def test_history_ttl_follows_the_config(self):
+        config = MagicMock()
+        config.app.main.storeHistory.ttl = 3600
+        crud = CrudNodesEvents(config, logging.getLogger("test"), self.coll)
+        self.assertEqual(_ttl(crud), {"ttl_event_history": ({"created": 1}, 3600)})
 
     def test_indexes_cover_the_paging_and_filter_columns(self):
         keys = {
@@ -55,7 +72,9 @@ class TestCrudNodesEvents(unittest.IsolatedAsyncioTestCase):
         await self.crud.insert_for_report([])
         self.coll.insert_many.assert_not_awaited()
         await self.crud.insert_for_report([{"node_id": "a"}])
-        self.coll.insert_many.assert_awaited_once_with([{"node_id": "a"}], ordered=False)
+        self.coll.insert_many.assert_awaited_once_with(
+            [{"node_id": "a", "_version": 0}], ordered=False
+        )
 
     async def test_set_latest_only_touches_changed_documents(self):
         await self.crud.set_latest(node_id="a", latest=False)
