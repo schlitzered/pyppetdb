@@ -15,7 +15,11 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+
+import pymongo.errors
+
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
+from pyppetdb.errors import BackendError
 
 
 class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
@@ -50,6 +54,21 @@ class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["result"], {"foo": "bar"})
         self.assertNotIn("_id", result)
+        self.mock_coll.find_one.assert_awaited_once_with(
+            filter={
+                "key_id": "k1",
+                "merge": True,
+                "facts": [{"key": "os", "value": "linux"}],
+            },
+            projection={"result": 1},
+        )
+
+    async def test_get_cached_connection_failure(self):
+        self.mock_coll.find_one = AsyncMock(
+            side_effect=pymongo.errors.ConnectionFailure("down")
+        )
+        with self.assertRaises(BackendError):
+            await self.crud.get_cached(key_id="k1", facts={}, merge=False)
 
     async def test_set_cached(self):
         self.mock_coll.update_one = AsyncMock()
