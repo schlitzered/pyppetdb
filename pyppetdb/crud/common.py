@@ -617,12 +617,14 @@ class CrudMongo(
         if unset:
             update["$unset"] = {field: "" for field in unset}
         try:
-            if not fetch and upsert:
+            if not fetch:
                 result = await self._coll.update_one(
                     filter=query,
                     update=update,
-                    upsert=True,
+                    upsert=upsert,
                 )
+                if not upsert and result.matched_count == 0:
+                    raise ResourceNotFound
                 return {}
             result = await self._coll.find_one_and_update(
                 filter=query,
@@ -638,4 +640,4 @@ class CrudMongo(
             raise BackendError
         if result is None:
             raise ResourceNotFound
-        return self._format(result) if fetch else {}
+        return self._format(result)

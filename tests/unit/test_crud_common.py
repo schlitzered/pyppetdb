@@ -886,7 +886,7 @@ class TestCrudMongoSchemaVersion(unittest.IsolatedAsyncioTestCase):
     async def test_bulk_and_upsert_helpers_stamp_the_version(self):
         crud, coll = self._crud(_Migrating)
         coll.insert_many = AsyncMock()
-        coll.find_one_and_update = AsyncMock(return_value={"id": "a"})
+        coll.update_one = AsyncMock()
 
         await crud._insert_many([{"id": "a"}, {"id": "b"}], ordered=False)
         await crud._update(
@@ -901,13 +901,19 @@ class TestCrudMongoSchemaVersion(unittest.IsolatedAsyncioTestCase):
         coll.insert_many.assert_awaited_once_with(
             [{"id": "a", "_version": 4}, {"id": "b", "_version": 4}], ordered=False
         )
-        coll.find_one_and_update.assert_awaited_once_with(
+        coll.update_one.assert_awaited_once_with(
             filter={"id": "a"},
             update={"$set": {"x": 1}, "$setOnInsert": {"since": 1, "_version": 4}},
-            projection={},
-            return_document=1,
             upsert=True,
         )
+        coll.find_one_and_update.assert_not_awaited()
+
+    async def test_update_without_fetch_raises_when_nothing_matched(self):
+        crud, coll = self._crud(_Migrating)
+        coll.update_one = AsyncMock(return_value=MagicMock(matched_count=0))
+
+        with self.assertRaises(ResourceNotFound):
+            await crud._update({"id": "a"}, {"x": 1}, fields=[], fetch=False)
 
     async def test_versioned_crud_stamps_created_documents(self):
         crud, coll = self._crud(_Migrating)
