@@ -276,7 +276,7 @@ class ControllerApiV1HieraLevelData:
 
         return await self.crud_hiera_level_data.search(
             _id=data_id,
-            key_id=key_id,
+            key_id_re=key_id,
             level_id=level_id,
             fact=fact,
             fields=list(fields),

@@ -85,7 +85,7 @@ class CrudJobsNodeJobs(CrudMongo):
             }
             for node_id in node_ids
         ]
-        await self.coll.insert_many(documents=docs)
+        await self._insert_many(docs)
 
     async def expire_scheduled_jobs(self, timeout_seconds: int) -> List[NodeJobGet]:
         threshold = datetime.datetime.now() - datetime.timedelta(

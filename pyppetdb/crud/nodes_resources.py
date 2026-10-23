@@ -98,7 +98,7 @@ class CrudNodesResources(CrudMongo):
             query["placement"] = placement
         await self._coll.delete_many(filter=query)
         if docs:
-            await self._coll.insert_many(docs, ordered=False)
+            await self._insert_many(docs, ordered=False)
 
     async def delete_all_from_node(
         self,

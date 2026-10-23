@@ -125,6 +125,8 @@ class CrudCASpacesCache:
 
 
 class CrudCASpaces(CrudMongo):
+    schema_version = 3
+
     def __init__(
         self,
         config: Config,
@@ -133,6 +135,11 @@ class CrudCASpaces(CrudMongo):
         protector: NodesDataProtector,
     ):
         super().__init__(config, log, coll, schema_model=CASpacePost)
+        self._migrations = {
+            1: self.migrate_1,
+            2: self.migrate_2,
+            3: self.migrate_3,
+        }
         self._protector = protector
         self._cache = CrudCASpacesCache(log=log, coll=coll, protector=protector)
         self._indices.append(
@@ -174,7 +181,11 @@ class CrudCASpaces(CrudMongo):
     async def migrate_1(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_1(session=session)
+        return None
+
+    async def migrate_2(
+        self, session: Optional[AsyncIOMotorClientSession] = None
+    ) -> None:
         default_config = CAValidationConfig().model_dump()
         res = await self.coll.update_many(
             {"validation_config": {"$exists": False}},
@@ -186,10 +197,9 @@ class CrudCASpaces(CrudMongo):
                 f"Migrated {res.modified_count} CA Spaces with default validation config"
             )
 
-    async def migrate_2(
+    async def migrate_3(
         self, session: Optional[AsyncIOMotorClientSession] = None
     ) -> None:
-        await super().migrate_2(session=session)
         cursor = self.coll.find(
             {"secret_refs": {"$exists": False}},
             {"validation_config": 1},

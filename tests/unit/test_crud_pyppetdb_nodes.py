@@ -28,14 +28,11 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
             config=self.mock_config, log=self.log, coll=self.mock_coll
         )
 
-    async def test_create_index(self):
-        self.crud._create_ttl_index = AsyncMock()
-        self.mock_coll.create_indexes = AsyncMock()
-        await self.crud._create_index()
-        self.crud._create_ttl_index.assert_called_once_with(
-            field="heartbeat",
-            ttl_seconds=70,
-            index_name="ttl_heartbeat",
+    def test_heartbeat_ttl_index_is_declared(self):
+        indexes = {index.document["name"]: index.document for index in self.crud._indices}
+        self.assertEqual(
+            indexes["ttl_heartbeat"],
+            {"key": {"heartbeat": 1}, "expireAfterSeconds": 70, "name": "ttl_heartbeat"},
         )
 
     async def test_heartbeat_update(self):
@@ -43,7 +40,7 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
         await self.crud.heartbeat_update(_id="instance1")
 
         self.mock_coll.update_one.assert_called_once()
-        args, kwargs = self.mock_coll.update_one.call_args
+        kwargs = self.mock_coll.update_one.call_args[1]
         self.assertEqual(kwargs["filter"], {"id": "instance1"})
         self.assertTrue("heartbeat" in kwargs["update"]["$set"])
         self.assertIsInstance(kwargs["update"]["$set"]["heartbeat"], datetime)
@@ -51,7 +48,7 @@ class TestCrudPyppetDBNodesUnit(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(
             kwargs["update"]["$setOnInsert"]["online_since"], datetime
         )
-        self.assertEqual(kwargs["upsert"], True)
+        self.assertTrue(kwargs["upsert"])
 
     async def test_delete(self):
         self.crud._delete = AsyncMock()

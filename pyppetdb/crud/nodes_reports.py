@@ -112,6 +112,11 @@ class CrudNodesReports(CrudMongo):
         self._indices.extend(
             [
                 pymongo.IndexModel(
+                    [("created", pymongo.ASCENDING)],
+                    expireAfterSeconds=config.app.main.storeHistory.ttl,
+                    name="ttl_report_history",
+                ),
+                pymongo.IndexModel(
                     [
                         ("placement", pymongo.ASCENDING),
                         ("node_id", pymongo.ASCENDING),
@@ -124,7 +129,8 @@ class CrudNodesReports(CrudMongo):
                     [("report.status", pymongo.ASCENDING)], name="idx_report_status"
                 ),
                 pymongo.IndexModel(
-                    [("node_id", pymongo.ASCENDING)], name="idx_node_id"
+                    [("node_id", pymongo.ASCENDING), ("id", pymongo.ASCENDING)],
+                    name="idx_node_id_report_id",
                 ),
                 pymongo.IndexModel(
                     [("report.hash", pymongo.ASCENDING)], name="idx_report_hash"
@@ -178,14 +184,6 @@ class CrudNodesReports(CrudMongo):
             ]
         )
 
-    async def _create_index(self) -> None:
-        await super()._create_index()
-        await self._create_ttl_index(
-            field="created",
-            ttl_seconds=self.config.app.main.storeHistory.ttl,
-            index_name="ttl_report_history",
-        )
-
     async def set_node_disabled(self, node_id: str, disabled: bool) -> int:
         try:
             result = await self._coll.update_many(
@@ -216,7 +214,7 @@ class CrudNodesReports(CrudMongo):
         data["created"] = _id
 
         if return_none:
-            await self._create_base(payload=data)
+            await self._create(payload=data, fields=["id"], fetch=False)
             return None
         result = await self._create(fields=fields, payload=data)
         return NodeReportGet(**result)
@@ -357,7 +355,6 @@ class CrudNodesReports(CrudMongo):
         data["node_id"] = node_id
         data["created"] = _id
         data["disabled"] = False
-        data["_version"] = 1
         try:
             latest = await self._create_latest_transactional(
                 data=data,
@@ -424,7 +421,7 @@ class CrudNodesReports(CrudMongo):
                 update={"$set": {"report.latest": False}},
                 session=session,
             )
-        await self.coll.insert_one(data, session=session)
+        await self._insert_one(data, session=session)
         return latest
 
     async def update_placement(

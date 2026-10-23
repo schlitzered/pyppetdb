@@ -249,7 +249,6 @@ class ControllerApiV1HieraKeys:
         if new_model and new_model != current_model:
             level_data = await self.crud_hiera_level_data.search(
                 key_id=key_id,
-                level_id=".*",
                 fields=["data"],
             )
             for item in level_data.result:

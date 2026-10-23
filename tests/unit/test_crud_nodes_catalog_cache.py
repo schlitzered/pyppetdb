@@ -67,6 +67,7 @@ class TestCrudNodesCatalogCacheUnit(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args["filter"], {"id": "node1"})
         self.assertEqual(call_args["update"]["$set"]["catalog"], "encrypted")
         self.assertEqual(call_args["update"]["$set"]["placement"], {"provider": "aws"})
+        self.assertTrue(call_args["upsert"])
 
     async def test_get_cached_node_ids(self):
         mock_cursor = MagicMock()

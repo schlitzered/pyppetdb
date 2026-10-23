@@ -255,7 +255,7 @@ class ControllerApiV1Nodes:
         fields: Set[filter_literal] = Query(default=filter_list),
         outdated_threshold: str = Query(
             default=None,
-            description="ISO timestamp for outdated threshold (defaults to now-2h)",
+            description="ISO timestamp for outdated threshold (defaults to now-4h)",
         ),
     ):
         user = await self.authorize.require_user(request=request)
@@ -359,7 +359,7 @@ class ControllerApiV1Nodes:
         ),
         outdated_threshold: str = Query(
             default=None,
-            description="ISO timestamp for outdated threshold (defaults to now-2h)",
+            description="ISO timestamp for outdated threshold (defaults to now-4h)",
         ),
         remote_agent_connected: bool = Query(default=None),
         remote_agent_via: str = Query(default=None),

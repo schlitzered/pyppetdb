@@ -15,7 +15,11 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 import logging
+
+import pymongo.errors
+
 from pyppetdb.crud.hiera_lookup_cache import CrudHieraLookupCache
+from pyppetdb.errors import BackendError
 
 
 class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
@@ -50,6 +54,21 @@ class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(result["result"], {"foo": "bar"})
         self.assertNotIn("_id", result)
+        self.mock_coll.find_one.assert_awaited_once_with(
+            filter={
+                "key_id": "k1",
+                "merge": True,
+                "facts": [{"key": "os", "value": "linux"}],
+            },
+            projection={"result": 1},
+        )
+
+    async def test_get_cached_connection_failure(self):
+        self.mock_coll.find_one = AsyncMock(
+            side_effect=pymongo.errors.ConnectionFailure("down")
+        )
+        with self.assertRaises(BackendError):
+            await self.crud.get_cached(key_id="k1", facts={}, merge=False)
 
     async def test_set_cached(self):
         self.mock_coll.update_one = AsyncMock()
@@ -57,9 +76,9 @@ class TestCrudHieraLookupCacheUnit(unittest.IsolatedAsyncioTestCase):
             key_id="k1", facts={"os": "linux"}, merge=True, result={"foo": "bar"}
         )
         self.mock_coll.update_one.assert_called_once()
-        call_args = self.mock_coll.update_one.call_args[1]
-        self.assertEqual(call_args["update"]["$set"]["result"], {"foo": "bar"})
-        self.assertTrue(call_args["upsert"])
+        kwargs = self.mock_coll.update_one.call_args[1]
+        self.assertEqual(kwargs["update"]["$set"]["result"], {"foo": "bar"})
+        self.assertTrue(kwargs["upsert"])
 
     async def test_delete_by_key_and_facts(self):
         self.mock_coll.delete_many = AsyncMock()

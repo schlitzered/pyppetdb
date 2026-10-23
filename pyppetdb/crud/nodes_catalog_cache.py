@@ -151,11 +151,7 @@ class CrudNodesCatalogCache(CrudMongo):
         query = {"id": node_id}
         data = payload.model_dump()
 
-        await self.coll.update_one(
-            filter=query,
-            update={"$set": data},
-            upsert=True,
-        )
+        await self._update(query=query, payload=data, fields=[], upsert=True, fetch=False)
 
     async def delete(
         self,

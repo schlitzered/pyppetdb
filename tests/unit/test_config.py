@@ -13,19 +13,37 @@
 # limitations under the License.
 
 import unittest
-from pyppetdb.config import ConfigAppFacts, ConfigAppPuppet
+from pyppetdb.config import ConfigAppFacts
+from pyppetdb.config import ConfigAppPuppet
+from pyppetdb.config import ConfigAppStoreHistory
+from pyppetdb.config import ConfigCA
 
 
 class TestConfigUnit(unittest.TestCase):
-    def test_parse_index(self):
-        # Test that JSON string is parsed into list
-        json_str = '["role", "stage"]'
-        config = ConfigAppFacts(index=json_str)
-        self.assertEqual(config.index, ["role", "stage"])
+    def test_ttls_must_be_positive(self):
+        ttls = (
+            (ConfigAppStoreHistory, "ttl", 7776000),
+            (ConfigAppStoreHistory, "catalogNoReportTtl", 3600),
+            (ConfigAppPuppet, "catalogCacheTTL", 86400),
+            (ConfigCA, "certificateRequestTtlDays", 30),
+            (ConfigCA, "verifyCertificateRegistrationCacheTtl", 300),
+        )
+        for model, field, default in ttls:
+            self.assertEqual(getattr(model(), field), default, field)
+            for value in (0, -1, None):
+                with self.assertRaises(Exception, msg=f"{field}={value}"):
+                    model(**{field: value})
 
-        # Test that list remains list
-        config = ConfigAppFacts(index=["a", "b"])
-        self.assertEqual(config.index, ["a", "b"])
+    def test_parse_index_deny(self):
+        config = ConfigAppFacts(indexDeny='["role", "stage"]')
+        self.assertEqual(config.indexDeny, ["role", "stage"])
+
+        config = ConfigAppFacts(indexDeny=["a", "b"])
+        self.assertEqual(config.indexDeny, ["a", "b"])
+
+    def test_removed_dedicated_fact_index_setting_is_ignored(self):
+        config = ConfigAppFacts(index='["role"]')
+        self.assertFalse(hasattr(config, "index"))
 
     def test_parse_catalog_cache_facts(self):
         json_str = '["fact1", "fact2"]'

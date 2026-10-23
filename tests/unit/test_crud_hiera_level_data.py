@@ -177,12 +177,21 @@ class TestCrudHieraLevelDataUnit(unittest.IsolatedAsyncioTestCase):
         self.crud._search = AsyncMock(
             return_value={"result": [], "meta": {"result_size": 0}}
         )
-        await self.crud.search(level_id="l1", key_id="k1")
+        await self.crud.search(level_id="l1", key_id_re="k1")
 
         # Check if _filter_re was called (indirectly via query building)
         call_args = self.crud._search.call_args[1]
         self.assertEqual(call_args["query"]["level_id"], {"$regex": "l1"})
         self.assertEqual(call_args["query"]["key_id"], {"$regex": "k1"})
+
+    async def test_search_key_id_literal(self):
+        self.crud._search = AsyncMock(
+            return_value={"result": [], "meta": {"result_size": 0}}
+        )
+        await self.crud.search(key_id="k1")
+
+        call_args = self.crud._search.call_args[1]
+        self.assertEqual(call_args["query"]["key_id"], "k1")
 
     async def test_update(self):
         self.crud._update = AsyncMock(
